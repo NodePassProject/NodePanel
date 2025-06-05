@@ -6,15 +6,15 @@ export const createInstanceFormSchema = z.object({
   instanceType: z.enum(["server", "client"], {
     required_error: "实例类型是必需的。",
   }),
+  autoCreateServer: z.optional(z.boolean()), // Moved up for earlier access in superRefine
   tunnelAddress: z.string().min(1, "隧道地址是必需的。").regex(/^(?:\[[0-9a-fA-F:]+\]|[0-9a-zA-Z.-]+):[0-9]+$/, "隧道地址格式无效 (例: host:port 或 [ipv6]:port)"),
   targetAddress: z.string().min(1, "目标地址是必需的。").regex(/^(?:\[[0-9a-fA-F:]+\]|[0-9a-zA-Z.-]+):[0-9]+$/, "目标地址格式无效 (例: host:port 或 [ipv6]:port)"),
   logLevel: z.enum(["master", "debug", "info", "warn", "error", "fatal"], {
     required_error: "日志级别是必需的。",
   }),
-  tlsMode: z.string(), // Server can be "master", "0", "1", "2". Client can be "0", "1". Validated by superRefine.
+  tlsMode: z.string(), 
   certPath: z.optional(z.string()),
   keyPath: z.optional(z.string()),
-  autoCreateServer: z.optional(z.boolean()),
 }).superRefine((data, ctx) => {
   if (data.instanceType === "server") {
     if (!["master", "0", "1", "2"].includes(data.tlsMode)) {
@@ -33,16 +33,20 @@ export const createInstanceFormSchema = z.object({
       }
     }
   } else if (data.instanceType === "client") {
-    if (!["0", "1"].includes(data.tlsMode)) { // Client MUST pick 0 or 1.
+    // If autoCreateServer is true, client's tlsMode is for the server, so it can be "master", "0", "1", "2".
+    // If autoCreateServer is false, client's tlsMode is for its own connection, typically "0" or "1".
+    // For simplicity in the form, we allow all. The buildUrl logic will handle client-specific URL construction.
+    if (!["master", "0", "1", "2"].includes(data.tlsMode)) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "客户端TLS模式必须为 '0' (无TLS) 或 '1' (TLS)。",
+        message: "客户端选择的TLS模式无效。", // Generic message, as its use depends on autoCreateServer
         path: ["tlsMode"],
       });
     }
-    // For client, certPath and keyPath are not applicable and should not be submitted.
-    // The form UI should hide these. If they are somehow submitted, it might indicate an issue,
-    // but the backend will likely ignore them for client types.
+    // CertPath and KeyPath are not directly used by the client instance itself.
+    // If autoCreateServer is true and tlsMode is "2", these would apply to the server.
+    // The form doesn't show these inputs for client type, so they'd be empty if submitted.
+    // This is acceptable; backend or master defaults would handle it for the auto-created server.
   }
 });
 
@@ -81,10 +85,13 @@ export const modifyInstanceFormSchema = z.object({
       }
     }
   } else if (data.instanceType === "client") {
-     if (!["0", "1"].includes(data.tlsMode)) { 
+     // For modify, client tlsMode doesn't directly configure the client instance's own connection in the URL usually.
+     // It's more of a reference or for potential future use if clients start supporting such URL params.
+     // Allowing all for now to match server, but typical direct client usage would be 0 or 1 for connection behavior.
+     if (!["master", "0", "1", "2"].includes(data.tlsMode)) { 
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "客户端TLS模式必须为 '0' (无TLS) 或 '1' (TLS)。",
+        message: "客户端TLS模式无效。",
         path: ["tlsMode"],
       });
     }
