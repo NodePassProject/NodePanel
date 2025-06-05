@@ -80,21 +80,29 @@ const MASTER_TLS_MODE_DISPLAY_MAP: Record<MasterTlsMode | '2', string> = {
   '2': '2: 自定义',
 };
 
-function buildUrl(values: Pick<CreateInstanceFormValues, 'instanceType' | 'tunnelAddress' | 'targetAddress' | 'logLevel' | 'tlsMode' | 'certPath' | 'keyPath'>): string {
-  let url = `${values.instanceType}://${values.tunnelAddress}/${values.targetAddress}`;
+// This buildUrl is now more generic and expects the final targetAddress
+function buildUrl(params: {
+  instanceType: 'server' | 'client';
+  tunnelAddress: string;
+  targetAddress: string; // This should be the final, fully resolved targetAddress
+  logLevel: MasterLogLevel;
+  tlsMode?: MasterTlsMode | '2'; // tlsMode is optional, especially for clients
+  certPath?: string;
+  keyPath?: string;
+}): string {
+  let url = `${params.instanceType}://${params.tunnelAddress}/${params.targetAddress}`;
   const queryParams = new URLSearchParams();
 
-  if (values.logLevel && values.logLevel !== "master") {
-    queryParams.append('log', values.logLevel);
+  if (params.logLevel && params.logLevel !== "master") {
+    queryParams.append('log', params.logLevel);
   }
 
-  // TLS parameters are ONLY for server instance types.
-  if (values.instanceType === 'server') {
-    if (values.tlsMode && values.tlsMode !== "master") {
-      queryParams.append('tls', values.tlsMode);
-      if (values.tlsMode === '2') {
-        if (values.certPath && values.certPath.trim() !== '') queryParams.append('crt', values.certPath.trim());
-        if (values.keyPath && values.keyPath.trim() !== '') queryParams.append('key', values.keyPath.trim());
+  if (params.instanceType === 'server') {
+    if (params.tlsMode && params.tlsMode !== "master") {
+      queryParams.append('tls', params.tlsMode);
+      if (params.tlsMode === '2') {
+        if (params.certPath && params.certPath.trim() !== '') queryParams.append('crt', params.certPath.trim());
+        if (params.keyPath && params.keyPath.trim() !== '') queryParams.append('key', params.keyPath.trim());
       }
     }
   }
@@ -114,7 +122,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
     defaultValues: {
       instanceType: 'server',
       tunnelAddress: '',
-      targetAddress: '',
+      targetAddress: '', // Will be empty for client if not auto-creating server
       logLevel: 'master',
       tlsMode: 'master', 
       certPath: '',
@@ -145,18 +153,20 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
   }, [open, form]);
   
   useEffect(() => {
-    // When instanceType changes, and form is not dirty (initial setup or programmatic change)
     if (!form.formState.isDirty) {
       if (instanceType === "client") {
-          // Keep form.setValue("tlsMode", "master"); for now as it might be used by autoCreateServer
+          form.setValue("tlsMode", "master"); // Client TLS can still apply to auto-server
           form.setValue("certPath", ''); 
           form.setValue("keyPath", '');
+          if (!autoCreateServer) { // If pure client, clear targetAddress as it's auto-generated
+            form.setValue("targetAddress", "");
+          }
       } else if (instanceType === "server") {
           form.setValue("tlsMode", "master"); 
           form.setValue("autoCreateServer", false); 
       }
     }
-  }, [instanceType, form]);
+  }, [instanceType, autoCreateServer, form]);
 
   useEffect(() => {
     if (instanceType === 'client' && tunnelAddressValue && !autoCreateServer) {
@@ -245,79 +255,116 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
         return;
     }
 
-    const isAutoCreatingServer = values.instanceType === 'client' && values.autoCreateServer;
-    let serverUrlToCreate = '';
-    let clientInstanceUrl = '';
+    let primaryInstanceUrl = '';
+    let serverInstanceUrlForAutoCreate: string | null = null;
 
-    if (isAutoCreatingServer) {
-      // Server URL construction
-      const formServerListenTunnelAddress = values.tunnelAddress; // e.g., "[::]:4006"
-      const formServerListenTunnelHost = extractHostname(formServerListenTunnelAddress) || '0.0.0.0';
-      const formServerListenTunnelPort = extractPort(formServerListenTunnelAddress) || '10001'; 
+    if (values.instanceType === 'client') {
+        const clientConnectsToServerTunnel = values.tunnelAddress; // e.g., your.server.com:4006 or [::]:4006
+        const serverPortForClientToConnect = extractPort(clientConnectsToServerTunnel);
 
-      const actualServerUrlTunnelHost = (formServerListenTunnelHost === '0.0.0.0' || formServerListenTunnelHost === '::')
-        ? '127.0.0.1'
-        : formServerListenTunnelHost;
-      const serverUrlTunnelAddressPart = `${actualServerUrlTunnelHost}:${formServerListenTunnelPort}`; // e.g., "127.0.0.1:4006"
-      
-      const serverUrlTargetAddressPart = values.targetAddress; // e.g., "192.168.100.1:5201"
+        if (!serverPortForClientToConnect) {
+            toast({ title: "错误", description: "无法从客户端连接的隧道地址中提取端口。", variant: "destructive" });
+            onLog?.('客户端隧道地址无效，无法提取端口。', 'ERROR');
+            return;
+        }
 
-      const serverConfigForAutoCreate = {
-        instanceType: 'server',
-        tunnelAddress: serverUrlTunnelAddressPart,
-        targetAddress: serverUrlTargetAddressPart,
-        logLevel: values.logLevel,
-        tlsMode: values.tlsMode, 
-        certPath: values.tlsMode === '2' ? values.certPath : '',
-        keyPath: values.tlsMode === '2' ? values.keyPath : '',
-      };
-      serverUrlToCreate = buildUrl(serverConfigForAutoCreate);
-      onLog?.(`准备自动创建服务端: ${serverUrlToCreate}`, 'INFO');
+        const clientLocalForwardPort = (parseInt(serverPortForClientToConnect, 10) + 1).toString();
+        const clientAutoGeneratedLocalTarget = `127.0.0.1:${clientLocalForwardPort}`;
 
-      // Client URL construction
-      const clientConnectToTunnelAddress = serverUrlTunnelAddressPart; 
-      const clientLocalForwardPort = (parseInt(formServerListenTunnelPort, 10) + 1).toString();
-      const clientLocalTargetAddress = `127.0.0.1:${clientLocalForwardPort}`;
+        if (values.autoCreateServer) {
+            // 1. Prepare Server URL (for auto-creation)
+            const serverListenHostRaw = extractHostname(clientConnectsToServerTunnel) || '0.0.0.0'; // Host part from form's tunnelAddress
+            const serverListenPort = extractPort(clientConnectsToServerTunnel) || '10001';         // Port part from form's tunnelAddress
 
-      const clientConfigForAutoCreate = {
-        instanceType: 'client',
-        tunnelAddress: clientConnectToTunnelAddress,
-        targetAddress: clientLocalTargetAddress,
-        logLevel: values.logLevel,
-        tlsMode: '0', // Client URL doesn't include TLS params for its own connection
-        certPath: '',
-        keyPath: '',
-      };
-      clientInstanceUrl = buildUrl(clientConfigForAutoCreate);
-      onLog?.(`准备创建客户端实例 (连接到自动创建的服务端): ${clientInstanceUrl}`, 'INFO');
+            // If wildcard host was specified for server's tunnel, use 127.0.0.1 in the URL. Backend handles listening on [::] or 0.0.0.0.
+            const serverEffectiveTunnelHostForUrl = (serverListenHostRaw === '0.0.0.0' || serverListenHostRaw === '::')
+                ? '127.0.0.1'
+                : serverListenHostRaw;
+            const serverEffectiveTunnelForUrl = `${serverEffectiveTunnelHostForUrl}:${serverListenPort}`;
+            
+            // Server's forwarding target is from the form's targetAddress field (which is visible for server config)
+            const serverForwardTargetFromForm = values.targetAddress; 
+            if (!serverForwardTargetFromForm) {
+                toast({ title: "错误", description: "自动创建服务端时，服务端转发目标地址是必需的。", variant: "destructive" });
+                onLog?.('自动创建服务端失败: 缺少服务端转发目标地址。', 'ERROR');
+                return;
+            }
 
-    } else { 
-      // If not auto-creating, or if it's a server type directly, use form values as is.
-      const directConfig = {
-        instanceType: values.instanceType,
-        tunnelAddress: values.tunnelAddress,
-        targetAddress: values.targetAddress,
-        logLevel: values.logLevel,
-        tlsMode: values.instanceType === 'server' ? values.tlsMode : '0', // TLS params only for server
-        certPath: values.instanceType === 'server' && values.tlsMode === '2' ? values.certPath : '',
-        keyPath: values.instanceType === 'server' && values.tlsMode === '2' ? values.keyPath : '',
-      };
-      clientInstanceUrl = buildUrl(directConfig); 
-      onLog?.(`准备创建 ${values.instanceType} 实例: ${clientInstanceUrl}`, 'INFO');
+            serverInstanceUrlForAutoCreate = buildUrl({
+                instanceType: 'server',
+                tunnelAddress: serverEffectiveTunnelForUrl,
+                targetAddress: serverForwardTargetFromForm,
+                logLevel: values.logLevel,
+                tlsMode: values.tlsMode, // This TLS mode and certs apply to the auto-created server
+                certPath: values.tlsMode === '2' ? values.certPath : '',
+                keyPath: values.tlsMode === '2' ? values.keyPath : '',
+            });
+            onLog?.(`准备自动创建服务端: ${serverInstanceUrlForAutoCreate}`, 'INFO');
+
+            // 2. Prepare Client URL (to connect to the auto-created server)
+            primaryInstanceUrl = buildUrl({
+                instanceType: 'client',
+                tunnelAddress: serverEffectiveTunnelForUrl,      // Client connects to where the server will listen
+                targetAddress: clientAutoGeneratedLocalTarget,  // Client's local forwarding is auto-generated
+                logLevel: values.logLevel,
+                // For client's own URL, TLS params are not typically used.
+                tlsMode: '0', certPath: '', keyPath: '',
+            });
+            onLog?.(`准备创建客户端实例 (连接到自动创建的服务端): ${primaryInstanceUrl}`, 'INFO');
+
+        } else { // Client only, no auto-server
+            primaryInstanceUrl = buildUrl({
+                instanceType: 'client',
+                tunnelAddress: clientConnectsToServerTunnel,      // Connect to specified server
+                targetAddress: clientAutoGeneratedLocalTarget, // Client's local forwarding is auto-generated
+                logLevel: values.logLevel,
+                tlsMode: '0', certPath: '', keyPath: '',
+            });
+            onLog?.(`准备创建客户端实例: ${primaryInstanceUrl}`, 'INFO');
+        }
+    } else { // instanceType === 'server'
+        // Server's targetAddress comes directly from the form
+        const serverTargetAddressFromForm = values.targetAddress;
+        if (!serverTargetAddressFromForm) {
+             toast({ title: "错误", description: "创建服务端时，目标地址是必需的。", variant: "destructive" });
+             onLog?.('创建服务端失败: 缺少目标地址。', 'ERROR');
+             return;
+        }
+        primaryInstanceUrl = buildUrl({
+            instanceType: 'server',
+            tunnelAddress: values.tunnelAddress,
+            targetAddress: serverTargetAddressFromForm,
+            logLevel: values.logLevel,
+            tlsMode: values.tlsMode,
+            certPath: values.tlsMode === '2' ? values.certPath : '',
+            keyPath: values.tlsMode === '2' ? values.keyPath : '',
+        });
+        onLog?.(`准备创建服务端实例: ${primaryInstanceUrl}`, 'INFO');
     }
     
     try {
-      if (isAutoCreatingServer && serverUrlToCreate) {
-        await createInstanceMutation.mutateAsync({ url: serverUrlToCreate });
+      if (serverInstanceUrlForAutoCreate) {
+        await createInstanceMutation.mutateAsync({ url: serverInstanceUrlForAutoCreate });
       }
-      await createInstanceMutation.mutateAsync({ url: clientInstanceUrl }); 
+      // Check if primaryInstanceUrl is valid before submitting
+      if (primaryInstanceUrl) {
+        await createInstanceMutation.mutateAsync({ url: primaryInstanceUrl }); 
+      } else {
+        // This case should ideally be caught earlier by validations
+        throw new Error("主实例URL未能正确构建。");
+      }
       
-      if (!createInstanceMutation.isError) { 
+      // Only reset and close if all mutations (if any) were successful, or if the primary was.
+      // createInstanceMutation.isError will reflect the status of the *last* mutation.
+      // For a more robust success check, you'd need to track individual mutation statuses.
+      // For now, if it reaches here without throwing, assume primary operation was initiated.
+      if (!createInstanceMutation.isError || (createInstanceMutation.isSuccess && !serverInstanceUrlForAutoCreate) || (createInstanceMutation.isSuccess && serverInstanceUrlForAutoCreate && (await queryClient.getQueryState(['instances', apiId]))?.status !== 'error' )) {
         form.reset();
         onOpenChange(false); 
       }
     } catch (error: any) {
        console.error("创建实例序列中发生错误:", error);
+       // Toast for this specific error might be redundant if individual mutations already toast.
     }
   }
   
@@ -386,7 +433,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
                         自动创建匹配的服务端
                       </FormLabel>
                       <FormDescription className="font-sans text-xs">
-                        在当前主控下基于此配置创建相应的服务端。
+                        在当前主控下基于此配置创建相应的服务端。客户端的本地转发端口将自动设置为服务端监听端口+1。
                       </FormDescription>
                     </div>
                   </FormItem>
@@ -408,7 +455,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
                       className="text-sm font-mono"
                       placeholder={
                         instanceType === "server" ? "例: 0.0.0.0:10101" : 
-                        (autoCreateServer ? "例: [::]:8080" : "例: your.server.com:10101")
+                        (autoCreateServer ? "例: [::]:8080 或 0.0.0.0:8080" : "例: your.server.com:10101")
                       } 
                       {...field}
                     />
@@ -472,37 +519,38 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
               </FormItem>
             )}
 
+            { (instanceType === 'server' || (instanceType === 'client' && autoCreateServer)) && (
+              <FormField
+                control={form.control}
+                name="targetAddress"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="font-sans">
+                      {instanceType === 'server' ? '目标地址 (业务数据)' : '服务端转发目标地址 (业务数据)'}
+                    </FormLabel>
+                    <FormControl>
+                      <Input 
+                        className="text-sm font-mono"
+                        placeholder={
+                          instanceType === "server" ? "例: 0.0.0.0:8080 或 10.0.0.5:3000" : 
+                          (autoCreateServer ? "例: 192.168.1.100:80 或 service.internal:5000" : "") 
+                        } 
+                        {...field} 
+                      />
+                    </FormControl>
+                    <FormDescription className="font-sans text-xs">
+                      {instanceType === "server"
+                        ? "服务端业务数据的目标地址 (支持双向)。"
+                        : (autoCreateServer 
+                            ? "自动创建的服务端将业务流量转发到此实际目标。"
+                            : "")}
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
 
-            <FormField
-              control={form.control}
-              name="targetAddress"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel className="font-sans">
-                    {instanceType === 'server' ? '目标地址 (业务数据)' :
-                     (autoCreateServer ? '服务端转发目标地址 (业务数据)' : '客户端本地转发地址 (业务数据)')}
-                  </FormLabel>
-                  <FormControl>
-                    <Input 
-                      className="text-sm font-mono"
-                      placeholder={
-                        instanceType === "server" ? "例: 0.0.0.0:8080" : 
-                        (autoCreateServer ? "例: 192.168.1.100:80" : "例: 127.0.0.1:8000")
-                      } 
-                      {...field} 
-                    />
-                  </FormControl>
-                   <FormDescription className="font-sans text-xs">
-                    {instanceType === "server"
-                      ? "服务端业务数据的目标地址 (支持双向)。"
-                      : (autoCreateServer 
-                          ? "自动创建的服务端将业务流量转发到此实际目标。"
-                          : "客户端转发业务流量至的本地服务地址。")}
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
 
             <FormField
               control={form.control}
@@ -542,8 +590,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
               render={({ field }) => (
                 <FormItem>
                   <FormLabel className="font-sans">
-                    {instanceType === 'server' ? "TLS 模式 (服务端数据通道)" :
-                     (autoCreateServer ? "TLS 模式 (自动创建的服务端数据通道)" : "TLS 模式 (客户端连接行为参考)")}
+                    {instanceType === 'server' ? "TLS 模式 (服务端数据通道)" : "TLS 模式"}
                   </FormLabel>
                   <Select onValueChange={field.onChange} value={field.value || "master"}>
                     <FormControl>
@@ -565,7 +612,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
                       ? "服务端数据通道的TLS加密模式。" 
                       : (autoCreateServer 
                           ? "自动创建的服务端数据通道的TLS模式。" 
-                          : "客户端连接目标服务端时使用的TLS行为。")}
+                          : "客户端连接目标服务端时采用的TLS行为。模式 '2' 表示客户端应信任自定义CA或特定证书。")}
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -640,4 +687,3 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
     </Dialog>
   );
 }
-
