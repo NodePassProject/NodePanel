@@ -135,8 +135,12 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
   const filteredInstances = instances?.filter(instance =>
     instance.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
     instance.url.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (instance.id !== '********' && instance.type.toLowerCase().includes(searchTerm.toLowerCase()))
+    (instance.id !== '********' && instance.type.toLowerCase().includes(searchTerm.toLowerCase())) ||
+    (instance.id === '********' && ('api key'.includes(searchTerm.toLowerCase()) || '密钥'.includes(searchTerm.toLowerCase()) )) // Ensure API key instance can be found
   );
+
+  const apiKeyInstance = filteredInstances?.find(inst => inst.id === '********');
+  const otherInstances = filteredInstances?.filter(inst => inst.id !== '********');
 
   const renderSkeletons = () => {
     return Array.from({ length: 3 }).map((_, i) => (
@@ -150,6 +154,96 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
     ));
   };
 
+  const renderInstanceRow = (instance: Instance) => (
+    <TableRow
+      key={instance.id}
+      className="text-foreground/90 hover:text-foreground"
+      onDoubleClick={() => setSelectedInstanceForDetails(instance)}
+    >
+      <TableCell className="font-medium font-mono text-xs max-w-[100px] truncate" title={instance.id}>{instance.id}</TableCell>
+        <TableCell>
+        {instance.id === '********' ? (
+            <Badge variant="outline" className="border-yellow-500 text-yellow-600 items-center whitespace-nowrap text-xs py-0.5 px-1.5 font-sans">
+            <KeyRound className="h-3 w-3 mr-1" />API 密钥
+            </Badge>
+        ) : (
+          <Badge
+            variant={instance.type === 'server' ? 'default' : 'accent'}
+            className="items-center whitespace-nowrap text-xs font-sans"
+          >
+            {instance.type === 'server' ? <ServerIcon size={12} className="mr-1" /> : <SmartphoneIcon size={12} className="mr-1" />}
+            {instance.type === 'server' ? '服务端' : '客户端'}
+          </Badge>
+        )}
+      </TableCell>
+      <TableCell>
+        {instance.id === '********' ? (
+          <Badge variant="outline" className="border-yellow-500 text-yellow-600 whitespace-nowrap font-sans text-xs py-0.5 px-1.5">
+            <KeyRound className="mr-1 h-3.5 w-3.5" />
+            监听中
+          </Badge>
+        ) : (
+          <InstanceStatusBadge status={instance.status} />
+        )}
+      </TableCell>
+      <TableCell
+        className="truncate max-w-sm text-xs font-mono"
+      >
+          <span
+            className="cursor-pointer hover:text-primary transition-colors duration-150"
+            title={`点击复制: ${instance.url}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              handleCopyToClipboard(instance.url, instance.id === '********' ? 'API 密钥' : 'URL');
+            }}
+          >
+            {instance.id === '********' ? 'API 密钥 (已隐藏)' : instance.url}
+          </span>
+      </TableCell>
+      <TableCell className="text-center text-xs whitespace-nowrap font-mono">
+        {formatBytes(instance.tcprx)} / {formatBytes(instance.tcptx)}
+      </TableCell>
+      <TableCell className="text-center text-xs whitespace-nowrap font-mono">
+        {formatBytes(instance.udprx)} / {formatBytes(instance.udptx)}
+      </TableCell>
+      <TableCell className="text-right">
+        <div className="flex justify-end items-center space-x-1">
+          {instance.id !== '********' && (
+            <InstanceControls
+                instance={instance}
+                onAction={(id, action) => updateInstanceMutation.mutate({ instanceId: id, action })}
+                isLoading={updateInstanceMutation.isPending && updateInstanceMutation.variables?.instanceId === instance.id}
+            />
+          )}
+          <button
+              className="p-2 rounded-md hover:bg-muted"
+              onClick={() => setSelectedInstanceForDetails(instance)}
+              aria-label="查看详情"
+          >
+              <Eye className="h-4 w-4" />
+          </button>
+          {instance.id !== '********' && (
+            <>
+              <button
+                  className="p-2 rounded-md hover:bg-muted"
+                  onClick={() => setSelectedInstanceForModify(instance)}
+                  aria-label="修改"
+              >
+                  <Pencil className="h-4 w-4" />
+              </button>
+              <button
+                  className="p-2 rounded-md hover:bg-destructive/10 text-destructive"
+                  onClick={() => setSelectedInstanceForDelete(instance)}
+                  aria-label="删除"
+              >
+                <Trash2 className="h-4 w-4" />
+              </button>
+            </>
+          )}
+        </div>
+      </TableCell>
+    </TableRow>
+  );
 
   return (
     <Card className="shadow-lg mt-6">
@@ -198,96 +292,10 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
             <TableBody>
               {isLoadingInstances ? renderSkeletons() :
                 filteredInstances && filteredInstances.length > 0 ? (
-                filteredInstances.map((instance) => (
-                  <TableRow
-                    key={instance.id}
-                    className="text-foreground/90 hover:text-foreground"
-                    onDoubleClick={() => setSelectedInstanceForDetails(instance)}
-                  >
-                    <TableCell className="font-medium font-mono text-xs max-w-[100px] truncate" title={instance.id}>{instance.id}</TableCell>
-                     <TableCell>
-                      {instance.id === '********' ? (
-                         <Badge variant="outline" className="border-yellow-500 text-yellow-600 items-center whitespace-nowrap text-xs py-0.5 px-1.5 font-sans">
-                           <KeyRound className="h-3 w-3 mr-1" />API 密钥
-                         </Badge>
-                      ) : (
-                        <Badge
-                          variant={instance.type === 'server' ? 'default' : 'accent'}
-                          className="items-center whitespace-nowrap text-xs font-sans"
-                        >
-                          {instance.type === 'server' ? <ServerIcon size={12} className="mr-1" /> : <SmartphoneIcon size={12} className="mr-1" />}
-                          {instance.type === 'server' ? '服务端' : '客户端'}
-                        </Badge>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      {instance.id === '********' ? (
-                        <Badge variant="outline" className="border-yellow-500 text-yellow-600 whitespace-nowrap font-sans text-xs py-0.5 px-1.5">
-                          <KeyRound className="mr-1 h-3.5 w-3.5" />
-                          监听中
-                        </Badge>
-                      ) : (
-                        <InstanceStatusBadge status={instance.status} />
-                      )}
-                    </TableCell>
-                    <TableCell
-                      className="truncate max-w-sm text-xs font-mono"
-                    >
-                        <span
-                          className="cursor-pointer hover:text-primary transition-colors duration-150"
-                          title={`点击复制: ${instance.url}`}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleCopyToClipboard(instance.url, instance.id === '********' ? 'API 密钥' : 'URL');
-                          }}
-                        >
-                          {instance.id === '********' ? 'API 密钥 (已隐藏)' : instance.url}
-                        </span>
-                    </TableCell>
-                    <TableCell className="text-center text-xs whitespace-nowrap font-mono">
-                      {formatBytes(instance.tcprx)} / {formatBytes(instance.tcptx)}
-                    </TableCell>
-                    <TableCell className="text-center text-xs whitespace-nowrap font-mono">
-                      {formatBytes(instance.udprx)} / {formatBytes(instance.udptx)}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex justify-end items-center space-x-1">
-                        {instance.id !== '********' && (
-                          <InstanceControls
-                              instance={instance}
-                              onAction={(id, action) => updateInstanceMutation.mutate({ instanceId: id, action })}
-                              isLoading={updateInstanceMutation.isPending && updateInstanceMutation.variables?.instanceId === instance.id}
-                          />
-                        )}
-                        <button
-                            className="p-2 rounded-md hover:bg-muted"
-                            onClick={() => setSelectedInstanceForDetails(instance)}
-                            aria-label="查看详情"
-                        >
-                            <Eye className="h-4 w-4" />
-                        </button>
-                        {instance.id !== '********' && (
-                          <>
-                            <button
-                                className="p-2 rounded-md hover:bg-muted"
-                                onClick={() => setSelectedInstanceForModify(instance)}
-                                aria-label="修改"
-                            >
-                                <Pencil className="h-4 w-4" />
-                            </button>
-                            <button
-                                className="p-2 rounded-md hover:bg-destructive/10 text-destructive"
-                                onClick={() => setSelectedInstanceForDelete(instance)}
-                                aria-label="删除"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </button>
-                          </>
-                        )}
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))
+                  <>
+                    {apiKeyInstance && renderInstanceRow(apiKeyInstance)}
+                    {otherInstances?.map(instance => renderInstanceRow(instance))}
+                  </>
               ) : (
                 <TableRow>
                   <TableCell colSpan={7} className="text-center h-24 font-sans">
@@ -340,4 +348,3 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
     </Card>
   );
 }
-
