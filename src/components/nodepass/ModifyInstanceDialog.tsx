@@ -282,18 +282,18 @@ export function ModifyInstanceDialog({ instance, open, onOpenChange, apiId, apiR
               name="tunnelAddress"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel className="font-sans">隧道地址</FormLabel>
+                  <FormLabel className="font-sans">隧道地址 (控制通道)</FormLabel>
                   <FormControl>
                     <Input
                       className="text-sm font-mono"
-                      placeholder={instanceType === "server" ? "服务端监听控制通道地址" : "连接的 NodePass 服务端隧道地址"}
+                      placeholder={instanceType === "server" ? "控制通道监听地址 (例: 0.0.0.0:10101)" : "连接的服务端控制通道地址 (例: your.server.com:10101)"}
                       {...field}
                     />
                   </FormControl>
                    <FormDescription className="font-sans text-xs">
                     {instanceType === "server"
-                      ? "服务端模式: 监听控制连接。"
-                      : "客户端模式: NodePass 服务端隧道地址。"}
+                      ? "服务端监听控制连接的地址 (TCP控制通道)。"
+                      : "客户端连接的服务端控制通道地址。"}
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -305,18 +305,18 @@ export function ModifyInstanceDialog({ instance, open, onOpenChange, apiId, apiR
               name="targetAddress"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel className="font-sans">目标地址</FormLabel>
+                  <FormLabel className="font-sans">目标地址 (业务数据)</FormLabel>
                   <FormControl>
                     <Input
                       className="text-sm font-mono"
-                      placeholder={instanceType === "server" ? "服务端监听流量转发地址" : "本地流量转发地址"}
+                      placeholder={instanceType === "server" ? "业务数据转发地址 (例: 0.0.0.0:8080)" : "本地业务数据转发地址 (例: 127.0.0.1:8000)"}
                       {...field}
                     />
                   </FormControl>
                   <FormDescription className="font-sans text-xs">
                     {instanceType === "server"
-                      ? "服务端模式: 监听隧道流量。"
-                      : "客户端模式: 本地接收流量转发地址。"}
+                      ? "服务端业务数据的目标地址 (支持双向)。"
+                      : "客户端转发业务流量至的本地服务地址。"}
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -361,7 +361,7 @@ export function ModifyInstanceDialog({ instance, open, onOpenChange, apiId, apiR
                   name="tlsMode"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="font-sans">TLS 模式 (服务端)</FormLabel>
+                      <FormLabel className="font-sans">TLS 模式 (服务端数据通道)</FormLabel>
                       <Select onValueChange={field.onChange} value={field.value || "master"}>
                         <FormControl>
                           <SelectTrigger className="text-sm font-sans">
@@ -378,7 +378,7 @@ export function ModifyInstanceDialog({ instance, open, onOpenChange, apiId, apiR
                         </SelectContent>
                       </Select>
                       <FormDescription className="font-sans text-xs">
-                        选择“默认”将继承主控实际启动时应用的设置。
+                        服务端数据通道的TLS加密模式。选择“默认”将继承主控设置。
                       </FormDescription>
                       <FormMessage />
                     </FormItem>
@@ -449,3 +449,4 @@ export function ModifyInstanceDialog({ instance, open, onOpenChange, apiId, apiR
     </Dialog>
   );
 }
+

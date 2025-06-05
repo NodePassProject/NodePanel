@@ -247,62 +247,56 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
 
     const isAutoCreatingServer = values.instanceType === 'client' && values.autoCreateServer;
     let serverUrlToCreate = '';
-    let finalInstanceUrlToCreate = ''; // This will be either the client URL or the server URL if only creating a server
+    let clientInstanceUrl = '';
 
     if (isAutoCreatingServer) {
-      // 1. Construct Server URL
-      const serverTunnelForDefinition = values.tunnelAddress; 
-      const serverTargetForDefinition = values.targetAddress; 
-
+      // Server URL construction
       const serverConfigForAutoCreate: CreateInstanceFormValues = {
         instanceType: 'server',
-        tunnelAddress: serverTunnelForDefinition,
-        targetAddress: serverTargetForDefinition,
+        tunnelAddress: values.tunnelAddress, // This is server's listening tunnel address
+        targetAddress: values.targetAddress, // This is server's forwarding target address
         logLevel: values.logLevel,
-        tlsMode: values.tlsMode,
+        tlsMode: values.tlsMode, // Client's TLS mode choice applies to the server
         certPath: values.tlsMode === '2' ? values.certPath : '',
         keyPath: values.tlsMode === '2' ? values.keyPath : '',
-        autoCreateServer: false, 
+        autoCreateServer: false, // Not relevant for the server instance itself
       };
       serverUrlToCreate = buildUrl(serverConfigForAutoCreate);
       onLog?.(`准备自动创建服务端: ${serverUrlToCreate}`, 'INFO');
 
-      // 2. Construct Client URL
-      const parsedServerTunnelHost = extractHostname(serverTunnelForDefinition);
-      const parsedServerTunnelPort = extractPort(serverTunnelForDefinition);
+      // Client URL construction
+      const serverTunnelHost = extractHostname(values.tunnelAddress) || '127.0.0.1'; // Server's tunnel host
+      const serverTunnelPort = extractPort(values.tunnelAddress) || '10001';     // Server's tunnel port
+      const clientConnectTo = (serverTunnelHost === '0.0.0.0' || serverTunnelHost === '::') ? '127.0.0.1' : serverTunnelHost;
+      const clientTunnelAddress = `${clientConnectTo}:${serverTunnelPort}`; // Client connects to this server tunnel
 
-      let clientConnectToHost = parsedServerTunnelHost;
-      if (parsedServerTunnelHost && (parsedServerTunnelHost === '0.0.0.0' || parsedServerTunnelHost === '::')) {
-        clientConnectToHost = '127.0.0.1'; 
-      }
-      const clientTunnel = `${clientConnectToHost || '127.0.0.1'}:${parsedServerTunnelPort || '10001'}`;
-
-      const remoteTargetPort = extractPort(serverTargetForDefinition);
-      const clientLocalTarget = `127.0.0.1:${remoteTargetPort || '8000'}`; 
+      const clientLocalForwardPort = extractPort(values.targetAddress) || '8000'; // Port from server's target, client listens locally
+      const clientTargetAddress = `127.0.0.1:${clientLocalForwardPort}`; // Client's local forwarding endpoint
 
       const clientConfigForAutoCreate: CreateInstanceFormValues = {
         instanceType: 'client',
-        tunnelAddress: clientTunnel,
-        targetAddress: clientLocalTarget,
-        logLevel: values.logLevel,
-        tlsMode: '0', // Client's own TLS mode for URL generation is not typically a query param
+        tunnelAddress: clientTunnelAddress,
+        targetAddress: clientTargetAddress,
+        logLevel: values.logLevel, // Client inherits log level
+        tlsMode: '0', // Client URL typically doesn't carry TLS params; it adapts. Set to '0' for URL build simplicity for client.
         certPath: '',
         keyPath: '',
         autoCreateServer: false,
       };
-      finalInstanceUrlToCreate = buildUrl(clientConfigForAutoCreate);
-      onLog?.(`准备创建客户端实例 (连接到自动创建的服务端): ${finalInstanceUrlToCreate}`, 'INFO');
+      clientInstanceUrl = buildUrl(clientConfigForAutoCreate);
+      onLog?.(`准备创建客户端实例 (连接到自动创建的服务端): ${clientInstanceUrl}`, 'INFO');
 
     } else { 
-      finalInstanceUrlToCreate = buildUrl(values);
-      onLog?.(`准备创建 ${values.instanceType} 实例: ${finalInstanceUrlToCreate}`, 'INFO');
+      clientInstanceUrl = buildUrl(values); // If not auto-creating, this is the direct URL to create
+      onLog?.(`准备创建 ${values.instanceType} 实例: ${clientInstanceUrl}`, 'INFO');
     }
     
     try {
       if (isAutoCreatingServer && serverUrlToCreate) {
         await createInstanceMutation.mutateAsync({ url: serverUrlToCreate });
       }
-      await createInstanceMutation.mutateAsync({ url: finalInstanceUrlToCreate });
+      // Always create the client instance (or the server if instanceType was 'server' initially)
+      await createInstanceMutation.mutateAsync({ url: clientInstanceUrl }); 
       
       if (!createInstanceMutation.isError) { 
         form.reset();
@@ -310,7 +304,6 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
       }
     } catch (error: any) {
        console.error("创建实例序列中发生错误:", error);
-       // Toast/log for individual failures are handled by mutateAsync's onError
     }
   }
   
@@ -393,24 +386,25 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
               render={({ field }) => (
                 <FormItem>
                   <FormLabel className="font-sans">
-                    {instanceType === 'client' && autoCreateServer ? '服务端隧道监听地址' : '隧道地址'}
+                    {instanceType === 'server' ? '隧道地址 (控制通道)' : 
+                     (autoCreateServer ? '服务端隧道监听地址 (控制通道)' : '连接的服务端隧道地址 (控制通道)')}
                   </FormLabel>
                   <FormControl>
                     <Input 
                       className="text-sm font-mono"
                       placeholder={
-                        instanceType === "server" ? "服务端监听控制连接的地址。例: 0.0.0.0:10001" : 
-                        (autoCreateServer ? "自动创建的服务端的监听地址。例: [::]:8080" : "客户端连接的服务端隧道地址。例: your.server.com:10001")
+                        instanceType === "server" ? "控制通道监听地址 (例: 0.0.0.0:10101)" : 
+                        (autoCreateServer ? "自动创建的服务端的控制通道监听地址 (例: [::]:8080)" : "连接的服务端控制通道地址 (例: your.server.com:10101)")
                       } 
                       {...field}
                     />
                   </FormControl>
                    <FormDescription className="font-sans text-xs">
                     {instanceType === "server"
-                      ? "服务端监听控制连接的地址。"
+                      ? "服务端监听控制连接的地址 (TCP控制通道)。"
                       : (autoCreateServer 
-                          ? "自动创建的服务端将在此地址监听隧道。"
-                          : "客户端连接的服务端隧道地址。")}
+                          ? "自动创建的服务端将在此地址监听控制通道。"
+                          : "客户端连接的服务端控制通道地址。")}
                   </FormDescription>
                   {externalApiSuggestion && (
                     <FormDescription className="text-xs text-amber-600 dark:text-amber-400 mt-1 font-sans">
@@ -471,24 +465,25 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
               render={({ field }) => (
                 <FormItem>
                   <FormLabel className="font-sans">
-                    {instanceType === 'client' && autoCreateServer ? '服务端转发目标地址' : '目标地址'}
+                    {instanceType === 'server' ? '目标地址 (业务数据)' :
+                     (autoCreateServer ? '服务端转发目标地址 (业务数据)' : '客户端本地转发地址 (业务数据)')}
                   </FormLabel>
                   <FormControl>
                     <Input 
                       className="text-sm font-mono"
                       placeholder={
-                        instanceType === "server" ? "服务端监听的业务流量地址。例: 0.0.0.0:8080" : 
-                        (autoCreateServer ? "自动创建的服务端转发到的实际目标。例: 192.168.1.100:80" : "客户端转发流量至的本地地址。例: 127.0.0.1:8000")
+                        instanceType === "server" ? "业务数据转发地址 (例: 0.0.0.0:8080)" : 
+                        (autoCreateServer ? "自动创建的服务端业务数据转发目标 (例: 192.168.1.100:80)" : "客户端本地业务数据转发地址 (例: 127.0.0.1:8000)")
                       } 
                       {...field} 
                     />
                   </FormControl>
                    <FormDescription className="font-sans text-xs">
                     {instanceType === "server"
-                      ? "服务端监听的业务流量地址。"
+                      ? "服务端业务数据的目标地址 (支持双向)。"
                       : (autoCreateServer 
-                          ? "自动创建的服务端将流量转发到此实际目标。客户端将通过本地端口访问此目标。"
-                          : "客户端转发流量至的本地服务地址。")}
+                          ? "自动创建的服务端将业务流量转发到此实际目标。客户端将通过本地端口访问此目标。"
+                          : "客户端转发业务流量至的本地服务地址。")}
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -536,7 +531,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel className="font-sans">
-                        TLS 模式 {instanceType === 'client' && autoCreateServer ? "(自动创建的服务端)" : "(服务端)"}
+                        TLS 模式 {instanceType === 'client' && autoCreateServer ? "(自动创建的服务端数据通道)" : "(服务端数据通道)"}
                       </FormLabel>
                       <Select onValueChange={field.onChange} value={field.value || "master"}>
                         <FormControl>
@@ -555,14 +550,13 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
                       </Select>
                       <FormDescription className="font-sans text-xs">
                         {instanceType === 'client' && autoCreateServer 
-                          ? "自动创建的服务端的TLS模式。"
-                          : "服务端控制连接的TLS加密模式。"}
+                          ? "自动创建的服务端的数据通道TLS模式。"
+                          : "服务端数据通道的TLS加密模式。"}
                       </FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
-                {/* Cert/Key paths only show if TLS mode is '2' AND it's for a server (or client auto-creating server) */}
                 {tlsMode === '2' && (
                   <>
                     <FormField
@@ -619,7 +613,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel className="font-sans">
-                        TLS 模式 (客户端连接行为)
+                        TLS 模式 (客户端连接行为参考)
                       </FormLabel>
                       <Select onValueChange={field.onChange} value={field.value || "master"}>
                         <FormControl>
@@ -628,14 +622,14 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          <SelectItem value="master" className="font-sans">默认 (通常无TLS或按服务端配置)</SelectItem>
+                          <SelectItem value="master" className="font-sans">默认 (按服务端配置)</SelectItem>
                           <SelectItem value="0" className="font-sans">0: 无TLS (明文连接)</SelectItem>
                           <SelectItem value="1" className="font-sans">1: TLS (信任自签名/任何证书)</SelectItem>
-                          <SelectItem value="2" className="font-sans">2: TLS (自定义根证书验证 - 不适用URL参数)</SelectItem>
+                          <SelectItem value="2" className="font-sans">2: TLS (自定义根CA - 通常不用于URL参数)</SelectItem>
                         </SelectContent>
                       </Select>
                       <FormDescription className="font-sans text-xs">
-                        客户端连接目标服务端时使用的TLS行为。
+                        客户端连接服务端时TLS行为参考。若勾选“自动创建服务端”，此设置将应用于该服务端的数据通道。
                       </FormDescription>
                       <FormMessage />
                     </FormItem>
@@ -665,3 +659,4 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
     </Dialog>
   );
 }
+
