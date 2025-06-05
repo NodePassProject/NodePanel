@@ -4,7 +4,6 @@
 import React, { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-// import type { z } from 'zod'; // No longer needed if type is imported
 import {
   Dialog,
   DialogContent,
@@ -89,6 +88,7 @@ function buildUrl(values: CreateInstanceFormValues): string {
     queryParams.append('log', values.logLevel);
   }
 
+  // For server instances, append TLS parameters if not 'master'
   if (values.instanceType === 'server') {
     if (values.tlsMode && values.tlsMode !== "master") {
       queryParams.append('tls', values.tlsMode);
@@ -98,6 +98,9 @@ function buildUrl(values: CreateInstanceFormValues): string {
       }
     }
   }
+  // Note: Client URL itself does not typically carry TLS parameters.
+  // The client's tlsMode form field is used for auto-creating the server.
+
   const queryString = queryParams.toString();
   return queryString ? `${url}?${queryString}` : url;
 }
@@ -116,7 +119,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
       tunnelAddress: '',
       targetAddress: '',
       logLevel: 'master',
-      tlsMode: 'master',
+      tlsMode: 'master', // Default for server
       certPath: '',
       keyPath: '',
       autoCreateServer: false,
@@ -124,7 +127,9 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
   });
 
   const instanceType = form.watch("instanceType");
-  const tlsMode = form.watch("tlsMode");
+  const tlsMode = form.watch("tlsMode"); // This is the server's TLS mode if type is server
+  const clientTlsMode = form.watch("tlsMode"); // This is the client's TLS choice if type is client
+  const autoCreateServer = form.watch("autoCreateServer");
   const tunnelAddressValue = form.watch("tunnelAddress");
 
   useEffect(() => {
@@ -134,7 +139,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
         tunnelAddress: '',
         targetAddress: '',
         logLevel: 'master',
-        tlsMode: 'master',
+        tlsMode: 'master', // Initial default for server
         certPath: '',
         keyPath: '',
         autoCreateServer: false,
@@ -145,19 +150,17 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
   
   useEffect(() => {
     if (instanceType === "client") {
-        form.setValue("tlsMode", undefined); 
-        form.setValue("certPath", '');
+        form.setValue("tlsMode", "0"); // Default client TLS to '0' (No TLS)
+        form.setValue("certPath", ''); // Clear server-specific fields
         form.setValue("keyPath", '');
     } else if (instanceType === "server") {
-        if (form.getValues("tlsMode") === undefined) {
-            form.setValue("tlsMode", "master");
-        }
+        form.setValue("tlsMode", "master"); // Default server TLS to 'master'
         form.setValue("autoCreateServer", false); 
     }
   }, [instanceType, form]);
 
   useEffect(() => {
-    if (instanceType === 'client' && tunnelAddressValue) {
+    if (instanceType === 'client' && tunnelAddressValue && !autoCreateServer) {
       const clientTunnelHost = extractHostname(tunnelAddressValue);
       if (!clientTunnelHost) {
         setExternalApiSuggestion(null);
@@ -183,7 +186,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
     } else {
       setExternalApiSuggestion(null);
     }
-  }, [tunnelAddressValue, instanceType, apiConfigsList]);
+  }, [tunnelAddressValue, instanceType, apiConfigsList, autoCreateServer]);
 
 
   const { data: serverInstancesForDropdown, isLoading: isLoadingServerInstances } = useQuery<Instance[], Error, {id: string, display: string, tunnelAddr: string}[]>({
@@ -264,20 +267,17 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
         return;
       }
       
-      const effectiveMasterTlsMode = (activeApiConfig?.masterDefaultTlsMode && activeApiConfig.masterDefaultTlsMode !== 'master') 
-                                      ? activeApiConfig.masterDefaultTlsMode 
-                                      : '1'; 
-
       const serverTunnelHostForDefinition = clientTunnelHost.includes(':') && !clientTunnelHost.startsWith('[') ? `[${clientTunnelHost}]` : clientTunnelHost;
 
+      // Server uses client's selected log level and TLS mode
       const serverConfigForAutoCreate: CreateInstanceFormValues = {
         instanceType: 'server',
         tunnelAddress: `${serverTunnelHostForDefinition}:${clientTunnelPort}`,
-        targetAddress: `0.0.0.0:${clientTargetPort}`,
-        logLevel: values.logLevel,
-        tlsMode: effectiveMasterTlsMode,
-        certPath: '', 
-        keyPath: '',  
+        targetAddress: `0.0.0.0:${clientTargetPort}`, // Server target is typically open
+        logLevel: values.logLevel, // Use client's log level
+        tlsMode: values.tlsMode,   // Use client's selected TLS mode ('0' or '1')
+        certPath: '', // Not applicable for TLS '0' or '1'
+        keyPath: '',  // Not applicable for TLS '0' or '1'
       };
       serverUrlToCreate = buildUrl(serverConfigForAutoCreate);
       onLog?.(`准备自动创建服务端: ${serverUrlToCreate}`, 'INFO');
@@ -345,6 +345,31 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
                 </FormItem>
               )}
             />
+            
+            {instanceType === 'client' && (
+              <FormField
+                control={form.control}
+                name="autoCreateServer"
+                render={({ field }) => (
+                  <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4 shadow-sm">
+                    <FormControl>
+                      <Checkbox
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                      />
+                    </FormControl>
+                    <div className="space-y-1 leading-none">
+                      <FormLabel className="font-sans cursor-pointer">
+                        自动创建匹配的服务端
+                      </FormLabel>
+                      <FormDescription className="font-sans text-xs">
+                        勾选后，会在创建此客户端前自动创建匹配的服务端。服务端将使用客户端选定的日志级别和TLS模式。
+                      </FormDescription>
+                    </div>
+                  </FormItem>
+                )}
+              />
+            )}
 
             <FormField
               control={form.control}
@@ -355,14 +380,14 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
                   <FormControl>
                     <Input 
                       className="text-sm font-mono"
-                      placeholder={instanceType === "server" ? "服务端监听控制通道地址, 例: 0.0.0.0:10101" : "连接的 NodePass 服务端隧道地址, 例: your.server.com:10101"} 
+                      placeholder={instanceType === "server" ? "监听控制连接, 例: 0.0.0.0:10101" : "连接的服务端隧道, 例: your.server.com:10101"} 
                       {...field}
                     />
                   </FormControl>
                   <FormDescription className="font-sans text-xs">
                     {instanceType === "server"
-                      ? "服务端模式: 监听客户端控制连接的地址。"
-                      : "客户端模式: NodePass 服务端隧道地址。"}
+                      ? "服务端监听客户端控制连接的地址。"
+                      : "客户端连接的NodePass服务端隧道地址。"}
                   </FormDescription>
                   {externalApiSuggestion && (
                     <FormDescription className="text-xs text-amber-600 dark:text-amber-400 mt-1 font-sans">
@@ -375,7 +400,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
               )}
             />
 
-            {instanceType === 'client' && (
+            {instanceType === 'client' && !autoCreateServer && (
               <FormItem>
                 <FormLabel className="font-sans">或从现有服务端选择</FormLabel>
                 <Select 
@@ -423,14 +448,14 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
                   <FormControl>
                     <Input 
                       className="text-sm font-mono"
-                      placeholder={instanceType === "server" ? "服务端监听流量转发地址, 例: 0.0.0.0:8080" : "本地流量转发地址, 例: 127.0.0.1:8000"} 
+                      placeholder={instanceType === "server" ? "监听隧道流量, 例: 0.0.0.0:8080" : "本地接收流量转发, 例: 127.0.0.1:8000"} 
                       {...field} 
                     />
                   </FormControl>
                    <FormDescription className="font-sans text-xs">
                     {instanceType === "server"
-                      ? "服务端模式: 监听隧道流量的地址。"
-                      : "客户端模式: 接收流量的本地转发地址。"}
+                      ? "服务端监听隧道中实际业务流量的地址。"
+                      : "客户端将接收到的隧道流量转发到的本地地址。"}
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -461,8 +486,8 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
                     </SelectContent>
                   </Select>
                   <FormDescription className="font-sans text-xs">
-                    选择“默认”将继承主控实际启动时应用的设置。
-                    {activeApiConfig?.masterDefaultLogLevel && activeApiConfig.masterDefaultLogLevel !== 'master' && ` (当前主控记录的默认级别为: ${activeApiConfig.masterDefaultLogLevel.toUpperCase()})`}
+                    “默认”将继承主控启动设置。
+                    {activeApiConfig?.masterDefaultLogLevel && activeApiConfig.masterDefaultLogLevel !== 'master' && ` (当前主控记录默认: ${activeApiConfig.masterDefaultLogLevel.toUpperCase()})`}
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -477,7 +502,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel className="font-sans">TLS 模式 (服务端)</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value || "master"}>
+                      <Select onValueChange={field.onChange} value={field.value || "master"}>
                         <FormControl>
                           <SelectTrigger className="text-sm font-sans">
                             <SelectValue placeholder="选择 TLS 模式" />
@@ -493,8 +518,8 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
                         </SelectContent>
                       </Select>
                        <FormDescription className="font-sans text-xs">
-                        选择“默认”将继承主控实际启动时应用的设置。
-                        {activeApiConfig?.masterDefaultTlsMode && activeApiConfig.masterDefaultTlsMode !== 'master' && ` (当前主控记录的默认TLS模式为: ${MASTER_TLS_MODE_DISPLAY_MAP[activeApiConfig.masterDefaultTlsMode]})`}
+                        “默认”将继承主控启动设置。
+                        {activeApiConfig?.masterDefaultTlsMode && activeApiConfig.masterDefaultTlsMode !== 'master' && ` (当前主控记录默认: ${MASTER_TLS_MODE_DISPLAY_MAP[activeApiConfig.masterDefaultTlsMode]})`}
                       </FormDescription>
                       <FormMessage />
                     </FormItem>
@@ -546,29 +571,29 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
             {instanceType === 'client' && (
               <FormField
                 control={form.control}
-                name="autoCreateServer"
+                name="tlsMode" 
                 render={({ field }) => (
-                  <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4 shadow-sm">
-                    <FormControl>
-                      <Checkbox
-                        checked={field.value}
-                        onCheckedChange={field.onChange}
-                      />
-                    </FormControl>
-                    <div className="space-y-1 leading-none">
-                      <FormLabel className="font-sans cursor-pointer">
-                        自动创建匹配的服务端
-                      </FormLabel>
-                      <FormDescription className="font-sans text-xs">
-                        如果勾选，将在创建此客户端实例前，尝试自动创建一个匹配的服务端实例。
-                        服务端将使用与客户端相同的日志级别，并根据当前活动主控记录的默认TLS模式进行配置 (若主控未记录特定TLS模式，则默认为 '1' 自签名证书)。
-                      </FormDescription>
-                    </div>
+                  <FormItem>
+                    <FormLabel className="font-sans">TLS 模式 (客户端)</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value || "0"}>
+                      <FormControl>
+                        <SelectTrigger className="text-sm font-sans">
+                          <SelectValue placeholder="选择客户端 TLS 模式" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="0" className="font-sans">0: 无TLS (连接 HTTP 服务端)</SelectItem>
+                        <SelectItem value="1" className="font-sans">1: TLS (连接 HTTPS 服务端, 信任自签名)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormDescription className="font-sans text-xs">
+                      选择客户端连接服务端时是否使用TLS。若勾选“自动创建匹配的服务端”，此设置也将用于该服务端。
+                    </FormDescription>
+                    <FormMessage />
                   </FormItem>
                 )}
               />
             )}
-
           </form>
         </Form>
         <DialogFooter className="pt-4 font-sans">
@@ -592,4 +617,3 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
     </Dialog>
   );
 }
-
