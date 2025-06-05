@@ -313,7 +313,7 @@ const TopologyPageContent: NextPage = () => {
       if (targetType === 'client') strokeColor = 'hsl(var(--chart-2))';
       else if (targetType === 'landing') strokeColor = 'hsl(var(--chart-4))';
     } else if (sourceType === 'client') {
-      if (targetType === 'server' || targetType === 'client') strokeColor = 'hsl(var(--chart-2))';
+      if (targetType === 'server' || targetType === 'client') strokeColor = 'hsl(var(--chart-2))'; // Client to Server or Client to Client
       else if (targetType === 'landing') strokeColor = 'hsl(var(--chart-5))';
     }
     return { stroke: strokeColor, markerColor: strokeColor };
@@ -344,150 +344,176 @@ const TopologyPageContent: NextPage = () => {
           let sourceNodeChanged = false;
           let targetNodeChanged = false;
 
+          // --- Start: Refined Managing API ID and Defaults Assignment for Target Node ---
+          // Only assign managingApiId if target doesn't already have one (or isn't a controller itself without one assigned yet)
+          const targetIsUnmanaged = !targetNode.data.managingApiId && !(targetNode.data.type === 'controller' && targetNode.data.apiId);
+          if (targetIsUnmanaged) {
+            let newManagingApiId: string | undefined = undefined;
+            let newManagingApiName: string | undefined = undefined;
+            let managingControllerConfig: NamedApiConfig | null = null;
 
-          let newManagingApiId: string | undefined = undefined;
-          let newManagingApiName: string | undefined = undefined;
-          let managingControllerConfig: NamedApiConfig | null = null;
-
-
-          if (sourceData.type === 'controller' && sourceData.role !== 'client') { 
-            const sCtrl = sourceData as ControllerNodeData;
-            if (targetData.type === 'server' || targetData.type === 'client' || (targetData.type === 'controller' && (targetData as ControllerNodeData).role === 'client')) {
-              newManagingApiId = sCtrl.apiId;
-              newManagingApiName = sCtrl.apiName;
-              managingControllerConfig = getApiConfigById(sCtrl.apiId);
-            }
-          } else if (sourceData.type === 'client' || (sourceData.type === 'controller' && (sourceData as ControllerNodeData).role === 'client')) { 
-            const clientLikeSource = sourceData as ClientNodeData | ControllerNodeData;
-            if (targetData.type === 'landing' || targetData.type === 'server' || targetData.type === 'client') {
-              newManagingApiId = clientLikeSource.managingApiId || (clientLikeSource.type === 'controller' ? clientLikeSource.apiId : undefined);
-              newManagingApiName = clientLikeSource.managingApiName || (clientLikeSource.type === 'controller' ? clientLikeSource.apiName : undefined);
-              if (newManagingApiId) managingControllerConfig = getApiConfigById(newManagingApiId);
-
-              if (!newManagingApiId) {
-                onAppLog?.(`无法为节点 "${targetData.label}" 设置主控信息，因为其父节点 "${sourceData.label}" 没有关联主控信息。`, 'WARNING');
+            if (sourceNode.data.type === 'controller' && (sourceNode.data as ControllerNodeData).role !== 'client') {
+              const sCtrl = sourceNode.data as ControllerNodeData;
+              if (targetNode.data.type === 'server' || targetNode.data.type === 'client' || (targetNode.data.type === 'controller' && (targetNode.data as ControllerNodeData).role === 'client')) {
+                newManagingApiId = sCtrl.apiId;
+                newManagingApiName = sCtrl.apiName;
+                if (newManagingApiId) managingControllerConfig = getApiConfigById(newManagingApiId);
+              }
+            } else if (sourceNode.data.type === 'server') {
+              const serverSource = sourceNode.data as ServerNodeData;
+              if (targetNode.data.type === 'client' || targetNode.data.type === 'landing') {
+                newManagingApiId = serverSource.managingApiId; // Server itself is managed
+                newManagingApiName = serverSource.managingApiName;
+                if (newManagingApiId) managingControllerConfig = getApiConfigById(newManagingApiId);
+              }
+            } else if (sourceNode.data.type === 'client' || (sourceNode.data.type === 'controller' && (sourceNode.data as ControllerNodeData).role === 'client')) {
+              const clientLikeSource = sourceNode.data as ClientNodeData | ControllerNodeData;
+              if (targetNode.data.type === 'landing') {
+                newManagingApiId = clientLikeSource.managingApiId || (clientLikeSource.type === 'controller' ? clientLikeSource.apiId : undefined);
+                newManagingApiName = clientLikeSource.managingApiName || (clientLikeSource.type === 'controller' ? clientLikeSource.apiName : undefined);
+                if (newManagingApiId) managingControllerConfig = getApiConfigById(newManagingApiId);
               }
             }
-          } else if (sourceData.type === 'server') { 
-            const serverSource = sourceData as ServerNodeData;
-            if (targetData.type === 'client' || targetData.type === 'landing') {
-              newManagingApiId = serverSource.managingApiId;
-              newManagingApiName = serverSource.managingApiName;
-               if (newManagingApiId) managingControllerConfig = getApiConfigById(newManagingApiId);
-              if (!newManagingApiId) {
-                 onAppLog?.(`无法为节点 "${targetData.label}" 设置主控信息，因为其父服务端 "${sourceData.label}" 没有关联主控信息。`, 'WARNING');
-              }
-            }
-          }
-
-          if (newManagingApiId && newManagingApiName &&
-              (targetData.type === 'server' || targetData.type === 'client' || targetData.type === 'landing' || (targetData.type === 'controller' && (targetData as ControllerNodeData).role === 'client' ))) {
             
-            const targetCurrentData = targetData as ServerNodeData | ClientNodeData | LandingNodeData | ControllerNodeData;
-            let updatedTargetWithControllerDefaults = { 
-                ...updatedTargetData, 
-                managingApiId: newManagingApiId, 
-                managingApiName: newManagingApiName 
-            };
+            if (newManagingApiId && newManagingApiName &&
+                (targetNode.data.type === 'server' || targetNode.data.type === 'client' || targetNode.data.type === 'landing' || (targetNode.data.type === 'controller' && (targetNode.data as ControllerNodeData).role === 'client'))) {
+                
+                updatedTargetData = { 
+                    ...updatedTargetData, 
+                    managingApiId: newManagingApiId, 
+                    managingApiName: newManagingApiName 
+                };
+                targetNodeChanged = true;
+                onAppLog?.(`节点 "${targetNode.data.label}" 已自动关联到主控 "${newManagingApiName}" (由于连接到 "${sourceNode.data.label}")。`, 'INFO');
 
-            if (targetCurrentData.type === 'server' || targetCurrentData.type === 'client' || (targetCurrentData.type === 'controller' && targetCurrentData.role === 'client')) {
-                if (managingControllerConfig) {
-                     const controllerLogLevel = managingControllerConfig.masterDefaultLogLevel;
-                     updatedTargetWithControllerDefaults.logLevel = (controllerLogLevel && controllerLogLevel !== 'master') ? controllerLogLevel : 'info';
-                     onAppLog?.(`节点 "${targetData.label}" 日志级别已根据主控 "${newManagingApiName}" 设置为: ${updatedTargetWithControllerDefaults.logLevel}`, 'INFO');
+                // Apply defaults from the new managing controller to the target node
+                const targetTypedData = updatedTargetData as ServerNodeData | ClientNodeData | ControllerNodeData; // Use a more specific type
+                if (targetTypedData.type === 'server' || targetTypedData.type === 'client' || (targetTypedData.type === 'controller' && targetTypedData.role === 'client')) {
+                    if (managingControllerConfig) {
+                        const controllerLogLevel = managingControllerConfig.masterDefaultLogLevel;
+                        targetTypedData.logLevel = (controllerLogLevel && controllerLogLevel !== 'master') ? controllerLogLevel : 'info';
+                        onAppLog?.(`节点 "${targetNode.data.label}" 日志级别已根据新主控 "${newManagingApiName}" 设置为: ${targetTypedData.logLevel}`, 'INFO');
 
-                     if (targetCurrentData.type === 'server') {
-                        const controllerTlsMode = managingControllerConfig.masterDefaultTlsMode;
-                        (updatedTargetWithControllerDefaults as ServerNodeData).tlsMode = (controllerTlsMode && controllerTlsMode !== 'master') ? controllerTlsMode : '0';
-                        onAppLog?.(`服务端节点 "${targetData.label}" TLS模式已根据主控 "${newManagingApiName}" 设置为: ${(updatedTargetWithControllerDefaults as ServerNodeData).tlsMode}`, 'INFO');
-                     }
-                } else {
-                    updatedTargetWithControllerDefaults.logLevel = 'info';
-                     if (targetCurrentData.type === 'server') (updatedTargetWithControllerDefaults as ServerNodeData).tlsMode = '0';
-                     onAppLog?.(`节点 "${targetData.label}" 未找到关联主控配置，日志级别设为 "info"${targetCurrentData.type === 'server' ? ', TLS模式设为 "0"' : ''}。`, 'WARNING');
+                        if (targetTypedData.type === 'server') {
+                            const controllerTlsMode = managingControllerConfig.masterDefaultTlsMode;
+                            (targetTypedData as ServerNodeData).tlsMode = (controllerTlsMode && controllerTlsMode !== 'master') ? controllerTlsMode : '0';
+                            onAppLog?.(`服务端节点 "${targetNode.data.label}" TLS模式已根据新主控 "${newManagingApiName}" 设置为: ${(targetTypedData as ServerNodeData).tlsMode}`, 'INFO');
+                        }
+                    } else {
+                        targetTypedData.logLevel = 'info';
+                        if (targetTypedData.type === 'server') (targetTypedData as ServerNodeData).tlsMode = '0';
+                        onAppLog?.(`节点 "${targetNode.data.label}" 未找到新关联主控配置，日志级别设为 "info"${targetTypedData.type === 'server' ? ', TLS模式设为 "0"' : ''}。`, 'WARNING');
+                    }
                 }
             }
-            updatedTargetData = updatedTargetWithControllerDefaults;
-            targetNodeChanged = true;
-            onAppLog?.(`节点 "${targetData.label}" 已自动关联到主控 "${newManagingApiName}"。`, 'INFO');
           }
+          // --- End: Refined Managing API ID and Defaults Assignment ---
 
+
+          // Auto-set tunnel/target addresses based on connection context
           if (sourceData.type === 'controller' && sourceData.role !== 'client' &&
               (targetData.type === 'server' || (targetData.type === 'controller' && (targetData as ControllerNodeData).role === 'client'))) {
 
-            const sCtrlData = sourceData as ControllerNodeData;
+            const sCtrlData = sourceData as ControllerNodeData; // This is the managing controller for targetData
             const targetInstanceData = targetData as ServerNodeData | ControllerNodeData;
             const initialTargetTunnelPortStr = extractPort(targetInstanceData.tunnelAddress || '');
             const initialTargetTunnelHost = extractHostname(targetInstanceData.tunnelAddress || '');
             const defaultTunnelPortStr = targetData.type === 'server' ? '10001' : INTER_CONTROLLER_CLIENT_DEFAULT_PORT;
             const initialTunnelPort = parseInt(initialTargetTunnelPortStr || defaultTunnelPortStr, 10);
 
+            // If target's tunnel host is wildcard or points to localhost (meaning it should use controller's host)
             if (isTunnelPortWildcard(initialTargetTunnelHost) || !initialTargetTunnelHost || initialTargetTunnelHost.toLowerCase() === 'localhost' || initialTargetTunnelHost === 'upstream-controller-host') {
-              const controllerConfig = getApiConfigById(sCtrlData.apiId);
-              if (controllerConfig?.apiUrl) {
-                let controllerApiHost = extractHostname(controllerConfig.apiUrl);
+              const controllerConfigForTarget = getApiConfigById(sCtrlData.apiId); // Use sCtrlData.apiId as it's managing target
+              if (controllerConfigForTarget?.apiUrl) {
+                let controllerApiHost = extractHostname(controllerConfigForTarget.apiUrl);
                 if (controllerApiHost) {
                   const availablePort = getNextAvailableTunnelPortOnCanvas(initialTunnelPort, controllerApiHost, rfGetNodes(), targetNode.id);
                   if (availablePort !== initialTunnelPort) {
                     toast({ title: "隧道端口已调整", description: `节点 "${targetInstanceData.label}" 端口从 ${initialTunnelPort} 调整为 ${availablePort} 以避免画布冲突。`});
-                    onAppLog?.(`节点 "${targetInstanceData.label}" 隧道端口自动从 ${initialTunnelPort} 调整为 ${availablePort} 以避免画布冲突。`, 'INFO');
+                    onAppLog?.(`节点 "${targetInstanceData.label}" 隧道端口自动从 ${initialTunnelPort} 调整为 ${availablePort} (主控: ${sCtrlData.label})。`, 'INFO');
                   }
 
                   if (controllerApiHost.includes(':') && !controllerApiHost.startsWith('[')) { controllerApiHost = `[${controllerApiHost}]`; }
                   const newTunnelAddress = `${controllerApiHost}:${availablePort}`;
                   if (targetInstanceData.tunnelAddress !== newTunnelAddress) {
-                    updatedTargetData = { ...updatedTargetData, tunnelAddress: newTunnelAddress };
+                    updatedTargetData = { ...updatedTargetData, tunnelAddress: newTunnelAddress } as TopologyNodeData;
                     targetNodeChanged = true;
                     toast({ title: "隧道地址已自动更新", description: `节点 "${targetInstanceData.label}" 隧道地址更新为 "${newTunnelAddress}".` });
-                    onAppLog?.(`节点 "${targetInstanceData.label}" 隧道地址自动设置为 "${newTunnelAddress}".`, 'INFO');
+                    onAppLog?.(`节点 "${targetInstanceData.label}" 隧道地址自动设置为 "${newTunnelAddress}" (主控: ${sCtrlData.label}).`, 'INFO');
                   }
                   if (targetData.type === 'controller' && (targetData as ControllerNodeData).role === 'client' && !(targetData as ControllerNodeData).targetAddress) {
                     const defaultClientTargetAddress = `127.0.0.1:${CONTROLLER_CLIENT_ROLE_DEFAULT_TARGET_PORT}`;
-                    updatedTargetData = { ...updatedTargetData, targetAddress: defaultClientTargetAddress };
+                    updatedTargetData = { ...updatedTargetData, targetAddress: defaultClientTargetAddress } as TopologyNodeData;
                     targetNodeChanged = true;
                      onAppLog?.(`Controller (client role) "${targetData.label}" 目标地址自动设置为 "${defaultClientTargetAddress}".`, 'INFO');
                   }
-                } else onAppLog?.(`无法从主控 "${sCtrlData.apiName}" 的 API URL (${controllerConfig.apiUrl}) 提取主机名。`, 'WARNING');
+                } else onAppLog?.(`无法从主控 "${sCtrlData.apiName}" 的 API URL (${controllerConfigForTarget.apiUrl}) 提取主机名。`, 'WARNING');
               } else onAppLog?.(`找不到主控 "${sCtrlData.apiName}" (${sCtrlData.apiId}) 的配置。`, 'WARNING');
             }
-          } else if ((sourceData.type === 'server' || (sourceData.type === 'controller' && (sourceData as ControllerNodeData).role === 'client')) &&
-                     targetData.type === 'client') {
-            const serverLikeSourceData = sourceData as ServerNodeData | ControllerNodeData;
+          } else if (sourceData.type === 'server' && targetData.type === 'client') { // Server (Source) -> Client (Target)
+            const serverSourceData = sourceData as ServerNodeData;
             const clientTargetData = targetData as ClientNodeData;
-            const serverTunnelPortStr = extractPort(serverLikeSourceData.tunnelAddress || '');
+            const serverTunnelPortStr = extractPort(serverSourceData.tunnelAddress || '');
 
             if (serverTunnelPortStr) {
-              const serverTunnelPort = parseInt(serverTunnelPortStr, 10);
-              let serverActualHost = extractHostname(serverLikeSourceData.tunnelAddress || '');
-
+              let serverActualHost = extractHostname(serverSourceData.tunnelAddress || '');
+              // If server's tunnel host is wildcard, resolve using its managing controller's API URL
               if (isTunnelPortWildcard(serverActualHost) || !serverActualHost) {
-                const managingCtrlId = serverLikeSourceData.managingApiId || (serverLikeSourceData.type === 'controller' ? serverLikeSourceData.apiId : undefined);
-                if (managingCtrlId) {
-                  const controllerConfigForSource = getApiConfigById(managingCtrlId);
-                  if (controllerConfigForSource?.apiUrl) {
-                    const controllerApiHost = extractHostname(controllerConfigForSource.apiUrl);
-                    if (controllerApiHost) serverActualHost = controllerApiHost;
-                    else onAppLog?.(`无法从管理主控 "${serverLikeSourceData.managingApiName || serverLikeSourceData.apiName}" 的 API URL (${controllerConfigForSource.apiUrl}) 提取主机名。`, 'WARNING');
-                  } else onAppLog?.(`找不到管理主控 "${serverLikeSourceData.managingApiName || serverLikeSourceData.apiName}" (${managingCtrlId}) 的配置。`, 'WARNING');
-                } else onAppLog?.(`源节点 "${serverLikeSourceData.label}" 监听于通配地址且未关联主控，无法确定客户端连接主机。`, 'WARNING');
+                const serverManagingControllerConfig = getApiConfigById(serverSourceData.managingApiId || '');
+                if (serverManagingControllerConfig?.apiUrl) {
+                  const hostFromApiUrl = extractHostname(serverManagingControllerConfig.apiUrl);
+                  if (hostFromApiUrl) serverActualHost = hostFromApiUrl;
+                  else onAppLog?.(`无法从服务端 "${serverSourceData.label}" 的管理主控 "${serverSourceData.managingApiName}" 解析API主机名。客户端隧道地址可能不正确。`, 'WARNING');
+                } else onAppLog?.(`无法找到服务端 "${serverSourceData.label}" 的管理主控配置。客户端隧道地址可能不正确。`, 'WARNING');
               }
 
               if (serverActualHost) {
                 if (serverActualHost.includes(':') && !serverActualHost.startsWith('[')) { serverActualHost = `[${serverActualHost}]`; }
-                const newClientTunnelAddress = `${serverActualHost}:${serverTunnelPort}`;
+                const newClientTunnelAddress = `${serverActualHost}:${serverTunnelPortStr}`;
                 if (clientTargetData.tunnelAddress !== newClientTunnelAddress) {
-                  updatedTargetData = { ...updatedTargetData, tunnelAddress: newClientTunnelAddress };
+                  updatedTargetData = { ...updatedTargetData, tunnelAddress: newClientTunnelAddress } as TopologyNodeData;
                   targetNodeChanged = true;
-                  toast({ title: "客户端隧道已自动更新", description: `客户端 "${clientTargetData.label}" 的隧道地址更新为 "${newClientTunnelAddress}".` });
-                  onAppLog?.(`客户端 "${clientTargetData.label}" 隧道地址自动设置为 "${newClientTunnelAddress}".`, 'INFO');
+                  toast({ title: "客户端隧道已自动更新", description: `客户端 "${clientTargetData.label}" 的隧道地址更新为 "${newClientTunnelAddress}" (连接到服务端 ${serverSourceData.label}).` });
+                  onAppLog?.(`客户端 "${clientTargetData.label}" 隧道地址自动设置为 "${newClientTunnelAddress}" (连接到服务端 ${serverSourceData.label}).`, 'INFO');
                 }
               } else {
-                 onAppLog?.(`无法确定源节点 "${serverLikeSourceData.label}" 的有效连接主机，客户端 (${clientTargetData.label}) 隧道地址未自动填充。`, 'WARNING');
+                 onAppLog?.(`无法确定源服务端 "${serverSourceData.label}" 的有效连接主机，客户端 (${clientTargetData.label}) 隧道地址未自动填充。`, 'WARNING');
               }
             } else {
-              onAppLog?.(`无法从源节点 "${serverLikeSourceData.label}" 的隧道地址 (${serverLikeSourceData.tunnelAddress}) 提取端口。客户端 (${clientTargetData.label}) 隧道地址未自动填充。`, 'WARNING');
+              onAppLog?.(`无法从源服务端 "${serverSourceData.label}" 的隧道地址 (${serverSourceData.tunnelAddress}) 提取端口。客户端 (${clientTargetData.label}) 隧道地址未自动填充。`, 'WARNING');
+            }
+          } else if (sourceData.type === 'client' && targetData.type === 'server') { // Client (Source) -> Server (Target)
+            const clientSourceData = sourceData as ClientNodeData;
+            const serverTargetData = targetData as ServerNodeData;
+
+            let serverEffectiveTunnelHost = extractHostname(serverTargetData.tunnelAddress || '');
+            const serverTunnelPort = extractPort(serverTargetData.tunnelAddress || '');
+
+            if (serverTunnelPort) {
+                if (isTunnelPortWildcard(serverEffectiveTunnelHost) || !serverEffectiveTunnelHost) {
+                    const serverManagingControllerConfig = getApiConfigById(serverTargetData.managingApiId || '');
+                    if (serverManagingControllerConfig?.apiUrl) {
+                        const hostFromApiUrl = extractHostname(serverManagingControllerConfig.apiUrl);
+                        if (hostFromApiUrl) serverEffectiveTunnelHost = hostFromApiUrl;
+                        else onAppLog?.(`无法从服务端 "${serverTargetData.label}" 的管理主控 "${serverTargetData.managingApiName}" 解析API主机名。客户端隧道地址可能不正确。`, 'WARNING');
+                    } else {
+                         onAppLog?.(`无法找到服务端 "${serverTargetData.label}" 的管理主控配置 (${serverTargetData.managingApiId})。客户端隧道地址可能不正确。`, 'WARNING');
+                    }
+                }
+
+                if (serverEffectiveTunnelHost) {
+                    if (serverEffectiveTunnelHost.includes(':') && !serverEffectiveTunnelHost.startsWith('[')) { serverEffectiveTunnelHost = `[${serverEffectiveTunnelHost}]`; }
+                    const newClientTunnelAddressForSource = `${serverEffectiveTunnelHost}:${serverTunnelPort}`;
+                    if (clientSourceData.tunnelAddress !== newClientTunnelAddressForSource) {
+                        updatedSourceData = { ...updatedSourceData, tunnelAddress: newClientTunnelAddressForSource } as TopologyNodeData;
+                        sourceNodeChanged = true;
+                        toast({ title: "客户端隧道已更新", description: `客户端 "${clientSourceData.label}" 的隧道地址更新为指向服务端 "${serverTargetData.label}": "${newClientTunnelAddressForSource}".` });
+                        onAppLog?.(`客户端 "${clientSourceData.label}" 隧道地址自动设置为连接服务端 "${serverTargetData.label}": "${newClientTunnelAddressForSource}".`, 'INFO');
+                    }
+                }
             }
           }
+
 
           const isSourceClientLikeOrServer = sourceData.type === 'client' || (sourceData.type === 'controller' && (sourceData as ControllerNodeData).role === 'client') || sourceData.type === 'server';
           if (isSourceClientLikeOrServer && targetData.type === 'landing') {
@@ -498,7 +524,7 @@ const TopologyPageContent: NextPage = () => {
             if (tNode.landingIp && tNode.landingPort) {
                 const newSourceTargetAddress = `${tNode.landingIp.includes(':') && !tNode.landingIp.startsWith('[') ? `[${tNode.landingIp}]` : tNode.landingIp}:${tNode.landingPort}`;
                 if (sNodeTargetAddress !== newSourceTargetAddress) {
-                    updatedSourceData = { ...updatedSourceData, targetAddress: newSourceTargetAddress };
+                    updatedSourceData = { ...updatedSourceData, targetAddress: newSourceTargetAddress } as TopologyNodeData;
                     sourceNodeChanged = true;
                     toast({ title: "源节点目标地址已更新", description: `节点 "${sNode.label}" 的目标地址已从落地节点 "${tNode.label}" 同步。`});
                     onAppLog?.(`节点 "${sNode.label}" 的目标地址已从落地 "${tNode.label}" (${newSourceTargetAddress}) 同步。`, "INFO");
@@ -508,7 +534,7 @@ const TopologyPageContent: NextPage = () => {
                 const port = extractPort(sNodeTargetAddress);
                 if (host && port) {
                     if (tNode.landingIp !== host || tNode.landingPort !== port) {
-                        updatedTargetData = { ...updatedTargetData, landingIp: host, landingPort: port };
+                        updatedTargetData = { ...updatedTargetData, landingIp: host, landingPort: port } as TopologyNodeData;
                         targetNodeChanged = true;
                         toast({ title: "落地节点 IP/端口已更新", description: `落地节点 "${tNode.label}" 的 IP/端口已从源节点 "${sNode.label}" 同步。`});
                         onAppLog?.(`落地节点 "${tNode.label}" 的 IP/端口已从源 "${sNode.label}" (${host}:${port}) 同步。`, "INFO");
@@ -521,8 +547,8 @@ const TopologyPageContent: NextPage = () => {
           if (sourceNodeChanged || targetNodeChanged) {
              setNodes((nds) =>
               nds.map((n) => {
-                if (n.id === sourceNode.id && sourceNodeChanged) return { ...n, data: updatedSourceData };
-                if (n.id === targetNode.id && targetNodeChanged) return { ...n, data: updatedTargetData };
+                if (n.id === sourceNode.id && sourceNodeChanged) return { ...n, data: updatedSourceData as TopologyNodeData };
+                if (n.id === targetNode.id && targetNodeChanged) return { ...n, data: updatedTargetData as TopologyNodeData };
                 return n;
               })
             );
