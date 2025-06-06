@@ -56,37 +56,30 @@ function stripAnsiCodes(str: string): string {
   return str.replace(ansiRegex, '');
 }
 
-// Regex to capture timestamp, level, and message
-// Example: 2023-10-27 10:30:00.123 INFO This is a log message.
-// Group 1: Timestamp (2023-10-27 10:30:00.123)
-// Group 2: Level (INFO)
-// Group 3: Message (This is a log message.)
 const logLineRegex = /^(\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2}\.\d{3})\s+([A-Z]+)\s+(.*)$/s;
 
 function parseAndFormatLogLine(rawLog: string, index: number): ParsedLogEntry {
-  const cleanedLog = stripAnsiCodes(rawLog).trim(); // Trim the whole cleaned log
+  const cleanedLog = stripAnsiCodes(rawLog).trim();
   const match = cleanedLog.match(logLineRegex);
 
   if (match) {
-    const fullTimestamp = match[1];
-    // Trim the captured level string before converting to uppercase and checking
+    const fullTimestamp = match[1].trim();
     const levelString = match[2].trim().toUpperCase();
     const level = ['ERROR', 'WARN', 'INFO', 'DEBUG', 'FATAL'].includes(levelString)
       ? (levelString as ParsedLogEntry['level'])
       : 'UNKNOWN';
-    const message = match[3].trim(); // Trim the message as well
+    const message = match[3].trim();
     const time = new Date(fullTimestamp).toLocaleTimeString('zh-CN', { hour12: false });
     return { id: `${fullTimestamp}-${index}-${Math.random()}`, fullTimestamp, time, level, message };
   }
 
-  // Fallback if regex doesn't match
   const now = new Date();
   return {
     id: `${now.toISOString()}-${index}-${Math.random()}`,
-    fullTimestamp: now.toISOString(), // This is not the log's original timestamp
+    fullTimestamp: now.toISOString(),
     time: now.toLocaleTimeString('zh-CN', { hour12: false }),
     level: 'UNKNOWN',
-    message: cleanedLog, // Use the trimmed and cleaned log as the message
+    message: cleanedLog,
   };
 }
 
@@ -102,11 +95,6 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
 
   const addLogEntry = useCallback((entry: ParsedLogEntry) => {
     setInstanceLogs(prevLogs => {
-      // If the initial message is still the only one and the new entry is not the same initial message, replace it.
-      if (prevLogs.length === 1 && prevLogs[0].message === INITIAL_MESSAGE_TEXT && entry.message !== INITIAL_MESSAGE_TEXT) {
-        return [entry];
-      }
-      // Otherwise, prepend and limit.
       const newLogs = [entry, ...prevLogs];
       return newLogs.slice(0, MAX_LOG_LINES);
     });
@@ -153,10 +141,10 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
       if (!response.body) {
         throw new Error("Response body is null.");
       }
-      // Clear initial message if connection is successful and we start receiving data
+      
       if (initialMessageDisplayedRef.current) {
-         setInstanceLogs(prevLogs => prevLogs.filter(log => log.message !== INITIAL_MESSAGE_TEXT));
-         initialMessageDisplayedRef.current = false;
+        setInstanceLogs([]); // Clear all logs, including initial message
+        initialMessageDisplayedRef.current = false; // Reset flag
       }
 
       const reader = response.body.getReader();
@@ -184,7 +172,7 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
         for (const block of messageBlocks) {
           if (block.trim() === '') continue;
 
-          let eventName = 'message';
+          let eventName = 'message'; // Default if no event: line
           let eventData = '';
           const messageLines = block.split('\n');
 
@@ -192,11 +180,12 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
             if (line.startsWith('event:')) {
               eventName = line.substring('event:'.length).trim();
             } else if (line.startsWith('data:')) {
-               if (eventData !== '') eventData += '\n';
-               eventData += line.substring('data:'.length).trimStart();
+               // Handle multi-line data fields correctly
+               if (eventData !== '') eventData += '\n'; // Add newline if appending to existing data
+               eventData += line.substring('data:'.length).trimStart(); // Keep leading spaces for JSON
             }
           }
-
+          
           if (eventName === 'instance' && eventData) {
             try {
               const jsonData = JSON.parse(eventData);
@@ -206,9 +195,11 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
                   let rawLogData = jsonData.logs || '';
                   if (typeof rawLogData === 'string') {
                     addLogEntry(parseAndFormatLogLine(rawLogData, logCounterRef.current++));
+                  } else {
+                    addLogEntry(parseAndFormatLogLine(`[WARN] Received log event with non-string 'logs' field for instance ${instance.id.substring(0,8)}. Type: ${typeof rawLogData}`, logCounterRef.current++));
                   }
                 } else {
-                   addLogEntry(parseAndFormatLogLine(`[DEBUG] Log for other instance ${jsonData.instance?.id?.substring(0,8)}... received (ignored).`, logCounterRef.current++));
+                   addLogEntry(parseAndFormatLogLine(`[DEBUG] Log for other instance ${jsonData.instance?.id?.substring(0,8)}... (ignored). Expected: ${instance.id.substring(0,8)}...`, logCounterRef.current++));
                 }
               } else if (jsonData.type === 'shutdown') {
                 addLogEntry(parseAndFormatLogLine(`[INFO] 主控服务已关闭事件流。连接将不会自动重试。`, logCounterRef.current++));
@@ -219,7 +210,7 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
                     clearTimeout(reconnectTimeoutRef.current);
                     reconnectTimeoutRef.current = null;
                 }
-                return;
+                return; 
               } else if (jsonData.type === 'initial' && Array.isArray(jsonData.instance)) {
                   addLogEntry(parseAndFormatLogLine(`[INFO] 收到初始实例数据 (${jsonData.instance.length} 个)。`, logCounterRef.current++));
               } else if (jsonData.type === 'create' && jsonData.instance) {
@@ -233,9 +224,9 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
               }
 
             } catch (e: any) {
-              addLogEntry(parseAndFormatLogLine(`[ERROR] 解析事件数据错误: ${e.message}. Data: ${eventData.substring(0,100)}...`, logCounterRef.current++));
+              addLogEntry(parseAndFormatLogLine(`[ERROR] 解析 'instance' 事件数据错误: ${e.message}. Data snippet: ${eventData.substring(0,100)}...`, logCounterRef.current++));
             }
-          } else if (eventData) {
+          } else if (eventData) { // Data received but not event: instance
              addLogEntry(parseAndFormatLogLine(`[WARN] 收到事件 "${eventName}" (预期 "instance"). Data: ${eventData.substring(0, 50)}...`, logCounterRef.current++));
           }
         }
@@ -260,7 +251,7 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
   useEffect(() => {
     if (open && instance && apiRoot && apiToken && instance.id !== '********') {
       logCounterRef.current = 0;
-      initialMessageDisplayedRef.current = true; // Set flag to true when we are about to show initial message
+      initialMessageDisplayedRef.current = true;
       setInstanceLogs([parseAndFormatLogLine(INITIAL_MESSAGE_TEXT, logCounterRef.current++)]);
       connectToSse();
     } else {
@@ -274,7 +265,7 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
       }
       if(instance?.id === '********' || !open || !instance){
         setInstanceLogs([]);
-        initialMessageDisplayedRef.current = false; // Reset flag if modal is closed or instance is invalid
+        initialMessageDisplayedRef.current = false;
       }
     }
 
@@ -289,7 +280,7 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
       }
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, instance, apiRoot, apiToken]);
+  }, [open, instance, apiRoot, apiToken]); // connectToSse is memoized and its deps are correct
 
 
   useEffect(() => {
@@ -501,3 +492,4 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
   );
 }
 
+    
