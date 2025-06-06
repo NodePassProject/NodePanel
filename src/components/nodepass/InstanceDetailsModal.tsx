@@ -31,6 +31,7 @@ const MAX_LOG_LINES = 200;
 const RECONNECT_DELAY = 5000;
 
 const INITIAL_MESSAGE_TEXT = "正在初始化实例日志流...";
+const CONNECTED_MESSAGE_TEXT = "SSE事件流已连接。";
 
 interface ParsedLogEntry {
   id: string;
@@ -57,27 +58,63 @@ function stripAnsiCodes(str: string): string {
 }
 
 const logLineRegex = /^(\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2}\.\d{3})\s+([A-Z]+)\s+(.*)$/s;
+const bracketedLevelRegex = /^\[?([A-Z]+)\]?\s+(.*)$/s;
 
-function parseAndFormatLogLine(rawLog: string, index: number): ParsedLogEntry {
+
+function parseAndFormatLogLine(
+  rawLog: string,
+  index: number,
+  forcedLevel?: ParsedLogEntry['level']
+): ParsedLogEntry {
   const cleanedLog = stripAnsiCodes(rawLog).trim();
-  const match = cleanedLog.match(logLineRegex);
+  const now = new Date();
+  const currentTimeString = now.toLocaleTimeString('zh-CN', { hour12: false });
+  const fullTimestampString = now.toISOString();
 
-  if (match) {
-    const fullTimestamp = match[1].trim();
-    const levelString = match[2].trim().toUpperCase();
+  if (forcedLevel) {
+    return {
+      id: `${fullTimestampString}-${index}-${Math.random()}`,
+      fullTimestamp: fullTimestampString,
+      time: currentTimeString,
+      level: forcedLevel,
+      message: cleanedLog,
+    };
+  }
+
+  const standardLogMatch = cleanedLog.match(logLineRegex);
+  if (standardLogMatch) {
+    const matchedFullTimestamp = standardLogMatch[1].trim();
+    const levelString = standardLogMatch[2].trim().toUpperCase();
     const level = ['ERROR', 'WARN', 'INFO', 'DEBUG', 'FATAL'].includes(levelString)
       ? (levelString as ParsedLogEntry['level'])
       : 'UNKNOWN';
-    const message = match[3].trim();
-    const time = new Date(fullTimestamp).toLocaleTimeString('zh-CN', { hour12: false });
-    return { id: `${fullTimestamp}-${index}-${Math.random()}`, fullTimestamp, time, level, message };
+    const message = standardLogMatch[3].trim();
+    const time = new Date(matchedFullTimestamp).toLocaleTimeString('zh-CN', { hour12: false });
+    return { id: `${matchedFullTimestamp}-${index}-${Math.random()}`, fullTimestamp: matchedFullTimestamp, time, level, message };
   }
 
-  const now = new Date();
+  const diagnosticLevelMatch = cleanedLog.match(bracketedLevelRegex);
+  if (diagnosticLevelMatch) {
+    const levelString = diagnosticLevelMatch[1].trim().toUpperCase();
+    const level = ['ERROR', 'WARN', 'INFO', 'DEBUG', 'FATAL'].includes(levelString)
+      ? (levelString as ParsedLogEntry['level'])
+      : 'UNKNOWN';
+    const messageContent = diagnosticLevelMatch[2].trim();
+    if (level !== 'UNKNOWN') {
+       return {
+        id: `${fullTimestampString}-${index}-${Math.random()}`,
+        fullTimestamp: fullTimestampString,
+        time: currentTimeString,
+        level,
+        message: messageContent,
+      };
+    }
+  }
+
   return {
-    id: `${now.toISOString()}-${index}-${Math.random()}`,
-    fullTimestamp: now.toISOString(),
-    time: now.toLocaleTimeString('zh-CN', { hour12: false }),
+    id: `${fullTimestampString}-${index}-${Math.random()}`,
+    fullTimestamp: fullTimestampString,
+    time: currentTimeString,
     level: 'UNKNOWN',
     message: cleanedLog,
   };
@@ -91,7 +128,7 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
   const abortControllerRef = useRef<AbortController | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const logCounterRef = useRef(0);
-  const initialMessageDisplayedRef = useRef(false);
+  const hasConnectedAtLeastOnceRef = useRef(false);
 
   const addLogEntry = useCallback((entry: ParsedLogEntry) => {
     setInstanceLogs(prevLogs => {
@@ -119,7 +156,7 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
 
     const eventsUrl = getEventsUrl(apiRoot);
     if (!eventsUrl) {
-        addLogEntry(parseAndFormatLogLine(`[ERROR] 事件流URL无效，无法连接。 Root: ${apiRoot}`, logCounterRef.current++));
+        addLogEntry(parseAndFormatLogLine(`事件流URL无效，无法连接。 Root: ${apiRoot}`, logCounterRef.current++, 'ERROR'));
         return;
     }
 
@@ -142,10 +179,12 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
         throw new Error("Response body is null.");
       }
       
-      if (initialMessageDisplayedRef.current) {
-        setInstanceLogs([]); // Clear all logs, including initial message
-        initialMessageDisplayedRef.current = false; // Reset flag
+      if (!hasConnectedAtLeastOnceRef.current) {
+        setInstanceLogs([]); // Clear "Initializing..." message only on first successful connect
+        addLogEntry(parseAndFormatLogLine(CONNECTED_MESSAGE_TEXT, logCounterRef.current++, 'INFO'));
+        hasConnectedAtLeastOnceRef.current = true;
       }
+
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
@@ -159,7 +198,7 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
 
         if (done) {
           if (!signal.aborted) {
-            addLogEntry(parseAndFormatLogLine(`[INFO] 事件流已关闭，${RECONNECT_DELAY / 1000}秒后尝试重连...`, logCounterRef.current++));
+            addLogEntry(parseAndFormatLogLine(`事件流已关闭，${RECONNECT_DELAY / 1000}秒后尝试重连...`, logCounterRef.current++, 'INFO'));
             if (!signal.aborted) reconnectTimeoutRef.current = setTimeout(connectToSse, RECONNECT_DELAY);
           }
           break;
@@ -172,7 +211,7 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
         for (const block of messageBlocks) {
           if (block.trim() === '') continue;
 
-          let eventName = 'message'; // Default if no event: line
+          let eventName = 'message'; 
           let eventData = '';
           const messageLines = block.split('\n');
 
@@ -180,9 +219,8 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
             if (line.startsWith('event:')) {
               eventName = line.substring('event:'.length).trim();
             } else if (line.startsWith('data:')) {
-               // Handle multi-line data fields correctly
-               if (eventData !== '') eventData += '\n'; // Add newline if appending to existing data
-               eventData += line.substring('data:'.length).trimStart(); // Keep leading spaces for JSON
+               if (eventData !== '') eventData += '\n'; 
+               eventData += line.substring('data:'.length).trimStart(); 
             }
           }
           
@@ -194,15 +232,15 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
                 if (jsonData.instance?.id === instance.id) {
                   let rawLogData = jsonData.logs || '';
                   if (typeof rawLogData === 'string') {
-                    addLogEntry(parseAndFormatLogLine(rawLogData, logCounterRef.current++));
+                    addLogEntry(parseAndFormatLogLine(rawLogData, logCounterRef.current++)); // No forcedLevel
                   } else {
-                    addLogEntry(parseAndFormatLogLine(`[WARN] Received log event with non-string 'logs' field for instance ${instance.id.substring(0,8)}. Type: ${typeof rawLogData}`, logCounterRef.current++));
+                    addLogEntry(parseAndFormatLogLine(`收到实例 ${instance.id.substring(0,8)} 的日志，但'logs'字段非字符串。类型: ${typeof rawLogData}`, logCounterRef.current++, 'WARN'));
                   }
                 } else {
                    addLogEntry(parseAndFormatLogLine(`[DEBUG] Log for other instance ${jsonData.instance?.id?.substring(0,8)}... (ignored). Expected: ${instance.id.substring(0,8)}...`, logCounterRef.current++));
                 }
               } else if (jsonData.type === 'shutdown') {
-                addLogEntry(parseAndFormatLogLine(`[INFO] 主控服务已关闭事件流。连接将不会自动重试。`, logCounterRef.current++));
+                addLogEntry(parseAndFormatLogLine(`主控服务已关闭事件流。连接将不会自动重试。`, logCounterRef.current++, 'INFO'));
                 if (abortControllerRef.current && !abortControllerRef.current.signal.aborted) {
                     abortControllerRef.current.abort("Server shutdown event received");
                 }
@@ -212,22 +250,22 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
                 }
                 return; 
               } else if (jsonData.type === 'initial' && Array.isArray(jsonData.instance)) {
-                  addLogEntry(parseAndFormatLogLine(`[INFO] 收到初始实例数据 (${jsonData.instance.length} 个)。`, logCounterRef.current++));
+                  addLogEntry(parseAndFormatLogLine(`收到初始实例数据 (${jsonData.instance.length} 个)。`, logCounterRef.current++, 'INFO'));
               } else if (jsonData.type === 'create' && jsonData.instance) {
-                  addLogEntry(parseAndFormatLogLine(`[INFO] 实例已创建: ${jsonData.instance.id.substring(0,8)}...`, logCounterRef.current++));
+                  addLogEntry(parseAndFormatLogLine(`实例已创建: ${jsonData.instance.id.substring(0,8)}...`, logCounterRef.current++, 'INFO'));
               } else if (jsonData.type === 'update' && jsonData.instance) {
-                  addLogEntry(parseAndFormatLogLine(`[INFO] 实例已更新: ${jsonData.instance.id.substring(0,8)}... 状态: ${jsonData.instance.status}`, logCounterRef.current++));
+                  addLogEntry(parseAndFormatLogLine(`实例已更新: ${jsonData.instance.id.substring(0,8)}... 状态: ${jsonData.instance.status}`, logCounterRef.current++, 'INFO'));
               } else if (jsonData.type === 'delete' && jsonData.instance) {
-                  addLogEntry(parseAndFormatLogLine(`[INFO] 实例已删除: ${jsonData.instance.id.substring(0,8)}...`, logCounterRef.current++));
+                  addLogEntry(parseAndFormatLogLine(`实例已删除: ${jsonData.instance.id.substring(0,8)}...`, logCounterRef.current++, 'INFO'));
               } else {
-                addLogEntry(parseAndFormatLogLine(`[WARN] 未识别的 'instance' 事件数据类型: ${jsonData.type}. Data: ${JSON.stringify(jsonData).substring(0,100)}...`, logCounterRef.current++));
+                addLogEntry(parseAndFormatLogLine(`未识别的 'instance' 事件数据类型: ${jsonData.type}. Data: ${JSON.stringify(jsonData).substring(0,100)}...`, logCounterRef.current++, 'WARN'));
               }
 
             } catch (e: any) {
-              addLogEntry(parseAndFormatLogLine(`[ERROR] 解析 'instance' 事件数据错误: ${e.message}. Data snippet: ${eventData.substring(0,100)}...`, logCounterRef.current++));
+              addLogEntry(parseAndFormatLogLine(`解析 'instance' 事件数据错误: ${e.message}. Data snippet: ${eventData.substring(0,100)}...`, logCounterRef.current++, 'ERROR'));
             }
-          } else if (eventData) { // Data received but not event: instance
-             addLogEntry(parseAndFormatLogLine(`[WARN] 收到事件 "${eventName}" (预期 "instance"). Data: ${eventData.substring(0, 50)}...`, logCounterRef.current++));
+          } else if (eventData) { 
+             addLogEntry(parseAndFormatLogLine(`收到事件 "${eventName}" (预期 "instance"). Data: ${eventData.substring(0, 50)}...`, logCounterRef.current++, 'WARN'));
           }
         }
       }
@@ -239,7 +277,7 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
         if (error.message.toLowerCase().includes('failed to fetch') || error.message.toLowerCase().includes('networkerror')) {
             displayError = '网络错误。请检查连接或服务器CORS设置。';
         }
-        addLogEntry(parseAndFormatLogLine(`[ERROR] 事件流连接错误: ${displayError} ${RECONNECT_DELAY / 1000}秒后尝试重连...`, logCounterRef.current++));
+        addLogEntry(parseAndFormatLogLine(`事件流连接错误: ${displayError} ${RECONNECT_DELAY / 1000}秒后尝试重连...`, logCounterRef.current++, 'ERROR'));
         if (!signal.aborted) {
           reconnectTimeoutRef.current = setTimeout(connectToSse, RECONNECT_DELAY);
         }
@@ -251,8 +289,8 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
   useEffect(() => {
     if (open && instance && apiRoot && apiToken && instance.id !== '********') {
       logCounterRef.current = 0;
-      initialMessageDisplayedRef.current = true;
-      setInstanceLogs([parseAndFormatLogLine(INITIAL_MESSAGE_TEXT, logCounterRef.current++)]);
+      hasConnectedAtLeastOnceRef.current = false; 
+      setInstanceLogs([parseAndFormatLogLine(INITIAL_MESSAGE_TEXT, logCounterRef.current++, 'INFO')]);
       connectToSse();
     } else {
       if (abortControllerRef.current && !abortControllerRef.current.signal.aborted) {
@@ -265,7 +303,7 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
       }
       if(instance?.id === '********' || !open || !instance){
         setInstanceLogs([]);
-        initialMessageDisplayedRef.current = false;
+        hasConnectedAtLeastOnceRef.current = false;
       }
     }
 
@@ -280,7 +318,7 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
       }
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, instance, apiRoot, apiToken]); // connectToSse is memoized and its deps are correct
+  }, [open, instance, apiRoot, apiToken]); 
 
 
   useEffect(() => {
@@ -492,4 +530,3 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
   );
 }
 
-    
