@@ -294,7 +294,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
 
         // Client's local forwarding target address calculation
         const clientLocalForwardPortCalculated = (parseInt(formTunnelPort_Parsed, 10) + 1).toString();
-        const clientLocalForwardHostCalculated = "127.0.0.1"; // Always use loopback for client's local target
+        const clientLocalForwardHostCalculated = formTunnelHost_Parsed; // Use the host part from the form's tunnelAddress for client's local listen host
         const clientLocalForwardTargetAddress = `${formatHostForUrl(clientLocalForwardHostCalculated)}:${clientLocalForwardPortCalculated}`;
 
         clientInstanceUrl = buildUrlFromFormValues({
@@ -414,3 +414,4 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
     </Dialog>
   );
 }
+
