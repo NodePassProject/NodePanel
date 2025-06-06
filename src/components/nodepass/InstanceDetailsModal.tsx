@@ -12,7 +12,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import type { Instance } from '@/types/nodepass';
 import { InstanceStatusBadge } from './InstanceStatusBadge';
-import { ArrowDownCircle, ArrowUpCircle, ServerIcon, SmartphoneIcon, Fingerprint, Cable, KeyRound, Eye, EyeOff, ScrollText, Network, AlertTriangle, Info as InfoIcon, MessageSquare, AlertCircle, Debug } from 'lucide-react';
+import { ArrowDownCircle, ArrowUpCircle, ServerIcon, SmartphoneIcon, Fingerprint, Cable, KeyRound, Eye, EyeOff, ScrollText, Network, AlertTriangle, Info as InfoIcon, MessageSquare, AlertCircle, Debug, HelpCircleIcon } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { getEventsUrl } from '@/lib/api';
@@ -29,6 +29,8 @@ interface InstanceDetailsModalProps {
 
 const MAX_LOG_LINES = 200; 
 const RECONNECT_DELAY = 5000; 
+
+const INITIAL_MESSAGE_TEXT = "正在初始化实例日志流...";
 
 interface ParsedLogEntry {
   id: string;
@@ -65,17 +67,16 @@ function parseAndFormatLogLine(rawLog: string, index: number): ParsedLogEntry {
     const level = match[2].toUpperCase() as ParsedLogEntry['level'];
     const message = match[3];
     const time = new Date(fullTimestamp).toLocaleTimeString('zh-CN', { hour12: false });
-    return { id: `${fullTimestamp}-${index}`, fullTimestamp, time, level: ['ERROR', 'WARN', 'INFO', 'DEBUG', 'FATAL'].includes(level) ? level : 'UNKNOWN', message };
+    return { id: `${fullTimestamp}-${index}-${Math.random()}`, fullTimestamp, time, level: ['ERROR', 'WARN', 'INFO', 'DEBUG', 'FATAL'].includes(level) ? level : 'UNKNOWN', message };
   }
   
-  // Fallback for unparsable lines
   const now = new Date();
   return {
-    id: `${now.toISOString()}-${index}`,
+    id: `${now.toISOString()}-${index}-${Math.random()}`,
     fullTimestamp: now.toISOString(),
     time: now.toLocaleTimeString('zh-CN', { hour12: false }),
     level: 'UNKNOWN',
-    message: cleanedLog, // Use cleaned log as message
+    message: cleanedLog,
   };
 }
 
@@ -87,6 +88,18 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
   const abortControllerRef = useRef<AbortController | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const logCounterRef = useRef(0);
+  const initialMessageDisplayedRef = useRef(false);
+
+  const addLogEntry = useCallback((entry: ParsedLogEntry) => {
+    setInstanceLogs(prevLogs => {
+      const newLogs = [entry, ...prevLogs];
+      // If the initial message is still the only one, replace it. Otherwise, prepend.
+      if (prevLogs.length === 1 && prevLogs[0].message === INITIAL_MESSAGE_TEXT) {
+        return [entry];
+      }
+      return newLogs.slice(0, MAX_LOG_LINES);
+    });
+  }, []);
 
 
   const connectToSse = useCallback(async () => {
@@ -108,12 +121,11 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
     const eventsUrl = getEventsUrl(apiRoot);
     if (!eventsUrl) {
         console.error("Modal SSE: Invalid events URL derived from apiRoot", apiRoot);
-        logCounterRef.current++;
-        setInstanceLogs(prev => [parseAndFormatLogLine(`事件流URL无效。`, logCounterRef.current), ...prev.slice(0, MAX_LOG_LINES -1)]);
+        addLogEntry(parseAndFormatLogLine(`事件流URL无效。`, logCounterRef.current++));
         return;
     }
     
-    console.log(`Modal SSE: Attempting to connect to ${eventsUrl} for instance ${instance.id}`);
+    // console.log(`Modal SSE: Attempting to connect to ${eventsUrl} for instance ${instance.id}`);
 
     try {
       const response = await fetch(eventsUrl, {
@@ -146,9 +158,8 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
         
         if (done) {
           if (!signal.aborted) { 
-            console.log(`Modal SSE for ${instance.id}: Stream closed by server. Attempting to reconnect in ${RECONNECT_DELAY / 1000}s.`);
-            logCounterRef.current++;
-            setInstanceLogs(prev => [parseAndFormatLogLine(`事件流已关闭，${RECONNECT_DELAY / 1000}秒后尝试重连...`, logCounterRef.current), ...prev.slice(0, MAX_LOG_LINES -1)]);
+            // console.log(`Modal SSE for ${instance.id}: Stream closed by server. Attempting to reconnect in ${RECONNECT_DELAY / 1000}s.`);
+            addLogEntry(parseAndFormatLogLine(`事件流已关闭，${RECONNECT_DELAY / 1000}秒后尝试重连...`, logCounterRef.current++));
             if (!signal.aborted) reconnectTimeoutRef.current = setTimeout(connectToSse, RECONNECT_DELAY);
           }
           break;
@@ -169,7 +180,8 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
             if (line.startsWith('event:')) {
               eventName = line.substring('event:'.length).trim();
             } else if (line.startsWith('data:')) {
-              eventData += line.substring('data:'.length).trim(); 
+               if (eventData !== '') eventData += '\n'; // As per SSE spec for multi-line data field values
+               eventData += line.substring('data:'.length).trimStart(); 
             }
           }
 
@@ -178,15 +190,17 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
               const jsonData = JSON.parse(eventData);
               const currentTime = new Date(jsonData.time || Date.now()).toLocaleTimeString('zh-CN', { hour12: false });
 
-              if (jsonData.type === 'log' && jsonData.instance?.id === instance.id) {
-                let rawLogData = jsonData.logs || '';
-                if (typeof rawLogData === 'string') {
-                  logCounterRef.current++;
-                  setInstanceLogs(prevLogs => [parseAndFormatLogLine(rawLogData, logCounterRef.current), ...prevLogs.slice(0, MAX_LOG_LINES - 1)]);
+              if (jsonData.type === 'log') {
+                if (jsonData.instance?.id === instance.id) {
+                  let rawLogData = jsonData.logs || '';
+                  if (typeof rawLogData === 'string') {
+                    addLogEntry(parseAndFormatLogLine(rawLogData, logCounterRef.current++));
+                  }
+                } else {
+                   addLogEntry(parseAndFormatLogLine(`[Info] Log for other instance ${jsonData.instance?.id?.substring(0,8)}... received.`, logCounterRef.current++));
                 }
               } else if (jsonData.type === 'shutdown') {
-                logCounterRef.current++;
-                setInstanceLogs(prevLogs => [parseAndFormatLogLine(`主控服务已关闭事件流。`, logCounterRef.current), ...prevLogs.slice(0, MAX_LOG_LINES - 1)]);
+                addLogEntry(parseAndFormatLogLine(`主控服务已关闭事件流。`, logCounterRef.current++));
                 if (abortControllerRef.current && !abortControllerRef.current.signal.aborted) {
                     abortControllerRef.current.abort("Server shutdown event received");
                 }
@@ -196,50 +210,49 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
                 }
                 return; 
               } else if (jsonData.type === 'initial' && Array.isArray(jsonData.instance)) {
-                  logCounterRef.current++;
-                  setInstanceLogs(prevLogs => [parseAndFormatLogLine(`收到初始实例数据 (${jsonData.instance.length} 个)。`, logCounterRef.current), ...prevLogs.slice(0, MAX_LOG_LINES - 1)]);
+                  addLogEntry(parseAndFormatLogLine(`收到初始实例数据 (${jsonData.instance.length} 个)。`, logCounterRef.current++));
               } else if (jsonData.type === 'create' && jsonData.instance) {
-                  logCounterRef.current++;
-                  setInstanceLogs(prevLogs => [parseAndFormatLogLine(`实例已创建: ${jsonData.instance.id.substring(0,8)}...`, logCounterRef.current), ...prevLogs.slice(0, MAX_LOG_LINES - 1)]);
+                  addLogEntry(parseAndFormatLogLine(`实例已创建: ${jsonData.instance.id.substring(0,8)}...`, logCounterRef.current++));
               } else if (jsonData.type === 'update' && jsonData.instance) {
-                  logCounterRef.current++;
-                  setInstanceLogs(prevLogs => [parseAndFormatLogLine(`实例已更新: ${jsonData.instance.id.substring(0,8)}... 状态: ${jsonData.instance.status}`, logCounterRef.current), ...prevLogs.slice(0, MAX_LOG_LINES - 1)]);
+                  addLogEntry(parseAndFormatLogLine(`实例已更新: ${jsonData.instance.id.substring(0,8)}... 状态: ${jsonData.instance.status}`, logCounterRef.current++));
               } else if (jsonData.type === 'delete' && jsonData.instance) {
-                  logCounterRef.current++;
-                  setInstanceLogs(prevLogs => [parseAndFormatLogLine(`实例已删除: ${jsonData.instance.id.substring(0,8)}...`, logCounterRef.current), ...prevLogs.slice(0, MAX_LOG_LINES - 1)]);
+                  addLogEntry(parseAndFormatLogLine(`实例已删除: ${jsonData.instance.id.substring(0,8)}...`, logCounterRef.current++));
+              } else {
+                addLogEntry(parseAndFormatLogLine(`[Warn] Unrecognized 'instance' event data type: ${jsonData.type}`, logCounterRef.current++));
               }
 
-            } catch (e) {
+            } catch (e: any) {
               console.error("Modal SSE: Error parsing JSON from 'instance' event data:", e, "Raw data:", eventData);
-              logCounterRef.current++;
-              setInstanceLogs(prev => [parseAndFormatLogLine(`解析事件数据错误。`, logCounterRef.current), ...prev.slice(0, MAX_LOG_LINES -1)]);
+              addLogEntry(parseAndFormatLogLine(`解析事件数据错误: ${e.message}. Data: ${eventData.substring(0,100)}...`, logCounterRef.current++));
             }
+          } else if (eventData) { // eventData exists, but eventName wasn't 'instance'
+             addLogEntry(parseAndFormatLogLine(`[Warn] Received event "${eventName}" (expected "instance"). Data: ${eventData.substring(0, 50)}...`, logCounterRef.current++));
           }
         }
       }
     } catch (error: any) {
       if (signal.aborted && error.name === 'AbortError') {
-        console.log(`Modal SSE for ${instance.id}: Fetch aborted as expected.`);
+        // console.log(`Modal SSE for ${instance.id}: Fetch aborted as expected.`);
       } else {
         console.error(`Modal SSE for ${instance.id}: Connection error: ${error.message}`, error);
         let displayError = error.message;
         if (error.message.toLowerCase().includes('failed to fetch') || error.message.toLowerCase().includes('networkerror')) {
             displayError = '网络错误。请检查连接或服务器CORS设置。';
         }
-        logCounterRef.current++;
-        setInstanceLogs(prev => [parseAndFormatLogLine(`事件流连接错误: ${displayError} ${RECONNECT_DELAY / 1000}秒后尝试重连...`, logCounterRef.current), ...prev.slice(0, MAX_LOG_LINES -1)]);
+        addLogEntry(parseAndFormatLogLine(`事件流连接错误: ${displayError} ${RECONNECT_DELAY / 1000}秒后尝试重连...`, logCounterRef.current++));
         if (!signal.aborted) {
           reconnectTimeoutRef.current = setTimeout(connectToSse, RECONNECT_DELAY);
         }
       }
     }
-  }, [instance, apiRoot, apiToken, open]);
+  }, [instance, apiRoot, apiToken, open, addLogEntry]);
 
 
   useEffect(() => {
     if (open && instance && apiRoot && apiToken && instance.id !== '********') {
       logCounterRef.current = 0;
-      setInstanceLogs([parseAndFormatLogLine(`正在初始化实例日志流...`, logCounterRef.current)]);
+      initialMessageDisplayedRef.current = true;
+      setInstanceLogs([parseAndFormatLogLine(INITIAL_MESSAGE_TEXT, logCounterRef.current++)]);
       connectToSse();
     } else {
       if (abortControllerRef.current && !abortControllerRef.current.signal.aborted) {
@@ -252,6 +265,7 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
       }
       if(instance?.id === '********' || !open || !instance){
         setInstanceLogs([]); 
+        initialMessageDisplayedRef.current = false;
       }
     }
 
@@ -265,7 +279,8 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
         reconnectTimeoutRef.current = null;
       }
     };
-  }, [open, instance, apiRoot, apiToken, connectToSse]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps 
+  }, [open, instance, apiRoot, apiToken]); // connectToSse is memoized, addLogEntry is memoized
 
 
   useEffect(() => {
@@ -409,8 +424,8 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
         return <InfoIcon className="h-3.5 w-3.5 mr-1" />;
       case 'DEBUG':
         return <Debug className="h-3.5 w-3.5 mr-1" />;
-      default:
-        return <MessageSquare className="h-3.5 w-3.5 mr-1" />;
+      default: // UNKNOWN
+        return <HelpCircleIcon className="h-3.5 w-3.5 mr-1" />;
     }
   };
 
