@@ -12,10 +12,12 @@ import {
 import { Badge } from '@/components/ui/badge';
 import type { Instance } from '@/types/nodepass';
 import { InstanceStatusBadge } from './InstanceStatusBadge';
-import { ArrowDownCircle, ArrowUpCircle, ServerIcon, SmartphoneIcon, Fingerprint, Cable, KeyRound, Eye, EyeOff, ScrollText, Network } from 'lucide-react';
+import { ArrowDownCircle, ArrowUpCircle, ServerIcon, SmartphoneIcon, Fingerprint, Cable, KeyRound, Eye, EyeOff, ScrollText, Network, AlertTriangle, Info as InfoIcon, MessageSquare, AlertCircle, Debug } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { getEventsUrl } from '@/lib/api';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { cn } from '@/lib/utils';
 
 interface InstanceDetailsModalProps {
   instance: Instance | null;
@@ -25,8 +27,16 @@ interface InstanceDetailsModalProps {
   apiToken: string | null;
 }
 
-const MAX_LOG_LINES = 200; // Increased log lines
-const RECONNECT_DELAY = 5000; // 5 seconds
+const MAX_LOG_LINES = 200; 
+const RECONNECT_DELAY = 5000; 
+
+interface ParsedLogEntry {
+  id: string;
+  fullTimestamp: string;
+  time: string;
+  level: 'ERROR' | 'WARN' | 'INFO' | 'DEBUG' | 'FATAL' | 'UNKNOWN';
+  message: string;
+}
 
 function formatBytes(bytes: number, decimals = 2) {
   if (bytes === 0) return '0 Bytes';
@@ -44,13 +54,40 @@ function stripAnsiCodes(str: string): string {
   return str.replace(ansiRegex, '');
 }
 
+const logLineRegex = /^(\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2}\.\d{3})\s+([A-Z]+)\s+(.*)$/s;
+
+function parseAndFormatLogLine(rawLog: string, index: number): ParsedLogEntry {
+  const cleanedLog = stripAnsiCodes(rawLog);
+  const match = cleanedLog.match(logLineRegex);
+
+  if (match) {
+    const fullTimestamp = match[1];
+    const level = match[2].toUpperCase() as ParsedLogEntry['level'];
+    const message = match[3];
+    const time = new Date(fullTimestamp).toLocaleTimeString('zh-CN', { hour12: false });
+    return { id: `${fullTimestamp}-${index}`, fullTimestamp, time, level: ['ERROR', 'WARN', 'INFO', 'DEBUG', 'FATAL'].includes(level) ? level : 'UNKNOWN', message };
+  }
+  
+  // Fallback for unparsable lines
+  const now = new Date();
+  return {
+    id: `${now.toISOString()}-${index}`,
+    fullTimestamp: now.toISOString(),
+    time: now.toLocaleTimeString('zh-CN', { hour12: false }),
+    level: 'UNKNOWN',
+    message: cleanedLog, // Use cleaned log as message
+  };
+}
+
 
 export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, apiToken }: InstanceDetailsModalProps) {
   const [showApiKey, setShowApiKey] = useState(false);
   const { toast } = useToast();
-  const [instanceLogs, setInstanceLogs] = useState<string[]>([]);
+  const [instanceLogs, setInstanceLogs] = useState<ParsedLogEntry[]>([]);
   const abortControllerRef = useRef<AbortController | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const logCounterRef = useRef(0);
+
 
   const connectToSse = useCallback(async () => {
     if (!instance || !apiRoot || !apiToken || !open || instance.id === '********') {
@@ -71,7 +108,8 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
     const eventsUrl = getEventsUrl(apiRoot);
     if (!eventsUrl) {
         console.error("Modal SSE: Invalid events URL derived from apiRoot", apiRoot);
-        setInstanceLogs(prev => [`[${new Date().toLocaleTimeString('zh-CN', { hour12: false })}] 事件流URL无效。`, ...prev.slice(0, MAX_LOG_LINES -1)]);
+        logCounterRef.current++;
+        setInstanceLogs(prev => [parseAndFormatLogLine(`事件流URL无效。`, logCounterRef.current), ...prev.slice(0, MAX_LOG_LINES -1)]);
         return;
     }
     
@@ -107,22 +145,23 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
         if (signal.aborted) break;
         
         if (done) {
-          if (!signal.aborted) { // If not intentionally aborted
+          if (!signal.aborted) { 
             console.log(`Modal SSE for ${instance.id}: Stream closed by server. Attempting to reconnect in ${RECONNECT_DELAY / 1000}s.`);
-            setInstanceLogs(prev => [`[${new Date().toLocaleTimeString('zh-CN', { hour12: false })}] 事件流已关闭，${RECONNECT_DELAY / 1000}秒后尝试重连...`, ...prev.slice(0, MAX_LOG_LINES -1)]);
+            logCounterRef.current++;
+            setInstanceLogs(prev => [parseAndFormatLogLine(`事件流已关闭，${RECONNECT_DELAY / 1000}秒后尝试重连...`, logCounterRef.current), ...prev.slice(0, MAX_LOG_LINES -1)]);
             if (!signal.aborted) reconnectTimeoutRef.current = setTimeout(connectToSse, RECONNECT_DELAY);
           }
-          break; // Break from the while(true) loop
+          break;
         }
 
         buffer += decoder.decode(value, { stream: true });
         const messageBlocks = buffer.split('\n\n');
-        buffer = messageBlocks.pop() || ''; // Last part might be an incomplete message
+        buffer = messageBlocks.pop() || ''; 
 
         for (const block of messageBlocks) {
           if (block.trim() === '') continue;
 
-          let eventName = 'message'; // Default SSE event name
+          let eventName = 'message'; 
           let eventData = '';
           const messageLines = block.split('\n');
 
@@ -130,7 +169,7 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
             if (line.startsWith('event:')) {
               eventName = line.substring('event:'.length).trim();
             } else if (line.startsWith('data:')) {
-              eventData += line.substring('data:'.length).trim(); // Concatenate if data is split over multiple lines, though JSON usually isn't
+              eventData += line.substring('data:'.length).trim(); 
             }
           }
 
@@ -142,11 +181,12 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
               if (jsonData.type === 'log' && jsonData.instance?.id === instance.id) {
                 let rawLogData = jsonData.logs || '';
                 if (typeof rawLogData === 'string') {
-                  const cleanedLog = stripAnsiCodes(rawLogData);
-                  setInstanceLogs(prevLogs => [`[${currentTime}] ${cleanedLog}`, ...prevLogs.slice(0, MAX_LOG_LINES - 1)]);
+                  logCounterRef.current++;
+                  setInstanceLogs(prevLogs => [parseAndFormatLogLine(rawLogData, logCounterRef.current), ...prevLogs.slice(0, MAX_LOG_LINES - 1)]);
                 }
               } else if (jsonData.type === 'shutdown') {
-                setInstanceLogs(prevLogs => [`[${currentTime}] 主控服务已关闭事件流。`, ...prevLogs.slice(0, MAX_LOG_LINES - 1)]);
+                logCounterRef.current++;
+                setInstanceLogs(prevLogs => [parseAndFormatLogLine(`主控服务已关闭事件流。`, logCounterRef.current), ...prevLogs.slice(0, MAX_LOG_LINES - 1)]);
                 if (abortControllerRef.current && !abortControllerRef.current.signal.aborted) {
                     abortControllerRef.current.abort("Server shutdown event received");
                 }
@@ -154,20 +194,25 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
                     clearTimeout(reconnectTimeoutRef.current);
                     reconnectTimeoutRef.current = null;
                 }
-                return; // Exit the read loop, do not reconnect
-              } else if (jsonData.type === 'initial') {
-                  setInstanceLogs(prevLogs => [`[${currentTime}] 收到初始实例数据。`, ...prevLogs.slice(0, MAX_LOG_LINES - 1)]);
+                return; 
+              } else if (jsonData.type === 'initial' && Array.isArray(jsonData.instance)) {
+                  logCounterRef.current++;
+                  setInstanceLogs(prevLogs => [parseAndFormatLogLine(`收到初始实例数据 (${jsonData.instance.length} 个)。`, logCounterRef.current), ...prevLogs.slice(0, MAX_LOG_LINES - 1)]);
               } else if (jsonData.type === 'create' && jsonData.instance) {
-                  setInstanceLogs(prevLogs => [`[${currentTime}] 实例已创建: ${jsonData.instance.id.substring(0,8)}...`, ...prevLogs.slice(0, MAX_LOG_LINES - 1)]);
+                  logCounterRef.current++;
+                  setInstanceLogs(prevLogs => [parseAndFormatLogLine(`实例已创建: ${jsonData.instance.id.substring(0,8)}...`, logCounterRef.current), ...prevLogs.slice(0, MAX_LOG_LINES - 1)]);
               } else if (jsonData.type === 'update' && jsonData.instance) {
-                  setInstanceLogs(prevLogs => [`[${currentTime}] 实例已更新: ${jsonData.instance.id.substring(0,8)}... 状态: ${jsonData.instance.status}`, ...prevLogs.slice(0, MAX_LOG_LINES - 1)]);
+                  logCounterRef.current++;
+                  setInstanceLogs(prevLogs => [parseAndFormatLogLine(`实例已更新: ${jsonData.instance.id.substring(0,8)}... 状态: ${jsonData.instance.status}`, logCounterRef.current), ...prevLogs.slice(0, MAX_LOG_LINES - 1)]);
               } else if (jsonData.type === 'delete' && jsonData.instance) {
-                  setInstanceLogs(prevLogs => [`[${currentTime}] 实例已删除: ${jsonData.instance.id.substring(0,8)}...`, ...prevLogs.slice(0, MAX_LOG_LINES - 1)]);
+                  logCounterRef.current++;
+                  setInstanceLogs(prevLogs => [parseAndFormatLogLine(`实例已删除: ${jsonData.instance.id.substring(0,8)}...`, logCounterRef.current), ...prevLogs.slice(0, MAX_LOG_LINES - 1)]);
               }
 
             } catch (e) {
               console.error("Modal SSE: Error parsing JSON from 'instance' event data:", e, "Raw data:", eventData);
-              setInstanceLogs(prev => [`[${new Date().toLocaleTimeString('zh-CN', { hour12: false })}] 解析事件数据错误。`, ...prev.slice(0, MAX_LOG_LINES -1)]);
+              logCounterRef.current++;
+              setInstanceLogs(prev => [parseAndFormatLogLine(`解析事件数据错误。`, logCounterRef.current), ...prev.slice(0, MAX_LOG_LINES -1)]);
             }
           }
         }
@@ -181,7 +226,8 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
         if (error.message.toLowerCase().includes('failed to fetch') || error.message.toLowerCase().includes('networkerror')) {
             displayError = '网络错误。请检查连接或服务器CORS设置。';
         }
-        setInstanceLogs(prev => [`[${new Date().toLocaleTimeString('zh-CN', { hour12: false })}] 事件流连接错误: ${displayError} ${RECONNECT_DELAY / 1000}秒后尝试重连...`, ...prev.slice(0, MAX_LOG_LINES -1)]);
+        logCounterRef.current++;
+        setInstanceLogs(prev => [parseAndFormatLogLine(`事件流连接错误: ${displayError} ${RECONNECT_DELAY / 1000}秒后尝试重连...`, logCounterRef.current), ...prev.slice(0, MAX_LOG_LINES -1)]);
         if (!signal.aborted) {
           reconnectTimeoutRef.current = setTimeout(connectToSse, RECONNECT_DELAY);
         }
@@ -192,7 +238,8 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
 
   useEffect(() => {
     if (open && instance && apiRoot && apiToken && instance.id !== '********') {
-      setInstanceLogs([`[${new Date().toLocaleTimeString('zh-CN', { hour12: false })}] 正在初始化实例日志流...`]);
+      logCounterRef.current = 0;
+      setInstanceLogs([parseAndFormatLogLine(`正在初始化实例日志流...`, logCounterRef.current)]);
       connectToSse();
     } else {
       if (abortControllerRef.current && !abortControllerRef.current.signal.aborted) {
@@ -204,7 +251,7 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
         reconnectTimeoutRef.current = null;
       }
       if(instance?.id === '********' || !open || !instance){
-        setInstanceLogs([]); // Clear logs if not supposed to connect
+        setInstanceLogs([]); 
       }
     }
 
@@ -334,6 +381,39 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
       icon: <Cable className="h-4 w-4 text-muted-foreground" /> 
     },
   ];
+  
+  const getLogLevelClass = (level: ParsedLogEntry['level']): string => {
+    switch (level) {
+      case 'ERROR':
+      case 'FATAL':
+        return 'text-destructive';
+      case 'WARN':
+        return 'text-yellow-500 dark:text-yellow-400';
+      case 'INFO':
+        return 'text-blue-500 dark:text-blue-400';
+      case 'DEBUG':
+        return 'text-purple-500 dark:text-purple-400';
+      default:
+        return 'text-muted-foreground';
+    }
+  };
+
+  const getLogLevelIcon = (level: ParsedLogEntry['level']): React.ReactNode => {
+    switch (level) {
+      case 'ERROR':
+      case 'FATAL':
+        return <AlertTriangle className="h-3.5 w-3.5 mr-1" />;
+      case 'WARN':
+        return <AlertCircle className="h-3.5 w-3.5 mr-1" />;
+      case 'INFO':
+        return <InfoIcon className="h-3.5 w-3.5 mr-1" />;
+      case 'DEBUG':
+        return <Debug className="h-3.5 w-3.5 mr-1" />;
+      default:
+        return <MessageSquare className="h-3.5 w-3.5 mr-1" />;
+    }
+  };
+
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -370,10 +450,24 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
             </h3>
             <ScrollArea className="h-48 w-full rounded-md border border-border/30 p-3 bg-muted/20 flex-grow">
               {instanceLogs.length === 0 && <p className="text-xs text-muted-foreground text-center py-2 font-sans">等待日志...</p>}
-              {instanceLogs.map((log, index) => (
-                <p key={index} className="text-xs font-mono py-0.5 whitespace-pre-wrap break-all">
-                  {log}
-                </p>
+              {instanceLogs.map((log) => (
+                <div key={log.id} className="flex items-start text-xs font-mono py-0.5 whitespace-pre-wrap break-words">
+                  <TooltipProvider delayDuration={100}>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className="text-muted-foreground/80 mr-1.5 shrink-0 cursor-default">{log.time}</span>
+                      </TooltipTrigger>
+                      <TooltipContent side="left" className="text-xs font-sans p-1.5">
+                        {log.fullTimestamp}
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                  <span className={cn("font-semibold mr-1.5 shrink-0 flex items-center", getLogLevelClass(log.level))}>
+                    {getLogLevelIcon(log.level)}
+                    {log.level}
+                  </span>
+                  <span className="flex-grow">{log.message}</span>
+                </div>
               ))}
             </ScrollArea>
           </div>
