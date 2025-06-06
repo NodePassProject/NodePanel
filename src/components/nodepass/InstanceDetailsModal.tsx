@@ -10,12 +10,12 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
-import type { Instance, InstanceEvent } from '@/types/nodepass';
+import type { Instance } from '@/types/nodepass';
 import { InstanceStatusBadge } from './InstanceStatusBadge';
 import { ArrowDownCircle, ArrowUpCircle, ServerIcon, SmartphoneIcon, Fingerprint, Cable, KeyRound, Eye, EyeOff, ScrollText, Network } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { getEventsUrl } from '@/lib/api'; // Assuming getEventsUrl is correctly exported
+import { getEventsUrl } from '@/lib/api';
 
 interface InstanceDetailsModalProps {
   instance: Instance | null;
@@ -24,6 +24,9 @@ interface InstanceDetailsModalProps {
   apiRoot: string | null;
   apiToken: string | null;
 }
+
+const MAX_LOG_LINES = 200; // Increased log lines
+const RECONNECT_DELAY = 5000; // 5 seconds
 
 function formatBytes(bytes: number, decimals = 2) {
   if (bytes === 0) return '0 Bytes';
@@ -48,53 +51,27 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
   const [instanceLogs, setInstanceLogs] = useState<string[]>([]);
   const abortControllerRef = useRef<AbortController | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const MAX_LOG_LINES = 100;
-
-  const processSseMessageData = useCallback((messageBlock: string) => {
-    let eventTypeFromServer = 'message';
-    let eventDataLine = '';
-
-    const lines = messageBlock.split('\n');
-    for (const line of lines) {
-      if (line.startsWith('event:')) {
-        eventTypeFromServer = line.substring('event:'.length).trim();
-      } else if (line.startsWith('data:')) {
-        eventDataLine = line.substring('data:'.length).trim();
-      }
-    }
-
-    if (eventTypeFromServer === 'instance' && eventDataLine) {
-      try {
-        const serverEventPayload = JSON.parse(eventDataLine);
-        if (serverEventPayload.type === 'log' && serverEventPayload.instance?.id === instance?.id) {
-          let rawLogData = serverEventPayload.logs || '';
-          if (typeof rawLogData === 'string') {
-            const cleanedLog = stripAnsiCodes(rawLogData);
-            const timestamp = new Date(serverEventPayload.time || Date.now()).toLocaleTimeString('zh-CN', { hour12: false });
-            setInstanceLogs(prevLogs => [`[${timestamp}] ${cleanedLog}`, ...prevLogs.slice(0, MAX_LOG_LINES - 1)]);
-          }
-        }
-      } catch (error) {
-        console.error("Modal SSE: Error parsing event data:", error, "Raw data:", eventDataLine);
-      }
-    }
-  }, [instance?.id]);
-
 
   const connectToSse = useCallback(async () => {
-    if (!instance || !apiRoot || !apiToken || !open || instance.id === '********') { // Do not connect SSE for API Key 'instance'
+    if (!instance || !apiRoot || !apiToken || !open || instance.id === '********') {
       return;
     }
 
     if (abortControllerRef.current) {
-      abortControllerRef.current.abort("New connection or modal closed");
+      abortControllerRef.current.abort("Starting new connection attempt");
     }
     abortControllerRef.current = new AbortController();
     const signal = abortControllerRef.current.signal;
 
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = null;
+    }
+
     const eventsUrl = getEventsUrl(apiRoot);
     if (!eventsUrl) {
         console.error("Modal SSE: Invalid events URL derived from apiRoot", apiRoot);
+        setInstanceLogs(prev => [`[${new Date().toLocaleTimeString('zh-CN', { hour12: false })}] 事件流URL无效。`, ...prev.slice(0, MAX_LOG_LINES -1)]);
         return;
     }
     
@@ -103,12 +80,17 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
     try {
       const response = await fetch(eventsUrl, {
         method: 'GET',
-        headers: { 'X-API-Key': apiToken, 'Accept': 'text/event-stream', 'Cache-Control': 'no-cache' },
+        headers: { 
+          'X-API-Key': apiToken, 
+          'Accept': 'text/event-stream', 
+          'Cache-Control': 'no-cache' 
+        },
         signal,
       });
 
       if (!response.ok) {
-        throw new Error(`HTTP error ${response.status}: ${await response.text()}`);
+        const errorText = await response.text().catch(() => `HTTP error ${response.status}`);
+        throw new Error(`HTTP error ${response.status}: ${errorText}`);
       }
       if (!response.body) {
         throw new Error("Response body is null.");
@@ -123,43 +105,117 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
         if (signal.aborted) break;
         const { value, done } = await reader.read();
         if (signal.aborted) break;
+        
         if (done) {
-          if (!signal.aborted) {
-            console.log(`Modal SSE for ${instance.id}: Stream closed by server.`);
-            setInstanceLogs(prev => [`[${new Date().toLocaleTimeString('zh-CN', { hour12: false })}] 事件流已由服务端关闭。`, ...prev.slice(0, MAX_LOG_LINES -1)]);
+          if (!signal.aborted) { // If not intentionally aborted
+            console.log(`Modal SSE for ${instance.id}: Stream closed by server. Attempting to reconnect in ${RECONNECT_DELAY / 1000}s.`);
+            setInstanceLogs(prev => [`[${new Date().toLocaleTimeString('zh-CN', { hour12: false })}] 事件流已关闭，${RECONNECT_DELAY / 1000}秒后尝试重连...`, ...prev.slice(0, MAX_LOG_LINES -1)]);
+            if (!signal.aborted) reconnectTimeoutRef.current = setTimeout(connectToSse, RECONNECT_DELAY);
           }
-          break;
+          break; // Break from the while(true) loop
         }
+
         buffer += decoder.decode(value, { stream: true });
         const messageBlocks = buffer.split('\n\n');
-        buffer = messageBlocks.pop() || '';
+        buffer = messageBlocks.pop() || ''; // Last part might be an incomplete message
+
         for (const block of messageBlocks) {
-          if (block.trim() !== '') processSseMessageData(block);
+          if (block.trim() === '') continue;
+
+          let eventName = 'message'; // Default SSE event name
+          let eventData = '';
+          const messageLines = block.split('\n');
+
+          for (const line of messageLines) {
+            if (line.startsWith('event:')) {
+              eventName = line.substring('event:'.length).trim();
+            } else if (line.startsWith('data:')) {
+              eventData += line.substring('data:'.length).trim(); // Concatenate if data is split over multiple lines, though JSON usually isn't
+            }
+          }
+
+          if (eventName === 'instance' && eventData) {
+            try {
+              const jsonData = JSON.parse(eventData);
+              const currentTime = new Date(jsonData.time || Date.now()).toLocaleTimeString('zh-CN', { hour12: false });
+
+              if (jsonData.type === 'log' && jsonData.instance?.id === instance.id) {
+                let rawLogData = jsonData.logs || '';
+                if (typeof rawLogData === 'string') {
+                  const cleanedLog = stripAnsiCodes(rawLogData);
+                  setInstanceLogs(prevLogs => [`[${currentTime}] ${cleanedLog}`, ...prevLogs.slice(0, MAX_LOG_LINES - 1)]);
+                }
+              } else if (jsonData.type === 'shutdown') {
+                setInstanceLogs(prevLogs => [`[${currentTime}] 主控服务已关闭事件流。`, ...prevLogs.slice(0, MAX_LOG_LINES - 1)]);
+                if (abortControllerRef.current && !abortControllerRef.current.signal.aborted) {
+                    abortControllerRef.current.abort("Server shutdown event received");
+                }
+                if (reconnectTimeoutRef.current) {
+                    clearTimeout(reconnectTimeoutRef.current);
+                    reconnectTimeoutRef.current = null;
+                }
+                return; // Exit the read loop, do not reconnect
+              } else if (jsonData.type === 'initial') {
+                  setInstanceLogs(prevLogs => [`[${currentTime}] 收到初始实例数据。`, ...prevLogs.slice(0, MAX_LOG_LINES - 1)]);
+              } else if (jsonData.type === 'create' && jsonData.instance) {
+                  setInstanceLogs(prevLogs => [`[${currentTime}] 实例已创建: ${jsonData.instance.id.substring(0,8)}...`, ...prevLogs.slice(0, MAX_LOG_LINES - 1)]);
+              } else if (jsonData.type === 'update' && jsonData.instance) {
+                  setInstanceLogs(prevLogs => [`[${currentTime}] 实例已更新: ${jsonData.instance.id.substring(0,8)}... 状态: ${jsonData.instance.status}`, ...prevLogs.slice(0, MAX_LOG_LINES - 1)]);
+              } else if (jsonData.type === 'delete' && jsonData.instance) {
+                  setInstanceLogs(prevLogs => [`[${currentTime}] 实例已删除: ${jsonData.instance.id.substring(0,8)}...`, ...prevLogs.slice(0, MAX_LOG_LINES - 1)]);
+              }
+
+            } catch (e) {
+              console.error("Modal SSE: Error parsing JSON from 'instance' event data:", e, "Raw data:", eventData);
+              setInstanceLogs(prev => [`[${new Date().toLocaleTimeString('zh-CN', { hour12: false })}] 解析事件数据错误。`, ...prev.slice(0, MAX_LOG_LINES -1)]);
+            }
+          }
         }
       }
     } catch (error: any) {
       if (signal.aborted && error.name === 'AbortError') {
         console.log(`Modal SSE for ${instance.id}: Fetch aborted as expected.`);
       } else {
-        console.error(`Modal SSE for ${instance.id}: Connection error:`, error.message);
-        setInstanceLogs(prev => [`[${new Date().toLocaleTimeString('zh-CN', { hour12: false })}] 事件流连接错误: ${error.message}`, ...prev.slice(0, MAX_LOG_LINES -1)]);
+        console.error(`Modal SSE for ${instance.id}: Connection error: ${error.message}`, error);
+        let displayError = error.message;
+        if (error.message.toLowerCase().includes('failed to fetch') || error.message.toLowerCase().includes('networkerror')) {
+            displayError = '网络错误。请检查连接或服务器CORS设置。';
+        }
+        setInstanceLogs(prev => [`[${new Date().toLocaleTimeString('zh-CN', { hour12: false })}] 事件流连接错误: ${displayError} ${RECONNECT_DELAY / 1000}秒后尝试重连...`, ...prev.slice(0, MAX_LOG_LINES -1)]);
+        if (!signal.aborted) {
+          reconnectTimeoutRef.current = setTimeout(connectToSse, RECONNECT_DELAY);
+        }
       }
     }
-  }, [instance, apiRoot, apiToken, open, processSseMessageData]);
+  }, [instance, apiRoot, apiToken, open]);
 
 
   useEffect(() => {
-    if (open && instance && apiRoot && apiToken) {
+    if (open && instance && apiRoot && apiToken && instance.id !== '********') {
       setInstanceLogs([`[${new Date().toLocaleTimeString('zh-CN', { hour12: false })}] 正在初始化实例日志流...`]);
       connectToSse();
+    } else {
+      if (abortControllerRef.current && !abortControllerRef.current.signal.aborted) {
+        abortControllerRef.current.abort("Modal closed or instance invalid");
+      }
+      abortControllerRef.current = null;
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+        reconnectTimeoutRef.current = null;
+      }
+      if(instance?.id === '********' || !open || !instance){
+        setInstanceLogs([]); // Clear logs if not supposed to connect
+      }
     }
 
     return () => {
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort("Modal closing or instance changed");
+      if (abortControllerRef.current && !abortControllerRef.current.signal.aborted) {
+        abortControllerRef.current.abort("Component unmounting or dependencies changed");
       }
+      abortControllerRef.current = null;
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
+        reconnectTimeoutRef.current = null;
       }
     };
   }, [open, instance, apiRoot, apiToken, connectToSse]);
