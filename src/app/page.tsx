@@ -4,7 +4,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { ApiConfigDialog } from '@/components/nodepass/ApiKeyDialog';
-import { CreateInstanceDialog } from '@/components/nodepass/CreateInstanceDialog';
+import { CreateInstanceDialog } from '@/components/nodepass/create-instance-dialog'; // Updated import path
 import { InstanceList } from '@/components/nodepass/InstanceList';
 import { EventLog, type AppLogEntry } from '@/components/nodepass/EventLog';
 import { ConnectionsManager } from '@/components/nodepass/ConnectionsManager';
@@ -45,9 +45,9 @@ export default function HomePage() {
   useEffect(() => {
     if (activeApiConfig && prevApiIdRef.current !== activeApiConfig.id) {
       if (prevApiIdRef.current !== null) { 
-        addPageLog(`活动主控已切换至: "${activeApiConfig.name}"`, 'INFO', { previousApiId: prevApiIdRef.current, newApiId: activeApiConfig.id });
+        addPageLog(\`活动主控已切换至: "\${activeApiConfig.name}"\`, 'INFO', { previousApiId: prevApiIdRef.current, newApiId: activeApiConfig.id });
       } else {
-        addPageLog(`活动主控已设置为: "${activeApiConfig.name}"`, 'INFO', { newApiId: activeApiConfig.id });
+        addPageLog(\`活动主控已设置为: "\${activeApiConfig.name}"\`, 'INFO', { newApiId: activeApiConfig.id });
       }
       prevApiIdRef.current = activeApiConfig.id;
     } else if (!activeApiConfig && prevApiIdRef.current !== null) {
@@ -64,9 +64,9 @@ export default function HomePage() {
     setIsApiConfigDialogOpenForSetup(false);
     toast({
       title: '主控已添加',
-      description: `“${savedConfig.name}”已保存并激活。`,
+      description: \`“\${savedConfig.name}”已保存并激活。\`,
     });
-    addPageLog(`主控 "${savedConfig.name}" 已添加并激活。`, 'SUCCESS', { configId: savedConfig.id, name: savedConfig.name });
+    addPageLog(\`主控 "\${savedConfig.name}" 已添加并激活。\`, 'SUCCESS', { configId: savedConfig.id, name: savedConfig.name });
   };
 
   const handleOpenApiConfigDialogForSetup = () => {
