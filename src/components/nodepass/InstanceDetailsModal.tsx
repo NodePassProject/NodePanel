@@ -27,8 +27,8 @@ interface InstanceDetailsModalProps {
   apiToken: string | null;
 }
 
-const MAX_LOG_LINES = 200; 
-const RECONNECT_DELAY = 5000; 
+const MAX_LOG_LINES = 200;
+const RECONNECT_DELAY = 5000;
 
 const INITIAL_MESSAGE_TEXT = "正在初始化实例日志流...";
 
@@ -56,27 +56,37 @@ function stripAnsiCodes(str: string): string {
   return str.replace(ansiRegex, '');
 }
 
+// Regex to capture timestamp, level, and message
+// Example: 2023-10-27 10:30:00.123 INFO This is a log message.
+// Group 1: Timestamp (2023-10-27 10:30:00.123)
+// Group 2: Level (INFO)
+// Group 3: Message (This is a log message.)
 const logLineRegex = /^(\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2}\.\d{3})\s+([A-Z]+)\s+(.*)$/s;
 
 function parseAndFormatLogLine(rawLog: string, index: number): ParsedLogEntry {
-  const cleanedLog = stripAnsiCodes(rawLog);
+  const cleanedLog = stripAnsiCodes(rawLog).trim(); // Trim the whole cleaned log
   const match = cleanedLog.match(logLineRegex);
 
   if (match) {
     const fullTimestamp = match[1];
-    const level = match[2].toUpperCase() as ParsedLogEntry['level'];
-    const message = match[3];
+    // Trim the captured level string before converting to uppercase and checking
+    const levelString = match[2].trim().toUpperCase();
+    const level = ['ERROR', 'WARN', 'INFO', 'DEBUG', 'FATAL'].includes(levelString)
+      ? (levelString as ParsedLogEntry['level'])
+      : 'UNKNOWN';
+    const message = match[3].trim(); // Trim the message as well
     const time = new Date(fullTimestamp).toLocaleTimeString('zh-CN', { hour12: false });
-    return { id: `${fullTimestamp}-${index}-${Math.random()}`, fullTimestamp, time, level: ['ERROR', 'WARN', 'INFO', 'DEBUG', 'FATAL'].includes(level) ? level : 'UNKNOWN', message };
+    return { id: `${fullTimestamp}-${index}-${Math.random()}`, fullTimestamp, time, level, message };
   }
-  
+
+  // Fallback if regex doesn't match
   const now = new Date();
   return {
     id: `${now.toISOString()}-${index}-${Math.random()}`,
-    fullTimestamp: now.toISOString(),
+    fullTimestamp: now.toISOString(), // This is not the log's original timestamp
     time: now.toLocaleTimeString('zh-CN', { hour12: false }),
     level: 'UNKNOWN',
-    message: cleanedLog,
+    message: cleanedLog, // Use the trimmed and cleaned log as the message
   };
 }
 
@@ -92,11 +102,12 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
 
   const addLogEntry = useCallback((entry: ParsedLogEntry) => {
     setInstanceLogs(prevLogs => {
-      const newLogs = [entry, ...prevLogs];
-      // If the initial message is still the only one, replace it. Otherwise, prepend.
-      if (prevLogs.length === 1 && prevLogs[0].message === INITIAL_MESSAGE_TEXT) {
+      // If the initial message is still the only one and the new entry is not the same initial message, replace it.
+      if (prevLogs.length === 1 && prevLogs[0].message === INITIAL_MESSAGE_TEXT && entry.message !== INITIAL_MESSAGE_TEXT) {
         return [entry];
       }
+      // Otherwise, prepend and limit.
+      const newLogs = [entry, ...prevLogs];
       return newLogs.slice(0, MAX_LOG_LINES);
     });
   }, []);
@@ -120,20 +131,17 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
 
     const eventsUrl = getEventsUrl(apiRoot);
     if (!eventsUrl) {
-        console.error("Modal SSE: Invalid events URL derived from apiRoot", apiRoot);
-        addLogEntry(parseAndFormatLogLine(`事件流URL无效。`, logCounterRef.current++));
+        addLogEntry(parseAndFormatLogLine(`[ERROR] 事件流URL无效，无法连接。 Root: ${apiRoot}`, logCounterRef.current++));
         return;
     }
-    
-    // console.log(`Modal SSE: Attempting to connect to ${eventsUrl} for instance ${instance.id}`);
 
     try {
       const response = await fetch(eventsUrl, {
         method: 'GET',
-        headers: { 
-          'X-API-Key': apiToken, 
-          'Accept': 'text/event-stream', 
-          'Cache-Control': 'no-cache' 
+        headers: {
+          'X-API-Key': apiToken,
+          'Accept': 'text/event-stream',
+          'Cache-Control': 'no-cache'
         },
         signal,
       });
@@ -145,6 +153,11 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
       if (!response.body) {
         throw new Error("Response body is null.");
       }
+      // Clear initial message if connection is successful and we start receiving data
+      if (initialMessageDisplayedRef.current) {
+         setInstanceLogs(prevLogs => prevLogs.filter(log => log.message !== INITIAL_MESSAGE_TEXT));
+         initialMessageDisplayedRef.current = false;
+      }
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
@@ -155,11 +168,10 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
         if (signal.aborted) break;
         const { value, done } = await reader.read();
         if (signal.aborted) break;
-        
+
         if (done) {
-          if (!signal.aborted) { 
-            // console.log(`Modal SSE for ${instance.id}: Stream closed by server. Attempting to reconnect in ${RECONNECT_DELAY / 1000}s.`);
-            addLogEntry(parseAndFormatLogLine(`事件流已关闭，${RECONNECT_DELAY / 1000}秒后尝试重连...`, logCounterRef.current++));
+          if (!signal.aborted) {
+            addLogEntry(parseAndFormatLogLine(`[INFO] 事件流已关闭，${RECONNECT_DELAY / 1000}秒后尝试重连...`, logCounterRef.current++));
             if (!signal.aborted) reconnectTimeoutRef.current = setTimeout(connectToSse, RECONNECT_DELAY);
           }
           break;
@@ -167,12 +179,12 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
 
         buffer += decoder.decode(value, { stream: true });
         const messageBlocks = buffer.split('\n\n');
-        buffer = messageBlocks.pop() || ''; 
+        buffer = messageBlocks.pop() || '';
 
         for (const block of messageBlocks) {
           if (block.trim() === '') continue;
 
-          let eventName = 'message'; 
+          let eventName = 'message';
           let eventData = '';
           const messageLines = block.split('\n');
 
@@ -180,15 +192,14 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
             if (line.startsWith('event:')) {
               eventName = line.substring('event:'.length).trim();
             } else if (line.startsWith('data:')) {
-               if (eventData !== '') eventData += '\n'; // As per SSE spec for multi-line data field values
-               eventData += line.substring('data:'.length).trimStart(); 
+               if (eventData !== '') eventData += '\n';
+               eventData += line.substring('data:'.length).trimStart();
             }
           }
 
           if (eventName === 'instance' && eventData) {
             try {
               const jsonData = JSON.parse(eventData);
-              const currentTime = new Date(jsonData.time || Date.now()).toLocaleTimeString('zh-CN', { hour12: false });
 
               if (jsonData.type === 'log') {
                 if (jsonData.instance?.id === instance.id) {
@@ -197,10 +208,10 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
                     addLogEntry(parseAndFormatLogLine(rawLogData, logCounterRef.current++));
                   }
                 } else {
-                   addLogEntry(parseAndFormatLogLine(`[Info] Log for other instance ${jsonData.instance?.id?.substring(0,8)}... received.`, logCounterRef.current++));
+                   addLogEntry(parseAndFormatLogLine(`[DEBUG] Log for other instance ${jsonData.instance?.id?.substring(0,8)}... received (ignored).`, logCounterRef.current++));
                 }
               } else if (jsonData.type === 'shutdown') {
-                addLogEntry(parseAndFormatLogLine(`主控服务已关闭事件流。`, logCounterRef.current++));
+                addLogEntry(parseAndFormatLogLine(`[INFO] 主控服务已关闭事件流。连接将不会自动重试。`, logCounterRef.current++));
                 if (abortControllerRef.current && !abortControllerRef.current.signal.aborted) {
                     abortControllerRef.current.abort("Server shutdown event received");
                 }
@@ -208,38 +219,36 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
                     clearTimeout(reconnectTimeoutRef.current);
                     reconnectTimeoutRef.current = null;
                 }
-                return; 
+                return;
               } else if (jsonData.type === 'initial' && Array.isArray(jsonData.instance)) {
-                  addLogEntry(parseAndFormatLogLine(`收到初始实例数据 (${jsonData.instance.length} 个)。`, logCounterRef.current++));
+                  addLogEntry(parseAndFormatLogLine(`[INFO] 收到初始实例数据 (${jsonData.instance.length} 个)。`, logCounterRef.current++));
               } else if (jsonData.type === 'create' && jsonData.instance) {
-                  addLogEntry(parseAndFormatLogLine(`实例已创建: ${jsonData.instance.id.substring(0,8)}...`, logCounterRef.current++));
+                  addLogEntry(parseAndFormatLogLine(`[INFO] 实例已创建: ${jsonData.instance.id.substring(0,8)}...`, logCounterRef.current++));
               } else if (jsonData.type === 'update' && jsonData.instance) {
-                  addLogEntry(parseAndFormatLogLine(`实例已更新: ${jsonData.instance.id.substring(0,8)}... 状态: ${jsonData.instance.status}`, logCounterRef.current++));
+                  addLogEntry(parseAndFormatLogLine(`[INFO] 实例已更新: ${jsonData.instance.id.substring(0,8)}... 状态: ${jsonData.instance.status}`, logCounterRef.current++));
               } else if (jsonData.type === 'delete' && jsonData.instance) {
-                  addLogEntry(parseAndFormatLogLine(`实例已删除: ${jsonData.instance.id.substring(0,8)}...`, logCounterRef.current++));
+                  addLogEntry(parseAndFormatLogLine(`[INFO] 实例已删除: ${jsonData.instance.id.substring(0,8)}...`, logCounterRef.current++));
               } else {
-                addLogEntry(parseAndFormatLogLine(`[Warn] Unrecognized 'instance' event data type: ${jsonData.type}`, logCounterRef.current++));
+                addLogEntry(parseAndFormatLogLine(`[WARN] 未识别的 'instance' 事件数据类型: ${jsonData.type}. Data: ${JSON.stringify(jsonData).substring(0,100)}...`, logCounterRef.current++));
               }
 
             } catch (e: any) {
-              console.error("Modal SSE: Error parsing JSON from 'instance' event data:", e, "Raw data:", eventData);
-              addLogEntry(parseAndFormatLogLine(`解析事件数据错误: ${e.message}. Data: ${eventData.substring(0,100)}...`, logCounterRef.current++));
+              addLogEntry(parseAndFormatLogLine(`[ERROR] 解析事件数据错误: ${e.message}. Data: ${eventData.substring(0,100)}...`, logCounterRef.current++));
             }
-          } else if (eventData) { // eventData exists, but eventName wasn't 'instance'
-             addLogEntry(parseAndFormatLogLine(`[Warn] Received event "${eventName}" (expected "instance"). Data: ${eventData.substring(0, 50)}...`, logCounterRef.current++));
+          } else if (eventData) {
+             addLogEntry(parseAndFormatLogLine(`[WARN] 收到事件 "${eventName}" (预期 "instance"). Data: ${eventData.substring(0, 50)}...`, logCounterRef.current++));
           }
         }
       }
     } catch (error: any) {
       if (signal.aborted && error.name === 'AbortError') {
-        // console.log(`Modal SSE for ${instance.id}: Fetch aborted as expected.`);
+        // This is an expected abort, no need to log an error or reconnect.
       } else {
-        console.error(`Modal SSE for ${instance.id}: Connection error: ${error.message}`, error);
         let displayError = error.message;
         if (error.message.toLowerCase().includes('failed to fetch') || error.message.toLowerCase().includes('networkerror')) {
             displayError = '网络错误。请检查连接或服务器CORS设置。';
         }
-        addLogEntry(parseAndFormatLogLine(`事件流连接错误: ${displayError} ${RECONNECT_DELAY / 1000}秒后尝试重连...`, logCounterRef.current++));
+        addLogEntry(parseAndFormatLogLine(`[ERROR] 事件流连接错误: ${displayError} ${RECONNECT_DELAY / 1000}秒后尝试重连...`, logCounterRef.current++));
         if (!signal.aborted) {
           reconnectTimeoutRef.current = setTimeout(connectToSse, RECONNECT_DELAY);
         }
@@ -251,7 +260,7 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
   useEffect(() => {
     if (open && instance && apiRoot && apiToken && instance.id !== '********') {
       logCounterRef.current = 0;
-      initialMessageDisplayedRef.current = true;
+      initialMessageDisplayedRef.current = true; // Set flag to true when we are about to show initial message
       setInstanceLogs([parseAndFormatLogLine(INITIAL_MESSAGE_TEXT, logCounterRef.current++)]);
       connectToSse();
     } else {
@@ -264,8 +273,8 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
         reconnectTimeoutRef.current = null;
       }
       if(instance?.id === '********' || !open || !instance){
-        setInstanceLogs([]); 
-        initialMessageDisplayedRef.current = false;
+        setInstanceLogs([]);
+        initialMessageDisplayedRef.current = false; // Reset flag if modal is closed or instance is invalid
       }
     }
 
@@ -279,8 +288,8 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
         reconnectTimeoutRef.current = null;
       }
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps 
-  }, [open, instance, apiRoot, apiToken]); // connectToSse is memoized, addLogEntry is memoized
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, instance, apiRoot, apiToken]);
 
 
   useEffect(() => {
@@ -307,18 +316,18 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
   const isApiKeyInstance = instance.id === '********';
 
   const detailItems = [
-    { 
-      label: "ID", 
+    {
+      label: "ID",
       value: (
-        <span 
+        <span
           className="font-mono text-xs cursor-pointer hover:text-primary transition-colors duration-150"
           title={`点击复制: ${instance.id}`}
           onClick={() => handleCopyToClipboard(instance.id, "ID")}
         >
           {instance.id}
         </span>
-      ), 
-      icon: <Fingerprint className="h-4 w-4 text-muted-foreground" /> 
+      ),
+      icon: <Fingerprint className="h-4 w-4 text-muted-foreground" />
     },
     {
       label: "类型",
@@ -338,21 +347,21 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
       ),
       icon: isApiKeyInstance ? <KeyRound className="h-4 w-4 text-muted-foreground" /> : (instance.type === 'server' ? <ServerIcon className="h-4 w-4 text-muted-foreground" /> : <SmartphoneIcon className="h-4 w-4 text-muted-foreground" />)
     },
-    { 
-      label: "状态", 
+    {
+      label: "状态",
       value: isApiKeyInstance ? (
          <Badge variant="outline" className="border-yellow-500 text-yellow-600 whitespace-nowrap font-sans text-xs">
             <KeyRound className="mr-1 h-3.5 w-3.5" />
             监听中
           </Badge>
-      ) : <InstanceStatusBadge status={instance.status} />, 
-      icon: <Cable className="h-4 w-4 text-muted-foreground" /> 
+      ) : <InstanceStatusBadge status={instance.status} />,
+      icon: <Cable className="h-4 w-4 text-muted-foreground" />
     },
-    { 
-      label: isApiKeyInstance ? "API 密钥" : "URL", 
+    {
+      label: isApiKeyInstance ? "API 密钥" : "URL",
       value: (
         <div className="flex items-center justify-between w-full">
-          <span 
+          <span
             className={`font-mono text-xs break-all ${isApiKeyInstance ? 'flex-grow' : ''} cursor-pointer hover:text-primary transition-colors duration-150`}
             title={`点击复制: ${instance.url}`}
             onClick={() => handleCopyToClipboard(instance.url, isApiKeyInstance ? 'API 密钥' : 'URL')}
@@ -369,34 +378,34 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
             </button>
           )}
         </div>
-      ), 
+      ),
       icon: <Network className="h-4 w-4 text-muted-foreground" />,
-      fullWidth: true 
+      fullWidth: true
     },
-    { 
-      label: "TCP 流量 (接收/发送)", 
+    {
+      label: "TCP 流量 (接收/发送)",
       value: (
         <span className="font-mono text-xs">
           <ArrowDownCircle className="inline-block h-3.5 w-3.5 mr-1 text-blue-500" />{formatBytes(instance.tcprx)}
           <span className="mx-1">/</span>
           <ArrowUpCircle className="inline-block h-3.5 w-3.5 mr-1 text-green-500" />{formatBytes(instance.tcptx)}
         </span>
-      ), 
-      icon: <Cable className="h-4 w-4 text-muted-foreground" /> 
+      ),
+      icon: <Cable className="h-4 w-4 text-muted-foreground" />
     },
-    { 
-      label: "UDP 流量 (接收/发送)", 
+    {
+      label: "UDP 流量 (接收/发送)",
       value: (
         <span className="font-mono text-xs">
           <ArrowDownCircle className="inline-block h-3.5 w-3.5 mr-1 text-blue-500" />{formatBytes(instance.udprx)}
           <span className="mx-1">/</span>
           <ArrowUpCircle className="inline-block h-3.5 w-3.5 mr-1 text-green-500" />{formatBytes(instance.udptx)}
         </span>
-      ), 
-      icon: <Cable className="h-4 w-4 text-muted-foreground" /> 
+      ),
+      icon: <Cable className="h-4 w-4 text-muted-foreground" />
     },
   ];
-  
+
   const getLogLevelClass = (level: ParsedLogEntry['level']): string => {
     switch (level) {
       case 'ERROR':
@@ -436,7 +445,7 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
         <DialogHeader>
           <DialogTitle className="font-title">实例详情</DialogTitle>
           <DialogDescription className="font-sans">
-            实例 <span 
+            实例 <span
                     className="font-semibold font-mono cursor-pointer hover:text-primary transition-colors duration-150"
                     title={`点击复制: ${instance.id}`}
                     onClick={() => handleCopyToClipboard(instance.id, "ID")}
@@ -456,7 +465,7 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
             </div>
           ))}
         </div>
-        
+
         {!isApiKeyInstance && (
           <div className="mt-4 pt-4 border-t border-border/50 flex-shrink-0 flex flex-col min-h-0">
             <h3 className="text-md font-semibold mb-2 flex items-center font-title">
