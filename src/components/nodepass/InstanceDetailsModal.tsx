@@ -12,7 +12,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import type { Instance } from '@/types/nodepass';
 import { InstanceStatusBadge } from './InstanceStatusBadge';
-import { ArrowDownCircle, ArrowUpCircle, ServerIcon, SmartphoneIcon, Fingerprint, Cable, KeyRound, Eye, EyeOff, ScrollText, Network, AlertTriangle, Info as InfoIcon, MessageSquare, AlertCircle, Debug, HelpCircleIcon } from 'lucide-react';
+import { ArrowDownCircle, ArrowUpCircle, ServerIcon, SmartphoneIcon, Fingerprint, Cable, KeyRound, Eye, EyeOff, ScrollText, Network, AlertTriangle, Info as InfoIcon, MessageSquare, AlertCircle, Bug, HelpCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { getEventsUrl } from '@/lib/api';
@@ -161,6 +161,10 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
     }
 
     try {
+      setInstanceLogs([]); // Clear previous logs, including initialization message
+      addLogEntry(parseAndFormatLogLine(INITIAL_MESSAGE_TEXT, logCounterRef.current++, 'INFO'));
+      hasConnectedAtLeastOnceRef.current = false;
+
       const response = await fetch(eventsUrl, {
         method: 'GET',
         headers: {
@@ -180,7 +184,7 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
       }
       
       if (!hasConnectedAtLeastOnceRef.current) {
-        setInstanceLogs([]); // Clear "Initializing..." message only on first successful connect
+        setInstanceLogs([]); 
         addLogEntry(parseAndFormatLogLine(CONNECTED_MESSAGE_TEXT, logCounterRef.current++, 'INFO'));
         hasConnectedAtLeastOnceRef.current = true;
       }
@@ -232,12 +236,12 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
                 if (jsonData.instance?.id === instance.id) {
                   let rawLogData = jsonData.logs || '';
                   if (typeof rawLogData === 'string') {
-                    addLogEntry(parseAndFormatLogLine(rawLogData, logCounterRef.current++)); // No forcedLevel
+                    addLogEntry(parseAndFormatLogLine(rawLogData, logCounterRef.current++)); 
                   } else {
                     addLogEntry(parseAndFormatLogLine(`收到实例 ${instance.id.substring(0,8)} 的日志，但'logs'字段非字符串。类型: ${typeof rawLogData}`, logCounterRef.current++, 'WARN'));
                   }
                 } else {
-                   addLogEntry(parseAndFormatLogLine(`[DEBUG] Log for other instance ${jsonData.instance?.id?.substring(0,8)}... (ignored). Expected: ${instance.id.substring(0,8)}...`, logCounterRef.current++));
+                   addLogEntry(parseAndFormatLogLine(`Log for other instance ${jsonData.instance?.id?.substring(0,8)}... (ignored). Expected: ${instance.id.substring(0,8)}...`, logCounterRef.current++, 'DEBUG'));
                 }
               } else if (jsonData.type === 'shutdown') {
                 addLogEntry(parseAndFormatLogLine(`主控服务已关闭事件流。连接将不会自动重试。`, logCounterRef.current++, 'INFO'));
@@ -289,8 +293,7 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
   useEffect(() => {
     if (open && instance && apiRoot && apiToken && instance.id !== '********') {
       logCounterRef.current = 0;
-      hasConnectedAtLeastOnceRef.current = false; 
-      setInstanceLogs([parseAndFormatLogLine(INITIAL_MESSAGE_TEXT, logCounterRef.current++, 'INFO')]);
+      // setInstanceLogs([parseAndFormatLogLine(INITIAL_MESSAGE_TEXT, logCounterRef.current++, 'INFO')]); // Initial message set inside connectToSse
       connectToSse();
     } else {
       if (abortControllerRef.current && !abortControllerRef.current.signal.aborted) {
@@ -461,9 +464,9 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
       case 'INFO':
         return <InfoIcon className="h-3.5 w-3.5 mr-1" />;
       case 'DEBUG':
-        return <Debug className="h-3.5 w-3.5 mr-1" />;
+        return <Bug className="h-3.5 w-3.5 mr-1" />;
       default: // UNKNOWN
-        return <HelpCircleIcon className="h-3.5 w-3.5 mr-1" />;
+        return <HelpCircle className="h-3.5 w-3.5 mr-1" />;
     }
   };
 
