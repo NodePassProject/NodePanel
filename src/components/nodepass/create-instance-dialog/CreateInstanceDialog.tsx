@@ -252,8 +252,8 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
             }
 
             // The server's tunnel address IS what the user typed in the form's tunnelAddress field.
-            const serverActualTunnelAddress = formTunnelAddress;
-            const serverActualTargetAddress = formTargetAddress; 
+            const serverActualTunnelAddress = formTunnelAddress; // User input for server listen
+            const serverActualTargetAddress = formTargetAddress; // User input for server forward
 
             if (!serverActualTargetAddress) {
                 toast({ title: "错误", description: "自动创建服务端时，服务端转发目标地址是必需的。", variant: "destructive" }); return;
@@ -261,7 +261,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
 
             serverInstanceUrlForAutoCreate = buildUrlFromFormValues({
                 instanceType: 'server',
-                tunnelAddress: serverActualTunnelAddress, // Use user input directly
+                tunnelAddress: serverActualTunnelAddress, 
                 targetAddress: serverActualTargetAddress,
                 logLevel: values.logLevel,
                 tlsMode: values.tlsMode,
@@ -292,19 +292,17 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
 
         const clientConnectToFullTunnelAddr = `${formatHostForUrl(clientConnectToServerHost)}:${clientConnectToServerPort}`;
 
-        const clientLocalForwardPort = (parseInt(formTunnelPort_Parsed, 10) + 1).toString();
-        let clientLocalForwardHost = formTunnelHost_Parsed; 
-        if (!clientLocalForwardHost || clientLocalForwardHost.toLowerCase() === "0.0.0.0" || clientLocalForwardHost.toLowerCase() === "[::]") {
-            clientLocalForwardHost = "127.0.0.1"; // Default to localhost if server listens on wildcard
-        }
-        const clientLocalForwardTargetAddress = `${formatHostForUrl(clientLocalForwardHost)}:${clientLocalForwardPort}`;
+        // Client's local forwarding target address calculation
+        const clientLocalForwardPortCalculated = (parseInt(formTunnelPort_Parsed, 10) + 1).toString();
+        const clientLocalForwardHostCalculated = "127.0.0.1"; // Always use loopback for client's local target
+        const clientLocalForwardTargetAddress = `${formatHostForUrl(clientLocalForwardHostCalculated)}:${clientLocalForwardPortCalculated}`;
 
         clientInstanceUrl = buildUrlFromFormValues({
             instanceType: 'client',
-            tunnelAddress: clientConnectToFullTunnelAddr,
-            targetAddress: clientLocalForwardTargetAddress,
+            tunnelAddress: clientConnectToFullTunnelAddr, // This is the server's address
+            targetAddress: clientLocalForwardTargetAddress, // This is the client's local forward
             logLevel: values.logLevel,
-        }, activeApiConfig);
+        }, activeApiConfig); // Pass client's active API config here
         onLog?.(`准备创建客户端实例于 "${activeApiConfig.name}": ${clientInstanceUrl}`, 'INFO');
 
     } else { // instanceType is 'server'
@@ -312,7 +310,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
         if (!serverActualTargetAddress) {
              toast({ title: "错误", description: "创建服务端时，目标地址 (业务数据) 是必需的。", variant: "destructive" }); return;
         }
-        const serverActualTunnelAddress = formTunnelAddress;
+        const serverActualTunnelAddress = formTunnelAddress; // Server listens on what user entered
 
         clientInstanceUrl = buildUrlFromFormValues({ 
             instanceType: 'server',
@@ -416,5 +414,3 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
     </Dialog>
   );
 }
-
-    
