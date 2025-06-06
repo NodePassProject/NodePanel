@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useEffect, useState } from 'react';
@@ -21,12 +20,12 @@ import { PlusCircle, Loader2 } from 'lucide-react';
 import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
 import { nodePassApi } from '@/lib/api';
 import { useApiConfig, type NamedApiConfig } from '@/hooks/use-api-key';
-import type { AppLogEntry } from './EventLog';
-import { extractHostname, extractPort } from '@/app/topology/lib/topology-utils';
+import type { AppLogEntry } from '../EventLog';
+import { extractHostname, extractPort, parseNodePassUrlForTopology } from '@/app/topology/lib/topology-utils';
 
-import { CreateInstanceFormFields } from './create-instance-dialog/CreateInstanceFormFields';
-import { buildUrlFromFormValues, formatHostForUrl } from './create-instance-dialog/utils';
-import { MASTER_TLS_MODE_DISPLAY_MAP } from './create-instance-dialog/constants';
+import { CreateInstanceFormFields } from './CreateInstanceFormFields';
+import { buildUrlFromFormValues, formatHostForUrl } from './utils';
+import { MASTER_TLS_MODE_DISPLAY_MAP } from './constants';
 
 
 interface CreateInstanceDialogProps {
@@ -43,25 +42,26 @@ interface CreateInstanceDialogProps {
 export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiToken, apiName, activeApiConfig, onLog }: CreateInstanceDialogProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const { apiConfigsList } = useApiConfig();
+  const { apiConfigsList, getApiConfigById, getApiRootUrl, getToken } = useApiConfig();
   const [externalApiSuggestion, setExternalApiSuggestion] = useState<string | null>(null);
 
   const form = useForm<CreateInstanceFormValues>({
     resolver: zodResolver(createInstanceFormSchema),
     defaultValues: {
       instanceType: 'server',
+      autoCreateServer: false,
+      serverApiId: activeApiConfig?.id || undefined,
       tunnelAddress: '',
-      targetAddress: '', 
+      targetAddress: '',
       logLevel: 'master',
-      tlsMode: 'master', 
+      tlsMode: 'master',
       certPath: '',
       keyPath: '',
-      autoCreateServer: false,
     },
   });
 
   const instanceType = form.watch("instanceType");
-  const tlsModeWatch = form.watch("tlsMode"); 
+  const tlsModeWatch = form.watch("tlsMode");
   const autoCreateServer = form.watch("autoCreateServer");
   const tunnelAddressValue = form.watch("tunnelAddress");
 
@@ -69,60 +69,52 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
     if (open) {
       form.reset({
         instanceType: 'server',
+        autoCreateServer: false,
+        serverApiId: activeApiConfig?.id || apiConfigsList[0]?.id || undefined,
         tunnelAddress: '',
         targetAddress: '',
         logLevel: 'master',
-        tlsMode: 'master', 
+        tlsMode: 'master',
         certPath: '',
         keyPath: '',
-        autoCreateServer: false,
       });
       setExternalApiSuggestion(null);
     }
-  }, [open, form]);
-  
+  }, [open, form, activeApiConfig, apiConfigsList]);
+
  useEffect(() => {
     if (instanceType === "client") {
         if (!form.formState.dirtyFields.tlsMode) form.setValue("tlsMode", "master");
         if (!form.formState.dirtyFields.certPath) form.setValue("certPath", '');
         if (!form.formState.dirtyFields.keyPath) form.setValue("keyPath", '');
+        if (!form.formState.dirtyFields.serverApiId && activeApiConfig?.id) {
+           form.setValue("serverApiId", activeApiConfig.id);
+        }
     } else if (instanceType === "server") {
         if (form.getValues("tlsMode") !== '2') {
             if (!form.formState.dirtyFields.certPath) form.setValue("certPath", '');
             if (!form.formState.dirtyFields.keyPath) form.setValue("keyPath", '');
         }
         if (!form.formState.dirtyFields.autoCreateServer) form.setValue("autoCreateServer", false);
+        if (!form.formState.dirtyFields.serverApiId) form.setValue("serverApiId", undefined);
     }
-  }, [instanceType, form]);
+  }, [instanceType, form, activeApiConfig]);
 
 
   useEffect(() => {
     if (instanceType === 'client' && tunnelAddressValue && !autoCreateServer) {
       const clientTunnelHost = extractHostname(tunnelAddressValue);
-      if (!clientTunnelHost) {
-        setExternalApiSuggestion(null);
-        return;
-      }
-
-      const localHostnames = ['localhost', '127.0.0.1', '::', '::1', '']; 
-      if (localHostnames.includes(clientTunnelHost.toLowerCase())) {
-        setExternalApiSuggestion(null);
-        return;
-      }
-
+      if (!clientTunnelHost) { setExternalApiSuggestion(null); return; }
+      const localHostnames = ['localhost', '127.0.0.1', '::', '::1', ''];
+      if (localHostnames.includes(clientTunnelHost.toLowerCase())) { setExternalApiSuggestion(null); return; }
       const isKnownHost = apiConfigsList.some(config => {
         const configuredApiHost = extractHostname(config.apiUrl);
         return configuredApiHost && configuredApiHost.toLowerCase() === clientTunnelHost.toLowerCase();
       });
-
       if (!isKnownHost) {
         setExternalApiSuggestion(`提示: 您似乎正在连接到一个外部主控 (${clientTunnelHost})。考虑将其添加为主控连接以便于管理。`);
-      } else {
-        setExternalApiSuggestion(null);
-      }
-    } else {
-      setExternalApiSuggestion(null);
-    }
+      } else { setExternalApiSuggestion(null); }
+    } else { setExternalApiSuggestion(null); }
   }, [tunnelAddressValue, instanceType, apiConfigsList, autoCreateServer]);
 
 
@@ -130,21 +122,27 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
     queryKey: ['instances', apiId, 'serversForTunnelSelection'],
     queryFn: async () => {
       if (!apiId || !apiRoot || !apiToken) throw new Error("主控配置不完整，无法获取服务端实例。");
-      const instances = await nodePassApi.getInstances(apiRoot, apiToken);
-      return instances.filter(inst => inst.type === 'server');
+      const allInstancesRaw = await nodePassApi.getInstances(apiRoot, apiToken);
+      const clientInstancesOnCurrentMaster = allInstancesRaw.filter(inst => inst.type === 'client');
+      const usedServerTunnelAddresses = new Set<string>();
+      clientInstancesOnCurrentMaster.forEach(clientInst => {
+        const parsedClientUrl = parseNodePassUrlForTopology(clientInst.url);
+        if (parsedClientUrl.tunnelAddress) { usedServerTunnelAddresses.add(parsedClientUrl.tunnelAddress.toLowerCase()); }
+      });
+      return allInstancesRaw.filter(inst => {
+        if (inst.type !== 'server') return false;
+        const parsedServerUrl = parseNodePassUrlForTopology(inst.url);
+        if (!parsedServerUrl.tunnelAddress) return true;
+        const serverListenAddress = parsedServerUrl.tunnelAddress.toLowerCase();
+        return !usedServerTunnelAddresses.has(serverListenAddress);
+      });
     },
     select: (data) => data
         .map(server => {
-            const tunnelAddrParsed = extractHostname(server.url); 
-            const tunnelPortParsed = extractPort(server.url);
-            if (!tunnelAddrParsed || !tunnelPortParsed) return null;
-            
-            const displayTunnelAddr = `${formatHostForUrl(tunnelAddrParsed)}:${tunnelPortParsed}`;
-            return {
-                id: server.id,
-                display: `ID: ${server.id.substring(0,8)}... (${displayTunnelAddr})`,
-                tunnelAddr: displayTunnelAddr 
-            };
+            const parsedUrl = parseNodePassUrlForTopology(server.url);
+            if (!parsedUrl.tunnelAddress) return null;
+            const displayTunnelAddr = parsedUrl.tunnelAddress;
+            return { id: server.id, display: `ID: ${server.id.substring(0,8)}... (${displayTunnelAddr})`, tunnelAddr: displayTunnelAddr };
         })
         .filter(Boolean) as {id: string, display: string, tunnelAddr: string}[],
     enabled: !!(open && instanceType === 'client' && !autoCreateServer && apiId && apiRoot && apiToken),
@@ -152,140 +150,188 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
 
 
   const createInstanceMutation = useMutation({
-    mutationFn: (data: CreateInstanceRequest) => {
-      if (!apiId || !apiRoot || !apiToken) throw new Error("没有活动的或有效的主控配置用于创建实例。");
-      const validatedApiData = createInstanceApiSchema.parse(data);
-      return nodePassApi.createInstance(validatedApiData, apiRoot, apiToken);
+    mutationFn: (params: { data: CreateInstanceRequest, useApiRoot?: string, useApiToken?: string }) => {
+      const effectiveApiRoot = params.useApiRoot || apiRoot;
+      const effectiveApiToken = params.useApiToken || apiToken;
+      if (!effectiveApiRoot || !effectiveApiToken) throw new Error("API configuration is incomplete.");
+      const validatedApiData = createInstanceApiSchema.parse(params.data);
+      return nodePassApi.createInstance(validatedApiData, effectiveApiRoot, effectiveApiToken);
     },
-    onSuccess: (data, variables) => {
-      const shortUrl = variables.url.length > 40 ? variables.url.substring(0,37) + "..." : variables.url;
-      toast({
-        title: '实例已创建',
-        description: `实例 (URL: ${shortUrl}) 已成功创建。`,
-      });
-      onLog?.(`实例创建成功: ${data.type} - ${data.id.substring(0,8)}... (URL: ${shortUrl})`, 'SUCCESS');
-      queryClient.invalidateQueries({ queryKey: ['instances', apiId] });
-      queryClient.invalidateQueries({ queryKey: ['allInstancesForTopologyPage']}); 
-      queryClient.invalidateQueries({ queryKey: ['allInstancesForTraffic']}); 
+    onSuccess: (createdInstance, variables) => {
+      const shortUrl = variables.data.url.length > 40 ? variables.data.url.substring(0,37) + "..." : variables.data.url;
+      const masterNameForToast = variables.useApiRoot === apiRoot ? apiName : apiConfigsList.find(c => getApiRootUrl(c.id) === variables.useApiRoot)?.name || 'a master';
+      toast({ title: `实例创建于 ${masterNameForToast}`, description: `实例 (URL: ${shortUrl}) -> ID: ${createdInstance.id.substring(0,8)}...` });
+      onLog?.(`实例创建成功于 ${masterNameForToast}: ${createdInstance.type} - ${createdInstance.id.substring(0,8)}... (URL: ${variables.data.url})`, 'SUCCESS');
+      queryClient.invalidateQueries({ queryKey: ['instances', variables.useApiRoot === apiRoot ? apiId : apiConfigsList.find(c => getApiRootUrl(c.id) === variables.useApiRoot)?.id] });
+      queryClient.invalidateQueries({ queryKey: ['allInstancesForTopologyPage']});
+      queryClient.invalidateQueries({ queryKey: ['allInstancesForTraffic']});
     },
     onError: (error: any, variables) => {
-      const shortUrl = variables.url.length > 40 ? variables.url.substring(0,37) + "..." : variables.url;
-      toast({
-        title: '创建实例出错',
-        description: `创建实例 (URL: ${shortUrl}) 失败: ${error.message || '未知错误。'}`,
-        variant: 'destructive',
-      });
-      onLog?.(`实例创建失败: (URL: ${shortUrl}) - ${error.message || '未知错误'}`, 'ERROR');
+      const shortUrl = variables.data.url.length > 40 ? variables.data.url.substring(0,37) + "..." : variables.data.url;
+      const masterNameForToast = variables.useApiRoot === apiRoot ? apiName : apiConfigsList.find(c => getApiRootUrl(c.id) === variables.useApiRoot)?.name || 'a master';
+      toast({ title: `创建实例失败于 ${masterNameForToast}`, description: `创建 (URL: ${shortUrl}) 失败: ${error.message || '未知错误。'}`, variant: 'destructive' });
+      onLog?.(`实例创建失败于 ${masterNameForToast}: (URL: ${variables.data.url}) - ${error.message || '未知错误'}`, 'ERROR');
     },
   });
 
  async function onSubmitHandler(values: CreateInstanceFormValues) {
-    if (!apiId || !apiRoot || !apiToken) {
-        toast({ title: "操作失败", description: "未选择活动主控或主控配置无效。", variant: "destructive"});
-        onLog?.('尝试创建实例失败: 未选择活动主控或主控配置无效。', 'ERROR');
+    const clientMasterApiId = apiId; 
+    const clientMasterApiRoot = apiRoot;
+    const clientMasterApiToken = apiToken;
+
+    if (!clientMasterApiId || !clientMasterApiRoot || !clientMasterApiToken || !activeApiConfig) {
+        toast({ title: "操作失败", description: "当前客户端主控配置无效。", variant: "destructive"});
+        onLog?.('尝试创建实例失败: 当前客户端主控配置无效。', 'ERROR');
         return;
     }
 
-    let primaryInstanceUrl = '';
+    let clientInstanceUrl = '';
     let serverInstanceUrlForAutoCreate: string | null = null;
-    const serverTunnelAddressFromForm = values.tunnelAddress; 
-    const serverTunnelHostFromForm_Parsed = extractHostname(serverTunnelAddressFromForm);
-    const serverTunnelPortFromForm_Parsed = extractPort(serverTunnelAddressFromForm);
-
-    if (!serverTunnelPortFromForm_Parsed) {
-        toast({ title: "错误", description: "无法从隧道监听地址中提取端口。", variant: "destructive" });
-        onLog?.('隧道监听地址无效，无法提取端口。', 'ERROR');
-        return;
-    }
-    const clientLocalListenHost_Formatted = formatHostForUrl(serverTunnelHostFromForm_Parsed);
-
+    
     if (values.instanceType === 'client') {
-        const clientLocalListenPort = (parseInt(serverTunnelPortFromForm_Parsed, 10) + 1).toString();
-        const clientLocalListenTargetAddr = `${clientLocalListenHost_Formatted}:${clientLocalListenPort}`;
-
         if (values.autoCreateServer) {
-            const serverForwardTargetFromForm = values.targetAddress; 
-            if (!serverForwardTargetFromForm) {
-                toast({ title: "错误", description: "自动创建服务端时，服务端转发目标地址是必需的。", variant: "destructive" });
-                onLog?.('自动创建服务端失败: 缺少服务端转发目标地址。', 'ERROR');
-                return;
+            // ==============================================================================
+            // [FIXED] 自动创建服务端和客户端的场景
+            // ==============================================================================
+
+            // --- 1. 准备【服务端】参数 ---
+            const serverListenAddressFromForm = values.tunnelAddress; // e.g., '[::]:10101'
+            const serverForwardAddressFromForm = values.targetAddress;
+            const serverListenPort = extractPort(serverListenAddressFromForm);
+
+            if (!serverListenPort) {
+                toast({ title: "错误", description: "无法从隧道地址提取端口以创建服务端。", variant: "destructive" }); return;
             }
+            if (!serverForwardAddressFromForm) {
+                toast({ title: "错误", description: "自动创建服务端时，服务端转发目标地址是必需的。", variant: "destructive" }); return;
+            }
+
+            const serverTargetMasterId = values.serverApiId || clientMasterApiId;
+            const serverMasterConfig = getApiConfigById(serverTargetMasterId);
+            if (!serverMasterConfig) {
+                toast({ title: "错误", description: `选择的服务端主控 (ID: ${serverTargetMasterId}) 未找到。`, variant: "destructive" }); return;
+            }
+            
+            // 服务端URL使用用户输入的原始监听地址，这是正确的。
             serverInstanceUrlForAutoCreate = buildUrlFromFormValues({
                 instanceType: 'server',
-                tunnelAddress: serverTunnelAddressFromForm,
-                targetAddress: serverForwardTargetFromForm,
+                tunnelAddress: serverListenAddressFromForm,
+                targetAddress: serverForwardAddressFromForm,
                 logLevel: values.logLevel,
                 tlsMode: values.tlsMode,
                 certPath: values.tlsMode === '2' ? values.certPath : '',
                 keyPath: values.tlsMode === '2' ? values.keyPath : '',
-            });
-            onLog?.(`准备自动创建服务端: ${serverInstanceUrlForAutoCreate}`, 'INFO');
-            const clientConnectToTunnelAddr = serverTunnelAddressFromForm;
-            primaryInstanceUrl = buildUrlFromFormValues({
+            }, serverMasterConfig);
+            onLog?.(`准备自动创建服务端于 "${serverMasterConfig.name}": ${serverInstanceUrlForAutoCreate}`, 'INFO');
+
+
+            // --- 2. 准备【客户端】参数 (核心修复) ---
+            
+            // a. 客户端的【远程连接地址】 (tunnelAddress)
+            //    主机必须是服务端的【主控地址】，而不是'[::]'。
+            const clientRemoteHost = extractHostname(serverMasterConfig.apiUrl);
+            if (!clientRemoteHost) {
+                toast({ title: "错误", description: `无法从服务端主控 "${serverMasterConfig.name}" API URL提取主机名。`, variant: "destructive" }); return;
+            }
+            const clientRemotePort = serverListenPort; // 端口与服务端保持一致
+            const clientRemoteFullAddress = `${formatHostForUrl(clientRemoteHost)}:${clientRemotePort}`;
+
+            // b. 客户端的【本地转发地址】 (targetAddress)
+            //    主机必须是安全的'127.0.0.1'，端口自增。
+            const clientLocalHost = '127.0.0.1'; 
+            const clientLocalPort = (parseInt(serverListenPort, 10) + 1).toString();
+            const clientLocalFullAddress = `${formatHostForUrl(clientLocalHost)}:${clientLocalPort}`;
+
+            // 使用全新计算出的、正确的地址来构建客户端URL
+            clientInstanceUrl = buildUrlFromFormValues({
                 instanceType: 'client',
-                tunnelAddress: clientConnectToTunnelAddr,
-                targetAddress: clientLocalListenTargetAddr,
+                tunnelAddress: clientRemoteFullAddress,
+                targetAddress: clientLocalFullAddress,
                 logLevel: values.logLevel,
-                tlsMode: values.tlsMode,
-            });
-            onLog?.(`准备创建客户端实例 (连接到自动创建的服务端): ${primaryInstanceUrl}`, 'INFO');
-        } else { 
-            const clientConnectToTunnelAddr = serverTunnelAddressFromForm;
-            primaryInstanceUrl = buildUrlFromFormValues({
+            }, activeApiConfig); // 客户端在它自己的主控上创建
+            onLog?.(`准备创建客户端实例于 "${activeApiConfig.name}": ${clientInstanceUrl}`, 'INFO');
+
+        } else { // 场景: 客户端连接到一个已存在的服务端
+            const clientRemoteFullAddress = values.tunnelAddress;
+            const clientRemotePort = extractPort(clientRemoteFullAddress);
+
+            if (!clientRemotePort) {
+                toast({ title: "错误", description: "无法从连接的服务端隧道地址提取端口。", variant: "destructive" }); return;
+            }
+
+            // 同样，为本地转发设置安全的默认值
+            const clientLocalHost = '127.0.0.1';
+            const clientLocalPort = (parseInt(clientRemotePort, 10) + 1).toString();
+            const clientLocalFullAddress = `${formatHostForUrl(clientLocalHost)}:${clientLocalPort}`;
+            
+            clientInstanceUrl = buildUrlFromFormValues({
                 instanceType: 'client',
-                tunnelAddress: clientConnectToTunnelAddr,
-                targetAddress: clientLocalListenTargetAddr,
+                tunnelAddress: clientRemoteFullAddress,
+                targetAddress: clientLocalFullAddress,
                 logLevel: values.logLevel,
-                tlsMode: values.tlsMode,
-            });
-            onLog?.(`准备创建客户端实例: ${primaryInstanceUrl}`, 'INFO');
+            }, activeApiConfig);
+            onLog?.(`准备创建客户端实例于 "${activeApiConfig.name}": ${clientInstanceUrl}`, 'INFO');
         }
-    } else { 
-        const serverForwardTargetFromForm = values.targetAddress;
-        if (!serverForwardTargetFromForm) {
-             toast({ title: "错误", description: "创建服务端时，目标地址 (业务数据) 是必需的。", variant: "destructive" });
-             onLog?.('创建服务端失败: 缺少目标地址。', 'ERROR');
-             return;
+
+    } else { // 场景: 只创建服务端
+        if (!values.targetAddress) {
+             toast({ title: "错误", description: "创建服务端时，目标地址 (业务数据) 是必需的。", variant: "destructive" }); return;
         }
-        primaryInstanceUrl = buildUrlFromFormValues({
+        clientInstanceUrl = buildUrlFromFormValues({ 
             instanceType: 'server',
-            tunnelAddress: serverTunnelAddressFromForm,
-            targetAddress: serverForwardTargetFromForm,
+            tunnelAddress: values.tunnelAddress,
+            targetAddress: values.targetAddress,
             logLevel: values.logLevel,
             tlsMode: values.tlsMode,
             certPath: values.tlsMode === '2' ? values.certPath : '',
             keyPath: values.tlsMode === '2' ? values.keyPath : '',
-        });
-        onLog?.(`准备创建服务端实例: ${primaryInstanceUrl}`, 'INFO');
+        }, activeApiConfig);
+        onLog?.(`准备创建服务端实例于 "${activeApiConfig.name}": ${clientInstanceUrl}`, 'INFO');
     }
     
     try {
+      let serverCreationOk = true;
       if (serverInstanceUrlForAutoCreate) {
-        await createInstanceMutation.mutateAsync({ url: serverInstanceUrlForAutoCreate });
+        const serverTargetMasterId = values.serverApiId || clientMasterApiId;
+        const serverTargetMasterConfig = getApiConfigById(serverTargetMasterId);
+        const serverTargetApiRoot = serverTargetMasterConfig ? getApiRootUrl(serverTargetMasterConfig.id) : null;
+        const serverTargetApiToken = serverTargetMasterConfig ? getToken(serverTargetMasterConfig.id) : null;
+
+        if (!serverTargetApiRoot || !serverTargetApiToken) {
+          toast({title: "配置错误", description: `无法为服务端找到有效的API配置 (主控ID: ${serverTargetMasterId})`, variant: "destructive"});
+          serverCreationOk = false;
+        } else {
+          try {
+            await createInstanceMutation.mutateAsync({
+              data: { url: serverInstanceUrlForAutoCreate },
+              useApiRoot: serverTargetApiRoot,
+              useApiToken: serverTargetApiToken,
+            });
+          } catch (e) {
+            serverCreationOk = false; 
+          }
+        }
       }
-      if (primaryInstanceUrl) {
-        await createInstanceMutation.mutateAsync({ url: primaryInstanceUrl }); 
-      } else {
+
+      if (clientInstanceUrl && serverCreationOk) { 
+        await createInstanceMutation.mutateAsync({
+            data: { url: clientInstanceUrl },
+            useApiRoot: clientMasterApiRoot, 
+            useApiToken: clientMasterApiToken,
+         });
+      } else if (!clientInstanceUrl) {
         throw new Error("主实例URL未能正确构建。");
       }
       
-      if (!createInstanceMutation.isError || (createInstanceMutation.isSuccess && !serverInstanceUrlForAutoCreate) || (createInstanceMutation.isSuccess && serverInstanceUrlForAutoCreate && (await queryClient.getQueryState(['instances', apiId]))?.status !== 'error' )) {
-        form.reset();
-        onOpenChange(false); 
+      if (!createInstanceMutation.isError) {
+         form.reset();
+         onOpenChange(false);
       }
     } catch (error: any) {
        console.error("创建实例序列中发生错误:", error);
     }
   }
   
-  const masterLogLevelDisplay = activeApiConfig?.masterDefaultLogLevel && activeApiConfig.masterDefaultLogLevel !== 'master'
-    ? activeApiConfig.masterDefaultLogLevel.toUpperCase()
-    : '主控配置';
-  
-  const effectiveTlsModeDisplay = activeApiConfig?.masterDefaultTlsMode && activeApiConfig.masterDefaultTlsMode !== 'master'
-    ? MASTER_TLS_MODE_DISPLAY_MAP[activeApiConfig.masterDefaultTlsMode as keyof typeof MASTER_TLS_MODE_DISPLAY_MAP] || '主控配置'
-    : '主控配置';
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
@@ -305,6 +351,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
             tlsMode={tlsModeWatch}
             autoCreateServer={autoCreateServer}
             activeApiConfig={activeApiConfig}
+            apiConfigsList={apiConfigsList}
             serverInstancesForDropdown={serverInstancesForDropdown}
             isLoadingServerInstances={isLoadingServerInstances}
             externalApiSuggestion={externalApiSuggestion}

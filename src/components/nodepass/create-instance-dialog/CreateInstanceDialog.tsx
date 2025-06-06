@@ -22,7 +22,7 @@ import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
 import { nodePassApi } from '@/lib/api';
 import { useApiConfig, type NamedApiConfig } from '@/hooks/use-api-key';
 import type { AppLogEntry } from '../EventLog';
-import { extractHostname, extractPort, parseNodePassUrlForTopology } from '@/app/topology/lib/topology-utils';
+import { extractHostname, extractPort, parseNodePassUrlForTopology, isTunnelPortWildcard } from '@/app/topology/lib/topology-utils';
 
 import { CreateInstanceFormFields } from './CreateInstanceFormFields';
 import { buildUrlFromFormValues, formatHostForUrl } from './utils';
@@ -39,6 +39,11 @@ interface CreateInstanceDialogProps {
   activeApiConfig: NamedApiConfig | null; // Current client's master full config
   onLog?: (message: string, type: AppLogEntry['type']) => void;
 }
+
+// Helper to check for wildcard hostnames
+const isWildcardHostname = (host: string | null): boolean => {
+    return !host || host === '0.0.0.0' || host === '[::]';
+};
 
 export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiToken, apiName, activeApiConfig, onLog }: CreateInstanceDialogProps) {
   const { toast } = useToast();
@@ -223,27 +228,33 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
     let clientInstanceUrl = '';
     let serverInstanceUrlForAutoCreate: string | null = null;
 
-    const formTunnelAddress = values.tunnelAddress; // This is the address user inputs for server listening / client connecting
-    const formTargetAddress = values.targetAddress; // This is for server forwarding / client local service
+    const formTunnelAddress = values.tunnelAddress; 
+    const formTargetAddress = values.targetAddress; 
 
-    let serverListenHost: string | null = null; // Actual host the server will listen on
-    let serverListenPort: string | null = null; // Actual port the server will listen on
+    // Host and Port from the user's input for the server's listening address / client's target server address
+    const formTunnelHost_Parsed = extractHostname(formTunnelAddress); 
+    const formTunnelPort_Parsed = extractPort(formTunnelAddress);
 
-    let clientConnectToHost: string | null = null; // Host the client connects to
-    let clientConnectToPort: string | null = null; // Port the client connects to
+    if (!formTunnelPort_Parsed) {
+        toast({ title: "错误", description: "无法从隧道地址提取端口。", variant: "destructive" }); return;
+    }
 
-    let clientLocalForwardHost: string | null = null; // Host for client's local forwarding part
-    let clientLocalForwardPort: string | null = null; // Port for client's local forwarding part
+    // These will be the actual host and port the client connects TO.
+    let clientConnectToServerHost: string | null = null;
+    let clientConnectToServerPort: string | null = formTunnelPort_Parsed; // Port is always from form's tunnel
+
+    // These will be for the client's LOCAL forwarding part (second part of client URL).
+    const clientLocalForwardHostCalculated = formTunnelHost_Parsed; // As per user's latest request
+    const clientLocalForwardPortCalculated = (parseInt(formTunnelPort_Parsed, 10) + 1).toString();
+
 
     if (values.instanceType === 'client') {
         if (values.autoCreateServer) {
-            // SERVER (auto-created) configuration
-            serverListenHost = extractHostname(formTunnelAddress);
-            serverListenPort = extractPort(formTunnelAddress);
-            if (!serverListenPort) {
-                toast({ title: "错误", description: "自动创建服务端时，无法从隧道地址提取端口。", variant: "destructive" }); return;
-            }
-            const serverActualTargetAddress = formTargetAddress;
+            // ---- SERVER (auto-created) configuration ----
+            const serverListenHost_ForDefinition = formTunnelHost_Parsed; // Server listens on what user entered
+            const serverListenPort_ForDefinition = formTunnelPort_Parsed;
+            
+            const serverActualTargetAddress = formTargetAddress; // Server forwards to what user entered for target
             if (!serverActualTargetAddress) {
                 toast({ title: "错误", description: "自动创建服务端时，服务端转发目标地址是必需的。", variant: "destructive" }); return;
             }
@@ -253,10 +264,10 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
             if (!serverMasterConfig) {
                 toast({ title: "错误", description: `选择的服务端主控 (ID: ${serverTargetMasterId}) 未找到。`, variant: "destructive" }); return;
             }
-
+            
             serverInstanceUrlForAutoCreate = buildUrlFromFormValues({
                 instanceType: 'server',
-                tunnelAddress: `${formatHostForUrl(serverListenHost)}:${serverListenPort}`,
+                tunnelAddress: `${formatHostForUrl(serverListenHost_ForDefinition)}:${serverListenPort_ForDefinition}`,
                 targetAddress: serverActualTargetAddress,
                 logLevel: values.logLevel,
                 tlsMode: values.tlsMode,
@@ -265,54 +276,49 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
             }, serverMasterConfig);
             onLog?.(`准备自动创建服务端于 "${serverMasterConfig.name}": ${serverInstanceUrlForAutoCreate}`, 'INFO');
 
-            // CLIENT (connecting to auto-created server) configuration
-            if (serverListenHost === '0.0.0.0' || serverListenHost === '[::]' || !serverListenHost) {
-                clientConnectToHost = extractHostname(serverMasterConfig.apiUrl);
-                if (!clientConnectToHost) {
-                    toast({ title: "错误", description: `无法从服务端主控 "${serverMasterConfig.name}" API URL提取主机名。`, variant: "destructive" }); return;
+            // ---- CLIENT (connecting to auto-created server) configuration ----
+            if (isWildcardHostname(serverListenHost_ForDefinition)) {
+                clientConnectToServerHost = extractHostname(serverMasterConfig.apiUrl); // Client connects to server's master IP
+                if (!clientConnectToServerHost) {
+                     toast({ title: "错误", description: `无法从服务端主控 "${serverMasterConfig.name}" API URL提取主机名。`, variant: "destructive" }); return;
                 }
             } else {
-                clientConnectToHost = serverListenHost;
+                clientConnectToServerHost = serverListenHost_ForDefinition; // Client connects to server's specific IP
             }
-            clientConnectToPort = serverListenPort;
-
-            // CLIENT (local forwarding) configuration
-            clientLocalForwardHost = serverListenHost; // Use the server's listen host for client's local part's host
-            clientLocalForwardPort = (parseInt(serverListenPort, 10) + 1).toString();
+            // clientConnectToServerPort is already set to formTunnelPort_Parsed
 
         } else { // Client connects to an EXISTING server (autoCreateServer is false)
-            // CLIENT (connecting to existing server) configuration
-            clientConnectToHost = extractHostname(formTunnelAddress); // User provided the server's full tunnel address
-            clientConnectToPort = extractPort(formTunnelAddress);
-            if (!clientConnectToPort) {
-                toast({ title: "错误", description: "无法从连接的服务端隧道地址提取端口。", variant: "destructive" }); return;
+            if (isWildcardHostname(formTunnelHost_Parsed)) {
+                // Server user wants to connect to is listening on a wildcard.
+                // Client should connect to the IP of its own active master, assuming the server is reachable there.
+                clientConnectToServerHost = extractHostname(activeApiConfig.apiUrl);
+                if (!clientConnectToServerHost) {
+                     toast({ title: "错误", description: `无法从当前活动主控 "${activeApiConfig.name}" API URL提取主机名。`, variant: "destructive" }); return;
+                }
+            } else {
+                clientConnectToServerHost = formTunnelHost_Parsed; // Client connects to specific IP user entered
             }
-            if (!clientConnectToHost) { // Should ideally not happen if port is found, but as a fallback
-                toast({ title: "错误", description: "无法从连接的服务端隧道地址提取主机名。", variant: "destructive" }); return;
-            }
-
-            // CLIENT (local forwarding) configuration
-            clientLocalForwardHost = clientConnectToHost; // Use the server's host for client's local part's host
-            clientLocalForwardPort = (parseInt(clientConnectToPort, 10) + 1).toString();
+            // clientConnectToServerPort is already set to formTunnelPort_Parsed
         }
 
-        const clientConnectToFullTunnelAddr = `${formatHostForUrl(clientConnectToHost)}:${clientConnectToPort}`;
-        const clientLocalForwardTargetAddress = `${formatHostForUrl(clientLocalForwardHost)}:${clientLocalForwardPort}`;
+        const clientConnectToFullTunnelAddr = `${formatHostForUrl(clientConnectToServerHost)}:${clientConnectToServerPort}`;
+        const clientLocalForwardTargetAddress = `${formatHostForUrl(clientLocalForwardHostCalculated)}:${clientLocalForwardPortCalculated}`;
 
         clientInstanceUrl = buildUrlFromFormValues({
             instanceType: 'client',
             tunnelAddress: clientConnectToFullTunnelAddr,
             targetAddress: clientLocalForwardTargetAddress,
             logLevel: values.logLevel,
-        }, activeApiConfig); // Client is always created on its activeApiConfig
+            // tlsMode for client URL isn't typically set in the same way as server,
+            // but if needed, it would be based on values.tlsMode if it's for client behavior.
+            // The current buildUrlFromFormValues doesn't add TLS params for 'client' type.
+        }, activeApiConfig); 
         onLog?.(`准备创建客户端实例于 "${activeApiConfig.name}": ${clientInstanceUrl}`, 'INFO');
 
     } else { // instanceType is 'server'
-        serverListenHost = extractHostname(formTunnelAddress);
-        serverListenPort = extractPort(formTunnelAddress);
-        if (!serverListenPort) {
-            toast({ title: "错误", description: "创建服务端时，无法从隧道监听地址提取端口。", variant: "destructive" }); return;
-        }
+        const serverListenHost_ForDefinition = formTunnelHost_Parsed;
+        const serverListenPort_ForDefinition = formTunnelPort_Parsed;
+        
         const serverActualTargetAddress = formTargetAddress;
         if (!serverActualTargetAddress) {
              toast({ title: "错误", description: "创建服务端时，目标地址 (业务数据) 是必需的。", variant: "destructive" }); return;
@@ -320,13 +326,13 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
 
         clientInstanceUrl = buildUrlFromFormValues({ 
             instanceType: 'server',
-            tunnelAddress: `${formatHostForUrl(serverListenHost)}:${serverListenPort}`,
+            tunnelAddress: `${formatHostForUrl(serverListenHost_ForDefinition)}:${serverListenPort_ForDefinition}`,
             targetAddress: serverActualTargetAddress,
             logLevel: values.logLevel,
             tlsMode: values.tlsMode,
             certPath: values.tlsMode === '2' ? values.certPath : '',
             keyPath: values.tlsMode === '2' ? values.keyPath : '',
-        }, activeApiConfig); // Server is created on its activeApiConfig
+        }, activeApiConfig); 
         onLog?.(`准备创建服务端实例于 "${activeApiConfig.name}": ${clientInstanceUrl}`, 'INFO');
     }
     
@@ -370,7 +376,6 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
       }
     } catch (error: any) {
        console.error("创建实例序列中发生错误:", error);
-       // Toast for critical failure already handled by mutation's onError
     }
   }
   
