@@ -87,10 +87,12 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
         if (!form.formState.dirtyFields.certPath) form.setValue("certPath", '');
         if (!form.formState.dirtyFields.keyPath) form.setValue("keyPath", '');
     } else if (instanceType === "server") {
+        // When switching to server, if tlsMode is not '2', clear cert/key paths
         if (form.getValues("tlsMode") !== '2') {
             if (!form.formState.dirtyFields.certPath) form.setValue("certPath", '');
             if (!form.formState.dirtyFields.keyPath) form.setValue("keyPath", '');
         }
+        // Ensure autoCreateServer is reset if not applicable or not dirty
         if (!form.formState.dirtyFields.autoCreateServer) form.setValue("autoCreateServer", false);
     }
   }, [instanceType, form]);
@@ -201,7 +203,9 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
 
     if (values.instanceType === 'client') {
         const clientLocalListenPort = (parseInt(serverTunnelPortFromForm_Parsed, 10) + 1).toString();
-        const clientLocalListenTargetAddr = `${clientLocalListenHost_Formatted}:${clientLocalListenPort}`;
+        // Ensure targetAddress for the client uses the (potentially resolved) host from the tunnelAddress and the incremented port.
+        const clientTargetAddressForClientInstance = `${clientLocalListenHost_Formatted}:${clientLocalListenPort}`;
+
 
         if (values.autoCreateServer) {
             const serverForwardTargetFromForm = values.targetAddress; 
@@ -212,35 +216,36 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
             }
             serverInstanceUrlForAutoCreate = buildUrlFromFormValues({
                 instanceType: 'server',
-                tunnelAddress: serverTunnelAddressFromForm,
-                targetAddress: serverForwardTargetFromForm,
+                tunnelAddress: serverTunnelAddressFromForm, // This is server's listen address
+                targetAddress: serverForwardTargetFromForm, // This is server's forward target
                 logLevel: values.logLevel,
-                tlsMode: values.tlsMode,
+                tlsMode: values.tlsMode, // TLS mode for the server
                 certPath: values.tlsMode === '2' ? values.certPath : '',
                 keyPath: values.tlsMode === '2' ? values.keyPath : '',
-            });
+            }, activeApiConfig); // Pass activeApiConfig
             onLog?.(`准备自动创建服务端: ${serverInstanceUrlForAutoCreate}`, 'INFO');
-            const clientConnectToTunnelAddr = serverTunnelAddressFromForm;
+            
+            // Client connects to the server's tunnel address
+            const clientConnectToTunnelAddr = serverTunnelAddressFromForm; 
             primaryInstanceUrl = buildUrlFromFormValues({
                 instanceType: 'client',
-                tunnelAddress: clientConnectToTunnelAddr,
-                targetAddress: clientLocalListenTargetAddr,
+                tunnelAddress: clientConnectToTunnelAddr, // Client connects to server's tunnel
+                targetAddress: clientTargetAddressForClientInstance, // Client's local forward target
                 logLevel: values.logLevel,
-                tlsMode: values.tlsMode,
-            });
+                // tlsMode for client URL construction is typically not needed unless for specific client behaviors not covered here
+            }, activeApiConfig); // Pass activeApiConfig
             onLog?.(`准备创建客户端实例 (连接到自动创建的服务端): ${primaryInstanceUrl}`, 'INFO');
         } else { 
-            const clientConnectToTunnelAddr = serverTunnelAddressFromForm;
+            const clientConnectToTunnelAddr = serverTunnelAddressFromForm; // Client connects to specified server tunnel
             primaryInstanceUrl = buildUrlFromFormValues({
                 instanceType: 'client',
                 tunnelAddress: clientConnectToTunnelAddr,
-                targetAddress: clientLocalListenTargetAddr,
+                targetAddress: clientTargetAddressForClientInstance, // Client's local forward target
                 logLevel: values.logLevel,
-                tlsMode: values.tlsMode,
-            });
+            }, activeApiConfig); // Pass activeApiConfig
             onLog?.(`准备创建客户端实例: ${primaryInstanceUrl}`, 'INFO');
         }
-    } else { 
+    } else { // instanceType is 'server'
         const serverForwardTargetFromForm = values.targetAddress;
         if (!serverForwardTargetFromForm) {
              toast({ title: "错误", description: "创建服务端时，目标地址 (业务数据) 是必需的。", variant: "destructive" });
@@ -255,7 +260,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
             tlsMode: values.tlsMode,
             certPath: values.tlsMode === '2' ? values.certPath : '',
             keyPath: values.tlsMode === '2' ? values.keyPath : '',
-        });
+        }, activeApiConfig); // Pass activeApiConfig
         onLog?.(`准备创建服务端实例: ${primaryInstanceUrl}`, 'INFO');
     }
     
@@ -269,12 +274,19 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
         throw new Error("主实例URL未能正确构建。");
       }
       
-      if (!createInstanceMutation.isError || (createInstanceMutation.isSuccess && !serverInstanceUrlForAutoCreate) || (createInstanceMutation.isSuccess && serverInstanceUrlForAutoCreate && (await queryClient.getQueryState(['instances', apiId]))?.status !== 'error' )) {
-        form.reset();
-        onOpenChange(false); 
+      // Check mutation status before closing. If autoCreateServer failed, primary might not have run or also failed.
+      // A more robust check might involve looking at the individual mutation results if they were separate.
+      // For now, if any part of the mutation process indicated an error, we might not want to close.
+      // However, individual errors are already toasted. So, closing might be okay if at least one succeeded or if all attempted.
+      
+      // Simplified: Close if the last mutation didn't immediately set an error flag (it toasts errors itself)
+      if (!createInstanceMutation.isError) {
+         form.reset();
+         onOpenChange(false); 
       }
     } catch (error: any) {
        console.error("创建实例序列中发生错误:", error);
+       // Error already toasted by individual mutation calls or initial checks
     }
   }
   
@@ -294,7 +306,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
         <CreateInstanceFormFields
             form={form}
             instanceType={instanceType}
-            tlsMode={tlsModeWatch}
+            tlsMode={tlsModeWatch} // Pass the watched tlsMode value
             autoCreateServer={autoCreateServer}
             activeApiConfig={activeApiConfig}
             serverInstancesForDropdown={serverInstancesForDropdown}
@@ -324,3 +336,4 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
     </Dialog>
   );
 }
+

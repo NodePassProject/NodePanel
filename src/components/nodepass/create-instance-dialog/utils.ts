@@ -2,7 +2,7 @@
 "use client";
 
 import type { CreateInstanceFormValues } from '@/zod-schemas/nodepass';
-import type { MasterLogLevel, MasterTlsMode } from '@/hooks/use-api-key';
+import type { NamedApiConfig, MasterLogLevel, MasterTlsMode } from '@/hooks/use-api-key';
 
 export function formatHostForUrl(host: string | null | undefined): string {
   if (!host) return '127.0.0.1'; 
@@ -17,10 +17,10 @@ export function buildUrlFromFormValues(params: {
   tunnelAddress: string;
   targetAddress: string;
   logLevel: MasterLogLevel;
-  tlsMode?: MasterTlsMode | '2';
+  tlsMode?: MasterTlsMode | '2'; // tlsMode from form
   certPath?: string;
   keyPath?: string;
-}): string {
+}, activeApiConfig: NamedApiConfig | null): string { // Added activeApiConfig
   let url = `${params.instanceType}://${params.tunnelAddress}/${params.targetAddress}`;
   const queryParams = new URLSearchParams();
 
@@ -29,9 +29,20 @@ export function buildUrlFromFormValues(params: {
   }
 
   if (params.instanceType === 'server') {
-    if (params.tlsMode && params.tlsMode !== "master") {
-      queryParams.append('tls', params.tlsMode);
-      if (params.tlsMode === '2') {
+    let effectiveTlsMode = params.tlsMode;
+
+    if (effectiveTlsMode === 'master') {
+      if (activeApiConfig?.masterDefaultTlsMode && activeApiConfig.masterDefaultTlsMode !== 'master') {
+        effectiveTlsMode = activeApiConfig.masterDefaultTlsMode;
+      } else {
+        effectiveTlsMode = '1'; // Default to '1' (self-signed) for servers if master default is also 'master' or undefined
+      }
+    }
+    
+    if (effectiveTlsMode && effectiveTlsMode !== "master") { // Should not be master after resolution
+      queryParams.append('tls', effectiveTlsMode);
+      if (effectiveTlsMode === '2') {
+        // Cert/Key paths are taken directly from params, which should be from the form
         if (params.certPath && params.certPath.trim() !== '') queryParams.append('crt', params.certPath.trim());
         if (params.keyPath && params.keyPath.trim() !== '') queryParams.append('key', params.keyPath.trim());
       }
@@ -40,3 +51,4 @@ export function buildUrlFromFormValues(params: {
   const queryString = queryParams.toString();
   return queryString ? `${url}?${queryString}` : url;
 }
+
