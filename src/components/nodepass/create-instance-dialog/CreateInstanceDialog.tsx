@@ -22,7 +22,7 @@ import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
 import { nodePassApi } from '@/lib/api';
 import { useApiConfig, type NamedApiConfig } from '@/hooks/use-api-key';
 import type { AppLogEntry } from '../EventLog';
-import { extractHostname, extractPort, parseNodePassUrlForTopology, isTunnelPortWildcard } from '@/app/topology/lib/topology-utils';
+import { extractHostname, extractPort, parseNodePassUrlForTopology } from '@/app/topology/lib/topology-utils';
 
 import { CreateInstanceFormFields } from './CreateInstanceFormFields';
 import { buildUrlFromFormValues, formatHostForUrl } from './utils';
@@ -41,8 +41,10 @@ interface CreateInstanceDialogProps {
 }
 
 // Helper to check for wildcard hostnames
-const isWildcardHostname = (host: string | null): boolean => {
-    return !host || host === '0.0.0.0' || host === '[::]';
+const isWildcardHostname = (host: string | null | undefined): boolean => {
+    if (!host) return true; // Treat empty or null host as wildcard for safety
+    const lowerHost = host.toLowerCase();
+    return lowerHost === '0.0.0.0' || lowerHost === '[::]' || lowerHost === '::';
 };
 
 export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiToken, apiName, activeApiConfig, onLog }: CreateInstanceDialogProps) {
@@ -228,10 +230,10 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
     let clientInstanceUrl = '';
     let serverInstanceUrlForAutoCreate: string | null = null;
 
+    // User input from the form for "Tunnel Address"
     const formTunnelAddress = values.tunnelAddress; 
-    const formTargetAddress = values.targetAddress; 
+    const formTargetAddress = values.targetAddress; // User input for "Target Address"
 
-    // Host and Port from the user's input for the server's listening address / client's target server address
     const formTunnelHost_Parsed = extractHostname(formTunnelAddress); 
     const formTunnelPort_Parsed = extractPort(formTunnelAddress);
 
@@ -239,19 +241,19 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
         toast({ title: "错误", description: "无法从隧道地址提取端口。", variant: "destructive" }); return;
     }
 
-    // These will be the actual host and port the client connects TO.
+    // These will be the actual host and port the client connects TO (first part of client URL).
     let clientConnectToServerHost: string | null = null;
-    let clientConnectToServerPort: string | null = formTunnelPort_Parsed; // Port is always from form's tunnel
+    let clientConnectToServerPort: string | null = formTunnelPort_Parsed;
 
     // These will be for the client's LOCAL forwarding part (second part of client URL).
-    const clientLocalForwardHostCalculated = formTunnelHost_Parsed; // As per user's latest request
+    const clientLocalForwardHostCalculated = formTunnelHost_Parsed; 
     const clientLocalForwardPortCalculated = (parseInt(formTunnelPort_Parsed, 10) + 1).toString();
 
 
     if (values.instanceType === 'client') {
         if (values.autoCreateServer) {
             // ---- SERVER (auto-created) configuration ----
-            const serverListenHost_ForDefinition = formTunnelHost_Parsed; // Server listens on what user entered
+            const serverListenHost_ForDefinition = formTunnelHost_Parsed; // Server listens on what user entered in form
             const serverListenPort_ForDefinition = formTunnelPort_Parsed;
             
             const serverActualTargetAddress = formTargetAddress; // Server forwards to what user entered for target
@@ -259,8 +261,8 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
                 toast({ title: "错误", description: "自动创建服务端时，服务端转发目标地址是必需的。", variant: "destructive" }); return;
             }
 
-            const serverTargetMasterId = values.serverApiId || clientMasterApiId;
-            const serverMasterConfig = getApiConfigById(serverTargetMasterId);
+            const serverTargetMasterId = values.serverApiId || clientMasterApiId; // Master where server will be created
+            const serverMasterConfig = getApiConfigById(serverTargetMasterId); // Config for that master
             if (!serverMasterConfig) {
                 toast({ title: "错误", description: `选择的服务端主控 (ID: ${serverTargetMasterId}) 未找到。`, variant: "destructive" }); return;
             }
@@ -273,34 +275,34 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
                 tlsMode: values.tlsMode,
                 certPath: values.tlsMode === '2' ? values.certPath : '',
                 keyPath: values.tlsMode === '2' ? values.keyPath : '',
-            }, serverMasterConfig);
+            }, serverMasterConfig); // Pass server's master config for TLS 'master' resolution
             onLog?.(`准备自动创建服务端于 "${serverMasterConfig.name}": ${serverInstanceUrlForAutoCreate}`, 'INFO');
 
             // ---- CLIENT (connecting to auto-created server) configuration ----
-            if (isWildcardHostname(serverListenHost_ForDefinition)) {
+            // clientConnectToServerPort is already set to formTunnelPort_Parsed (which is serverListenPort_ForDefinition)
+            if (isWildcardHostname(serverListenHost_ForDefinition)) { // If server listens on wildcard
                 clientConnectToServerHost = extractHostname(serverMasterConfig.apiUrl); // Client connects to server's master IP
                 if (!clientConnectToServerHost) {
                      toast({ title: "错误", description: `无法从服务端主控 "${serverMasterConfig.name}" API URL提取主机名。`, variant: "destructive" }); return;
                 }
-            } else {
+            } else { // Server listens on specific IP
                 clientConnectToServerHost = serverListenHost_ForDefinition; // Client connects to server's specific IP
             }
-            // clientConnectToServerPort is already set to formTunnelPort_Parsed
-
         } else { // Client connects to an EXISTING server (autoCreateServer is false)
+            // clientConnectToServerPort is already set to formTunnelPort_Parsed
             if (isWildcardHostname(formTunnelHost_Parsed)) {
                 // Server user wants to connect to is listening on a wildcard.
-                // Client should connect to the IP of its own active master, assuming the server is reachable there.
+                // Client should connect to the IP of its own active master.
                 clientConnectToServerHost = extractHostname(activeApiConfig.apiUrl);
                 if (!clientConnectToServerHost) {
                      toast({ title: "错误", description: `无法从当前活动主控 "${activeApiConfig.name}" API URL提取主机名。`, variant: "destructive" }); return;
                 }
-            } else {
+            } else { // Server user specified is listening on a specific IP.
                 clientConnectToServerHost = formTunnelHost_Parsed; // Client connects to specific IP user entered
             }
-            // clientConnectToServerPort is already set to formTunnelPort_Parsed
         }
 
+        // Construct the two parts of the client URL
         const clientConnectToFullTunnelAddr = `${formatHostForUrl(clientConnectToServerHost)}:${clientConnectToServerPort}`;
         const clientLocalForwardTargetAddress = `${formatHostForUrl(clientLocalForwardHostCalculated)}:${clientLocalForwardPortCalculated}`;
 
@@ -309,13 +311,11 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
             tunnelAddress: clientConnectToFullTunnelAddr,
             targetAddress: clientLocalForwardTargetAddress,
             logLevel: values.logLevel,
-            // tlsMode for client URL isn't typically set in the same way as server,
-            // but if needed, it would be based on values.tlsMode if it's for client behavior.
-            // The current buildUrlFromFormValues doesn't add TLS params for 'client' type.
-        }, activeApiConfig); 
+            // tlsMode for client URL is not set here, buildUrlFromFormValues handles server-side TLS for servers.
+        }, activeApiConfig); // Client is created on its own active master, pass its config for 'master' resolution if needed
         onLog?.(`准备创建客户端实例于 "${activeApiConfig.name}": ${clientInstanceUrl}`, 'INFO');
 
-    } else { // instanceType is 'server'
+    } else { // instanceType is 'server' (only creating a server)
         const serverListenHost_ForDefinition = formTunnelHost_Parsed;
         const serverListenPort_ForDefinition = formTunnelPort_Parsed;
         
@@ -332,7 +332,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
             tlsMode: values.tlsMode,
             certPath: values.tlsMode === '2' ? values.certPath : '',
             keyPath: values.tlsMode === '2' ? values.keyPath : '',
-        }, activeApiConfig); 
+        }, activeApiConfig); // Server is created on activeApiConfig, pass its config for TLS 'master' resolution
         onLog?.(`准备创建服务端实例于 "${activeApiConfig.name}": ${clientInstanceUrl}`, 'INFO');
     }
     
@@ -367,15 +367,21 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
             useApiToken: clientMasterApiToken,
          });
       } else if (!clientInstanceUrl) {
-        throw new Error("主实例URL未能正确构建。");
+        // This case should ideally not be reached if validation is correct
+        onLog?.('主实例URL未能正确构建，创建中止。', 'ERROR');
+        toast({ title: "内部错误", description: "主实例URL未能构建。", variant: "destructive" });
+        return; 
       }
       
-      if (!createInstanceMutation.isError) {
+      if (!createInstanceMutation.isError && serverCreationOk) { // Check serverCreationOk here
          form.reset();
          onOpenChange(false);
       }
     } catch (error: any) {
-       console.error("创建实例序列中发生错误:", error);
+       // Errors from mutateAsync would have been caught by its onError and shown a toast
+       // This catch is more for unexpected synchronous errors in the logic above.
+       console.error("创建实例序列中发生意外错误:", error);
+       onLog?.(`创建实例序列中发生意外错误: ${error.message}`, 'ERROR');
     }
   }
   
@@ -427,3 +433,4 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
   );
 }
 
+    
