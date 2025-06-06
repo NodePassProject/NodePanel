@@ -140,6 +140,11 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
 
   const connectToSse = useCallback(async () => {
     if (!instance || !apiRoot || !apiToken || !open || instance.id === '********') {
+      // If it's the API key instance, or modal not open, or essential params missing, do not connect.
+      if(instance?.id === '********' && open) {
+        setInstanceLogs([]); // Clear logs for API key instance if modal is open for it
+        addLogEntry(parseAndFormatLogLine("此为特殊API Key实例，不展示实时日志。", logCounterRef.current++, 'INFO'));
+      }
       return;
     }
 
@@ -161,7 +166,7 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
     }
 
     try {
-      setInstanceLogs([]); // Clear previous logs, including initialization message
+      setInstanceLogs([]); 
       addLogEntry(parseAndFormatLogLine(INITIAL_MESSAGE_TEXT, logCounterRef.current++, 'INFO'));
       hasConnectedAtLeastOnceRef.current = false;
 
@@ -231,6 +236,12 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
           if (eventName === 'instance' && eventData) {
             try {
               const jsonData = JSON.parse(eventData);
+              const eventInstanceId = jsonData.instance?.id || (Array.isArray(jsonData.instance) && jsonData.instance.length > 0 ? jsonData.instance[0]?.id : null);
+
+              if (eventInstanceId === '********' && ['initial', 'create', 'update', 'delete'].includes(jsonData.type)) {
+                // Silently ignore meta-events for the API key instance
+                continue;
+              }
 
               if (jsonData.type === 'log') {
                 if (jsonData.instance?.id === instance.id) {
@@ -240,8 +251,8 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
                   } else {
                     addLogEntry(parseAndFormatLogLine(`收到实例 ${instance.id.substring(0,8)} 的日志，但'logs'字段非字符串。类型: ${typeof rawLogData}`, logCounterRef.current++, 'WARN'));
                   }
-                } else {
-                   addLogEntry(parseAndFormatLogLine(`Log for other instance ${jsonData.instance?.id?.substring(0,8)}... (ignored). Expected: ${instance.id.substring(0,8)}...`, logCounterRef.current++, 'DEBUG'));
+                } else if (jsonData.instance?.id !== '********') { // Only log this debug if it's not for API key
+                   addLogEntry(parseAndFormatLogLine(`[DEBUG] Log for other instance ${jsonData.instance?.id?.substring(0,8)}... (ignored). Expected: ${instance.id.substring(0,8)}...`, logCounterRef.current++, 'DEBUG'));
                 }
               } else if (jsonData.type === 'shutdown') {
                 addLogEntry(parseAndFormatLogLine(`主控服务已关闭事件流。连接将不会自动重试。`, logCounterRef.current++, 'INFO'));
@@ -253,22 +264,27 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
                     reconnectTimeoutRef.current = null;
                 }
                 return; 
-              } else if (jsonData.type === 'initial' && Array.isArray(jsonData.instance)) {
-                  addLogEntry(parseAndFormatLogLine(`收到初始实例数据 (${jsonData.instance.length} 个)。`, logCounterRef.current++, 'INFO'));
-              } else if (jsonData.type === 'create' && jsonData.instance) {
+              } else if (jsonData.type === 'initial') {
+                  if (Array.isArray(jsonData.instance)) {
+                    addLogEntry(parseAndFormatLogLine(`收到初始实例数据 (${jsonData.instance.length} 个)。`, logCounterRef.current++, 'INFO'));
+                  } else if (typeof jsonData.instance === 'object' && jsonData.instance !== null && jsonData.instance.id !== '********') {
+                    // If it's a single object for 'initial' and not the API key, log it
+                    addLogEntry(parseAndFormatLogLine(`收到单个实例初始数据: ${jsonData.instance.id.substring(0,8)}...`, logCounterRef.current++, 'INFO'));
+                  }
+              } else if (jsonData.type === 'create' && jsonData.instance && jsonData.instance.id !== '********') {
                   addLogEntry(parseAndFormatLogLine(`实例已创建: ${jsonData.instance.id.substring(0,8)}...`, logCounterRef.current++, 'INFO'));
-              } else if (jsonData.type === 'update' && jsonData.instance) {
+              } else if (jsonData.type === 'update' && jsonData.instance && jsonData.instance.id !== '********') {
                   addLogEntry(parseAndFormatLogLine(`实例已更新: ${jsonData.instance.id.substring(0,8)}... 状态: ${jsonData.instance.status}`, logCounterRef.current++, 'INFO'));
-              } else if (jsonData.type === 'delete' && jsonData.instance) {
+              } else if (jsonData.type === 'delete' && jsonData.instance && jsonData.instance.id !== '********') {
                   addLogEntry(parseAndFormatLogLine(`实例已删除: ${jsonData.instance.id.substring(0,8)}...`, logCounterRef.current++, 'INFO'));
-              } else {
+              } else if (jsonData.instance?.id !== '********') { // General catch-all, only log if not API key related
                 addLogEntry(parseAndFormatLogLine(`未识别的 'instance' 事件数据类型: ${jsonData.type}. Data: ${JSON.stringify(jsonData).substring(0,100)}...`, logCounterRef.current++, 'WARN'));
               }
 
             } catch (e: any) {
               addLogEntry(parseAndFormatLogLine(`解析 'instance' 事件数据错误: ${e.message}. Data snippet: ${eventData.substring(0,100)}...`, logCounterRef.current++, 'ERROR'));
             }
-          } else if (eventData) { 
+          } else if (eventData && eventName !== 'instance') { 
              addLogEntry(parseAndFormatLogLine(`收到事件 "${eventName}" (预期 "instance"). Data: ${eventData.substring(0, 50)}...`, logCounterRef.current++, 'WARN'));
           }
         }
@@ -291,10 +307,9 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
 
 
   useEffect(() => {
-    if (open && instance && apiRoot && apiToken && instance.id !== '********') {
+    if (open && instance && apiRoot && apiToken ) { // Removed instance.id !== '********' check here to allow initial setup
       logCounterRef.current = 0;
-      // setInstanceLogs([parseAndFormatLogLine(INITIAL_MESSAGE_TEXT, logCounterRef.current++, 'INFO')]); // Initial message set inside connectToSse
-      connectToSse();
+      connectToSse(); // connectToSse itself will check if it's the API key instance and handle it
     } else {
       if (abortControllerRef.current && !abortControllerRef.current.signal.aborted) {
         abortControllerRef.current.abort("Modal closed or instance invalid");
@@ -304,7 +319,7 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
         clearTimeout(reconnectTimeoutRef.current);
         reconnectTimeoutRef.current = null;
       }
-      if(instance?.id === '********' || !open || !instance){
+      if(!open || !instance){ // Clear logs if modal closed or no instance
         setInstanceLogs([]);
         hasConnectedAtLeastOnceRef.current = false;
       }
@@ -321,7 +336,7 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
       }
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, instance, apiRoot, apiToken]); 
+  }, [open, instance, apiRoot, apiToken]); // connectToSse is memoized and will be called
 
 
   useEffect(() => {
@@ -533,3 +548,4 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
   );
 }
 
+    
