@@ -72,36 +72,66 @@ function parseAndFormatLogLine(
   const currentTimeString = now.toLocaleTimeString('zh-CN', { hour12: false });
   const fullTimestampString = now.toISOString();
 
-  if (forcedLevel) {
-    // If a level is forced, use it directly and treat the cleanedLog as the entire message
-    // unless forcedLevel is UNKNOWN, then we attempt to parse further.
-    if (forcedLevel !== 'UNKNOWN') {
-      return {
-        id: `${fullTimestampString}-${index}-${Math.random()}`,
-        fullTimestamp: fullTimestampString,
-        time: currentTimeString,
-        level: forcedLevel,
-        message: cleanedLog.trim(),
-      };
-    }
-    // If forcedLevel is UNKNOWN, proceed to try parsing, it might be a server log that needs parsing
+  if (forcedLevel && forcedLevel !== 'UNKNOWN') {
+    return {
+      id: `${fullTimestampString}-${index}-${Math.random()}`,
+      fullTimestamp: fullTimestampString,
+      time: currentTimeString,
+      level: forcedLevel,
+      message: cleanedLog.trim(),
+    };
   }
 
   const standardLogMatch = cleanedLog.match(logLineRegex);
   if (standardLogMatch) {
     const matchedFullTimestamp = standardLogMatch[1].trim();
     const levelString = standardLogMatch[2].trim().toUpperCase();
-    const message = standardLogMatch[3].trim();
+    let message = standardLogMatch[3].trim(); // Use let for message as it might be reassigned
     const time = new Date(matchedFullTimestamp).toLocaleTimeString('zh-CN', { hour12: false });
     
     const level = KNOWN_LOG_LEVELS.includes(levelString as any)
       ? (levelString as ParsedLogEntry['level'])
       : 'INFO'; // Default to INFO if timestamped but level is not standard (e.g., "EVENT")
 
+    // Check for TRAFFIC_STATS message
+    if (message.startsWith("Exchange complete: TRAFFIC_STATS|")) {
+      try {
+        const statsPart = message.substring("Exchange complete: TRAFFIC_STATS|".length);
+        const parts = statsPart.split('|');
+        const trafficData: Record<string, number> = {};
+        parts.forEach(part => {
+          const [key, value] = part.split('=');
+          if (key && value !== undefined) {
+            trafficData[key.trim()] = parseInt(value.trim(), 10);
+          }
+        });
+
+        const tcpRx = trafficData['TCP_RX'] || 0;
+        const tcpTx = trafficData['TCP_TX'] || 0;
+        const udpRx = trafficData['UDP_RX'] || 0;
+        const udpTx = trafficData['UDP_TX'] || 0;
+
+        const formattedMessage = 
+`TCP 流量: ${formatBytes(tcpRx)} / ${formatBytes(tcpTx)}
+UDP 流量: ${formatBytes(udpRx)} / ${formatBytes(udpTx)}`;
+        
+        return { 
+          id: `${matchedFullTimestamp}-${index}-traffic-${Math.random()}`, 
+          fullTimestamp: matchedFullTimestamp, 
+          time, 
+          level: 'INFO', // As requested, display traffic stats as INFO
+          message: formattedMessage 
+        };
+      } catch (parseError) {
+        console.warn("Failed to parse traffic stats from log message:", message, parseError);
+        // Fallback to showing the original message if parsing fails, with the determined level
+        return { id: `${matchedFullTimestamp}-${index}-trafficfail-${Math.random()}`, fullTimestamp: matchedFullTimestamp, time, level, message };
+      }
+    }
+    // If not traffic stats, return as before
     return { id: `${matchedFullTimestamp}-${index}-${Math.random()}`, fullTimestamp: matchedFullTimestamp, time, level, message };
   }
 
-  // Try parsing bracketed levels like [DEBUG] if standard format fails or wasn't forced
   const diagnosticLevelMatch = cleanedLog.match(bracketedLevelRegex);
   if (diagnosticLevelMatch) {
     const levelString = diagnosticLevelMatch[1].trim().toUpperCase();
@@ -117,13 +147,12 @@ function parseAndFormatLogLine(
     }
   }
   
-  // Fallback for any other lines or if forcedLevel was UNKNOWN and parsing failed
   return {
     id: `${fullTimestampString}-${index}-${Math.random()}`,
     fullTimestamp: fullTimestampString,
     time: currentTimeString,
     level: 'UNKNOWN',
-    message: cleanedLog.trim(), // Use the already cleaned and trimmed log
+    message: cleanedLog.trim(),
   };
 }
 
@@ -149,12 +178,12 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
     if (!instance || !apiRoot || !apiToken || !open) {
       return;
     }
+    // Special handling for API Key instance - no logs to show
     if(instance.id === '********') {
       setInstanceLogs([]); 
       addLogEntry(parseAndFormatLogLine("此为特殊API Key实例，不展示实时日志。", logCounterRef.current++, 'INFO'));
       return;
     }
-
 
     if (abortControllerRef.current) {
       abortControllerRef.current.abort("Starting new connection attempt");
@@ -174,9 +203,10 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
     }
 
     try {
-      setInstanceLogs([]); 
-      addLogEntry(parseAndFormatLogLine(INITIAL_MESSAGE_TEXT, logCounterRef.current++, 'INFO'));
-      hasConnectedAtLeastOnceRef.current = false;
+      if (!hasConnectedAtLeastOnceRef.current) {
+        setInstanceLogs([]); 
+        addLogEntry(parseAndFormatLogLine(INITIAL_MESSAGE_TEXT, logCounterRef.current++, 'INFO'));
+      }
 
       const response = await fetch(eventsUrl, {
         method: 'GET',
@@ -196,10 +226,11 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
         throw new Error("Response body is null.");
       }
       
-      // Clear initial messages and set "Connected" message
-      setInstanceLogs([]); 
-      addLogEntry(parseAndFormatLogLine(CONNECTED_MESSAGE_TEXT, logCounterRef.current++, 'INFO'));
-      hasConnectedAtLeastOnceRef.current = true;
+      if (!hasConnectedAtLeastOnceRef.current) {
+        setInstanceLogs([]); 
+        addLogEntry(parseAndFormatLogLine(CONNECTED_MESSAGE_TEXT, logCounterRef.current++, 'INFO'));
+        hasConnectedAtLeastOnceRef.current = true;
+      }
 
 
       const reader = response.body.getReader();
@@ -243,25 +274,22 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
           if (eventName === 'instance' && eventData) {
             try {
               const jsonData = JSON.parse(eventData);
-              const eventInstanceId = jsonData.instance?.id || (Array.isArray(jsonData.instance) && jsonData.instance.length > 0 ? jsonData.instance[0]?.id : null);
+              const eventInstanceId = jsonData.instance?.id || 
+                                    (Array.isArray(jsonData.instance) && jsonData.instance.length > 0 ? jsonData.instance[0]?.id : null);
               
-              // Silently ignore events for the API key instance
+              // Skip UI logging for API Key instance metadata events
               if (eventInstanceId === '********' && ['initial', 'create', 'update', 'delete'].includes(jsonData.type)) {
                 continue;
               }
 
               if (jsonData.type === 'log') {
-                if (jsonData.instance?.id === instance.id) { // Only process logs for the current instance
+                if (jsonData.instance?.id === instance.id) {
                   let rawLogData = jsonData.logs || '';
                   if (typeof rawLogData === 'string') {
-                    // Let parseAndFormatLogLine determine the level from the log string itself
                     addLogEntry(parseAndFormatLogLine(rawLogData, logCounterRef.current++)); 
                   } else {
                     addLogEntry(parseAndFormatLogLine(`收到实例 ${instance.id.substring(0,8)} 的日志，但'logs'字段非字符串。类型: ${typeof rawLogData}`, logCounterRef.current++, 'WARN'));
                   }
-                } else if (jsonData.instance?.id !== '********') {
-                   // Only show this debug if it's not an API key event AND not for current instance
-                   // addLogEntry(parseAndFormatLogLine(`[DEBUG] Log for other instance ${jsonData.instance?.id?.substring(0,8)}... (ignored). Expected: ${instance.id.substring(0,8)}...`, logCounterRef.current++, 'DEBUG'));
                 }
               } else if (jsonData.type === 'shutdown') {
                 addLogEntry(parseAndFormatLogLine(`主控服务已关闭事件流。连接将不会自动重试。`, logCounterRef.current++, 'INFO'));
@@ -274,44 +302,41 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
                 }
                 return; 
               } else if (jsonData.type === 'initial') {
-                  if (jsonData.instance?.id !== '********') { // Don't log initial for API key instance to UI
-                    if (Array.isArray(jsonData.instance)) {
-                      addLogEntry(parseAndFormatLogLine(`收到初始实例数据 (${jsonData.instance.length} 个)。`, logCounterRef.current++, 'INFO'));
-                    } else if (typeof jsonData.instance === 'object' && jsonData.instance !== null) {
-                      addLogEntry(parseAndFormatLogLine(`收到单个实例初始数据: ${jsonData.instance.id.substring(0,8)}...`, logCounterRef.current++, 'INFO'));
-                    }
+                  // Handled silently for API key instance, otherwise log for general instances
+                  if (Array.isArray(jsonData.instance)) {
+                    addLogEntry(parseAndFormatLogLine(`收到初始实例数据 (${jsonData.instance.length} 个)。`, logCounterRef.current++, 'INFO'), 'INFO');
+                  } else if (typeof jsonData.instance === 'object' && jsonData.instance !== null && jsonData.instance.id !== '********') {
+                    addLogEntry(parseAndFormatLogLine(`收到单个实例初始数据: ${jsonData.instance.id.substring(0,8)}...`, logCounterRef.current++, 'INFO'), 'INFO');
                   }
               } else if (jsonData.type === 'create' && jsonData.instance && jsonData.instance.id !== '********') {
-                  addLogEntry(parseAndFormatLogLine(`实例已创建: ${jsonData.instance.id.substring(0,8)}...`, logCounterRef.current++, 'INFO'));
+                  addLogEntry(parseAndFormatLogLine(`实例已创建: ${jsonData.instance.id.substring(0,8)}...`, logCounterRef.current++, 'INFO'), 'INFO');
               } else if (jsonData.type === 'update' && jsonData.instance && jsonData.instance.id !== '********') {
-                  addLogEntry(parseAndFormatLogLine(`实例已更新: ${jsonData.instance.id.substring(0,8)}... 状态: ${jsonData.instance.status}`, logCounterRef.current++, 'INFO'));
+                  addLogEntry(parseAndFormatLogLine(`实例已更新: ${jsonData.instance.id.substring(0,8)}... 状态: ${jsonData.instance.status}`, logCounterRef.current++, 'INFO'), 'INFO');
               } else if (jsonData.type === 'delete' && jsonData.instance && jsonData.instance.id !== '********') {
-                  addLogEntry(parseAndFormatLogLine(`实例已删除: ${jsonData.instance.id.substring(0,8)}...`, logCounterRef.current++, 'INFO'));
-              } else if (jsonData.instance?.id !== '********') {
-                addLogEntry(parseAndFormatLogLine(`未识别的 'instance' 事件数据类型: ${jsonData.type}. Data: ${JSON.stringify(jsonData).substring(0,100)}...`, logCounterRef.current++, 'WARN'));
+                  addLogEntry(parseAndFormatLogLine(`实例已删除: ${jsonData.instance.id.substring(0,8)}...`, logCounterRef.current++, 'INFO'), 'INFO');
+              } else if (eventInstanceId !== '********') { // Only warn if not for API key
+                addLogEntry(parseAndFormatLogLine(`未识别的 'instance' 事件数据类型: ${jsonData.type}. Data: ${JSON.stringify(jsonData).substring(0,100)}...`, logCounterRef.current++, 'WARN'), 'WARN');
               }
 
             } catch (e: any) {
-               if (instance.id !== '********') { // Only log parsing errors if not related to API key instance
-                 addLogEntry(parseAndFormatLogLine(`解析 'instance' 事件数据错误: ${e.message}. Data snippet: ${eventData.substring(0,100)}...`, logCounterRef.current++, 'ERROR'));
-               }
+                 if (instance.id !== '********') {
+                    addLogEntry(parseAndFormatLogLine(`解析 'instance' 事件数据错误: ${e.message}. Data snippet: ${eventData.substring(0,100)}...`, logCounterRef.current++, 'ERROR'), 'ERROR');
+                 }
             }
-          } else if (eventData && eventName !== 'instance') { 
-             if (instance.id !== '********') { // Only log this warning if not for API key instance
-                addLogEntry(parseAndFormatLogLine(`收到事件 "${eventName}" (预期 "instance"). Data: ${eventData.substring(0, 50)}...`, logCounterRef.current++, 'WARN'));
-             }
+          } else if (eventData && eventName !== 'instance' && instance.id !== '********') { 
+             addLogEntry(parseAndFormatLogLine(`收到事件 "${eventName}" (预期 "instance"). Data: ${eventData.substring(0, 50)}...`, logCounterRef.current++, 'WARN'), 'WARN');
           }
         }
       }
     } catch (error: any) {
       if (signal.aborted && error.name === 'AbortError') {
-        // This is an expected abort, no need to log an error or reconnect.
+        // This is an expected abort
       } else {
         let displayError = error.message;
         if (error.message.toLowerCase().includes('failed to fetch') || error.message.toLowerCase().includes('networkerror')) {
             displayError = '网络错误。请检查连接或服务器CORS设置。';
         }
-        if (instance.id !== '********') { // Only show connection errors for non-API key instances
+        if (instance.id !== '********') {
           addLogEntry(parseAndFormatLogLine(`事件流连接错误: ${displayError} ${RECONNECT_DELAY / 1000}秒后尝试重连...`, logCounterRef.current++, 'ERROR'));
           if (!signal.aborted) {
             reconnectTimeoutRef.current = setTimeout(connectToSse, RECONNECT_DELAY);
