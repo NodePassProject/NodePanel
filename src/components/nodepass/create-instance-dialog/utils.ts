@@ -4,10 +4,8 @@
 import type { CreateInstanceFormValues } from '@/zod-schemas/nodepass';
 import type { MasterLogLevel, MasterTlsMode } from '@/hooks/use-api-key';
 
-
 export function formatHostForUrl(host: string | null | undefined): string {
-  if (!host) return '127.0.0.1'; // Default or handle as appropriate
-  // Check if it's an IPv6 address and not already bracketed
+  if (!host) return '127.0.0.1'; 
   if (host.includes(':') && !host.startsWith('[')) {
     return `[${host}]`;
   }
@@ -19,7 +17,7 @@ export function buildUrlFromFormValues(params: {
   tunnelAddress: string;
   targetAddress: string;
   logLevel: MasterLogLevel;
-  tlsMode?: MasterTlsMode | '2'; // Make tlsMode optional as it's not always used by client
+  tlsMode?: MasterTlsMode | '2';
   certPath?: string;
   keyPath?: string;
 }): string {
@@ -30,7 +28,6 @@ export function buildUrlFromFormValues(params: {
     queryParams.append('log', params.logLevel);
   }
 
-  // Only add TLS parameters if the instance type is server
   if (params.instanceType === 'server') {
     if (params.tlsMode && params.tlsMode !== "master") {
       queryParams.append('tls', params.tlsMode);

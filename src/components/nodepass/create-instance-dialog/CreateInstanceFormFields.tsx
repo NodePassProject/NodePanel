@@ -16,13 +16,13 @@ import { MASTER_TLS_MODE_DISPLAY_MAP } from './constants';
 interface CreateInstanceFormFieldsProps {
   form: UseFormReturn<CreateInstanceFormValues>;
   instanceType: 'server' | 'client';
-  tlsMode?: string; // Watching form.watch("tlsMode")
-  autoCreateServer: boolean; // Watching form.watch("autoCreateServer")
+  tlsMode?: string;
+  autoCreateServer: boolean;
   activeApiConfig: NamedApiConfig | null;
   serverInstancesForDropdown: Array<{id: string, display: string, tunnelAddr: string}> | undefined;
   isLoadingServerInstances: boolean;
   externalApiSuggestion: string | null;
-  onSubmitHandler: (values: CreateInstanceFormValues) => void; // Actual submit logic
+  onSubmitHandler: (values: CreateInstanceFormValues) => void;
 }
 
 export function CreateInstanceFormFields({
