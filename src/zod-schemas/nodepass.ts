@@ -7,12 +7,13 @@ export const createInstanceFormSchema = z.object({
     required_error: "实例类型是必需的。",
   }),
   autoCreateServer: z.optional(z.boolean()),
+  serverApiId: z.optional(z.string()), // New field for server's master API ID
   tunnelAddress: z.string().min(1, "隧道地址是必需的。").regex(/^(?:\[[0-9a-fA-F:]+\]|[0-9a-zA-Z.-]+):[0-9]+$/, "隧道地址格式无效 (例: host:port 或 [ipv6]:port)"),
   targetAddress: z.string().optional(), // Made optional here, validated in superRefine
   logLevel: z.enum(["master", "debug", "info", "warn", "error", "fatal"], {
     required_error: "日志级别是必需的。",
   }),
-  tlsMode: z.string(), 
+  tlsMode: z.string(),
   certPath: z.optional(z.string()),
   keyPath: z.optional(z.string()),
 }).superRefine((data, ctx) => {
@@ -69,7 +70,7 @@ export const createInstanceFormSchema = z.object({
       }
     }
   } else if (effectiveTlsUser === "client") { // This case implies client AND !autoCreateServer
-    if (!["master", "0", "1", "2"].includes(data.tlsMode)) { 
+    if (!["master", "0", "1", "2"].includes(data.tlsMode)) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message: "客户端TLS模式无效。",
@@ -88,7 +89,7 @@ export type CreateInstanceFormValues = z.infer<typeof createInstanceFormSchema>;
 
 // Schema for the detailed modify instance form - Defined independently
 export const modifyInstanceFormSchema = z.object({
-  instanceType: z.enum(["server", "client"], { 
+  instanceType: z.enum(["server", "client"], {
     required_error: "实例类型是必需的。",
   }),
   tunnelAddress: z.string().min(1, "隧道地址是必需的。").regex(/^(?:\[[0-9a-fA-F:]+\]|[0-9a-zA-Z.-]+):[0-9]+$/, "隧道地址格式无效 (例: host:port 或 [ipv6]:port)"),
@@ -117,7 +118,7 @@ export const modifyInstanceFormSchema = z.object({
       }
     }
   } else if (data.instanceType === "client") {
-     if (!["master", "0", "1", "2"].includes(data.tlsMode)) { 
+     if (!["master", "0", "1", "2"].includes(data.tlsMode)) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message: "客户端TLS模式无效。",

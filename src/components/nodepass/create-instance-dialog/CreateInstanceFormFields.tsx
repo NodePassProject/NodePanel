@@ -7,7 +7,7 @@ import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, For
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, Info } from 'lucide-react';
+import { Loader2, Info, Network } from 'lucide-react';
 import type { CreateInstanceFormValues } from '@/zod-schemas/nodepass';
 import type { Instance } from '@/types/nodepass';
 import type { NamedApiConfig } from '@/hooks/use-api-key';
@@ -19,6 +19,7 @@ interface CreateInstanceFormFieldsProps {
   tlsMode?: string;
   autoCreateServer: boolean;
   activeApiConfig: NamedApiConfig | null;
+  apiConfigsList: NamedApiConfig[]; // Added to pass full list
   serverInstancesForDropdown: Array<{id: string, display: string, tunnelAddr: string}> | undefined;
   isLoadingServerInstances: boolean;
   externalApiSuggestion: string | null;
@@ -31,6 +32,7 @@ export function CreateInstanceFormFields({
   tlsMode,
   autoCreateServer,
   activeApiConfig,
+  apiConfigsList, // Consumed here
   serverInstancesForDropdown,
   isLoadingServerInstances,
   externalApiSuggestion,
@@ -40,7 +42,7 @@ export function CreateInstanceFormFields({
   const masterLogLevelDisplay = activeApiConfig?.masterDefaultLogLevel && activeApiConfig.masterDefaultLogLevel !== 'master'
     ? activeApiConfig.masterDefaultLogLevel.toUpperCase()
     : '主控配置';
-  
+
   const effectiveTlsModeDisplay = activeApiConfig?.masterDefaultTlsMode && activeApiConfig.masterDefaultTlsMode !== 'master'
     ? MASTER_TLS_MODE_DISPLAY_MAP[activeApiConfig.masterDefaultTlsMode as keyof typeof MASTER_TLS_MODE_DISPLAY_MAP] || '主控配置'
     : '主控配置';
@@ -71,7 +73,7 @@ export function CreateInstanceFormFields({
             </FormItem>
           )}
         />
-        
+
         {instanceType === 'client' && (
           <FormField
             control={form.control}
@@ -90,7 +92,7 @@ export function CreateInstanceFormFields({
                     自动创建匹配的服务端
                   </FormLabel>
                   <FormDescription className="font-sans text-xs">
-                    在当前主控下创建相应的服务端。客户端本地监听端口将使用服务端的隧道监听端口+1。
+                    在选定主控下创建相应的服务端。客户端本地监听端口将使用服务端的隧道监听端口+1。
                   </FormDescription>
                 </div>
               </FormItem>
@@ -98,29 +100,66 @@ export function CreateInstanceFormFields({
           />
         )}
 
+        {instanceType === 'client' && autoCreateServer && (
+          <FormField
+            control={form.control}
+            name="serverApiId"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel className="font-sans flex items-center">
+                  <Network size={16} className="mr-1.5 text-primary" />
+                  服务端所属主控
+                </FormLabel>
+                <Select
+                  onValueChange={field.onChange}
+                  defaultValue={activeApiConfig?.id || ""}
+                >
+                  <FormControl>
+                    <SelectTrigger className="text-sm font-sans">
+                      <SelectValue placeholder="选择服务端将创建于哪个主控" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    {apiConfigsList.map(config => (
+                      <SelectItem key={config.id} value={config.id} className="font-sans">
+                        {config.name} {config.id === activeApiConfig?.id ? "(当前客户端主控)" : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <FormDescription className="font-sans text-xs">
+                  选择自动创建的服务端实例将归属于哪个NodePass主控。
+                </FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        )}
+
+
         <FormField
           control={form.control}
           name="tunnelAddress"
           render={({ field }) => (
             <FormItem>
               <FormLabel className="font-sans">
-                {instanceType === 'server' ? '服务端隧道监听地址 (控制通道)' : 
+                {instanceType === 'server' ? '服务端隧道监听地址 (控制通道)' :
                  (autoCreateServer ? '服务端隧道监听地址 (控制通道)' : '连接的服务端隧道地址 (控制通道)')}
               </FormLabel>
               <FormControl>
-                <Input 
+                <Input
                   className="text-sm font-mono"
                   placeholder={
-                    instanceType === "server" ? "例: 0.0.0.0:10101 或 [::]:10101" : 
+                    instanceType === "server" ? "例: 0.0.0.0:10101 或 [::]:10101" :
                     (autoCreateServer ? "例: [::]:8080 或 your.host.com:8080" : "例: your.server.com:10101 或 [::]:10101")
-                  } 
+                  }
                   {...field}
                 />
               </FormControl>
                <FormDescription className="font-sans text-xs">
                 {instanceType === "server"
                   ? "服务端在此地址监听控制连接。"
-                  : (autoCreateServer 
+                  : (autoCreateServer
                       ? "自动创建的服务端将在此地址监听控制连接。"
                       : "客户端连接此服务端地址的控制通道。")}
               </FormDescription>
@@ -138,8 +177,8 @@ export function CreateInstanceFormFields({
         {instanceType === 'client' && !autoCreateServer && (
           <FormItem>
             <FormLabel className="font-sans">或从现有服务端选择隧道</FormLabel>
-            <Select 
-              onValueChange={(selectedServerId) => { 
+            <Select
+              onValueChange={(selectedServerId) => {
                 if (selectedServerId) {
                   const selectedServer = serverInstancesForDropdown?.find(s => s.id === selectedServerId);
                   if (selectedServer) {
@@ -152,7 +191,7 @@ export function CreateInstanceFormFields({
               <FormControl>
                 <SelectTrigger className="text-sm font-sans">
                   <SelectValue placeholder={
-                    isLoadingServerInstances ? "加载服务端中..." : 
+                    isLoadingServerInstances ? "加载服务端中..." :
                     (!serverInstancesForDropdown || serverInstancesForDropdown.length === 0) ? "当前主控无服务端" : "选择服务端隧道"
                   } />
                 </SelectTrigger>
@@ -175,7 +214,7 @@ export function CreateInstanceFormFields({
             )}
           </FormItem>
         )}
-        
+
         {(instanceType === 'server' || (instanceType === 'client' && autoCreateServer)) && (
           <FormField
             control={form.control}
@@ -186,19 +225,19 @@ export function CreateInstanceFormFields({
                   {instanceType === 'server' ? '服务端目标地址 (业务数据)' : '服务端转发目标地址 (业务数据)'}
                 </FormLabel>
                 <FormControl>
-                  <Input 
+                  <Input
                     className="text-sm font-mono"
                     placeholder={
-                      instanceType === "server" ? "例: 0.0.0.0:8080 或 10.0.0.5:3000" : 
-                      (autoCreateServer ? "例: 192.168.1.100:80 或 service.internal:5000" : "") 
-                    } 
-                    {...field} 
+                      instanceType === "server" ? "例: 0.0.0.0:8080 或 10.0.0.5:3000" :
+                      (autoCreateServer ? "例: 192.168.1.100:80 或 service.internal:5000" : "")
+                    }
+                    {...field}
                   />
                 </FormControl>
                 <FormDescription className="font-sans text-xs">
                   {instanceType === "server"
                     ? "服务端业务数据的目标地址。"
-                    : (autoCreateServer 
+                    : (autoCreateServer
                         ? "自动创建的服务端将业务流量转发到此实际目标。"
                         : "")}
                 </FormDescription>
@@ -239,14 +278,14 @@ export function CreateInstanceFormFields({
             </FormItem>
           )}
         />
-        
+
         <FormField
           control={form.control}
-          name="tlsMode" 
+          name="tlsMode"
           render={({ field }) => (
             <FormItem>
               <FormLabel className="font-sans">
-                {instanceType === 'server' ? "TLS 模式 (服务端数据通道)" 
+                {instanceType === 'server' ? "TLS 模式 (服务端数据通道)"
                   : (instanceType === 'client' && autoCreateServer ? "TLS 模式 (自动创建的服务端)" : "TLS 模式 (客户端连接行为)")}
               </FormLabel>
               <Select onValueChange={field.onChange} value={field.value || "master"}>
@@ -265,10 +304,10 @@ export function CreateInstanceFormFields({
                 </SelectContent>
               </Select>
               <FormDescription className="font-sans text-xs">
-                {instanceType === 'server' 
-                  ? "服务端数据通道的TLS加密模式。" 
-                  : (autoCreateServer 
-                      ? "应用于自动创建的服务端的数据通道的TLS模式。" 
+                {instanceType === 'server'
+                  ? "服务端数据通道的TLS加密模式。"
+                  : (autoCreateServer
+                      ? "应用于自动创建的服务端的数据通道的TLS模式。"
                       : "客户端连接目标服务端时采用的TLS行为。若选 '2'，则服务端需提供自定义证书。")}
               </FormDescription>
               <FormMessage />
@@ -284,10 +323,10 @@ export function CreateInstanceFormFields({
                 <FormItem>
                   <FormLabel className="font-sans">证书路径 (TLS 2)</FormLabel>
                   <FormControl>
-                    <Input 
+                    <Input
                       className="text-sm font-mono"
-                      placeholder="例: /path/to/cert.pem" 
-                      {...field} 
+                      placeholder="例: /path/to/cert.pem"
+                      {...field}
                       value={field.value || ""}
                     />
                   </FormControl>
@@ -305,10 +344,10 @@ export function CreateInstanceFormFields({
                 <FormItem>
                   <FormLabel className="font-sans">密钥路径 (TLS 2)</FormLabel>
                   <FormControl>
-                    <Input 
+                    <Input
                       className="text-sm font-mono"
-                      placeholder="例: /path/to/key.pem" 
-                      {...field} 
+                      placeholder="例: /path/to/key.pem"
+                      {...field}
                       value={field.value || ""}
                     />
                   </FormControl>
