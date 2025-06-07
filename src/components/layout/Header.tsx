@@ -3,7 +3,7 @@
 
 import React from 'react';
 import Link from 'next/link';
-import { Moon, Sun, Settings, LogOut, PlusCircle, ListTree, Network, BarChartHorizontalBig, Check, HelpCircle } from 'lucide-react';
+import { Moon, Sun, Settings, LogOut, PlusCircle, ListTree, BarChartHorizontalBig, Check, HelpCircle } from 'lucide-react'; // Network icon removed
 import { useTheme } from 'next-themes';
 import { Button } from '@/components/ui/button';
 import {
@@ -118,12 +118,7 @@ export function Header({ onManageApiConfigs, onClearActiveConfig, hasActiveApiCo
 
               <DropdownMenuSeparator />
               <DropdownMenuLabel>可视化与分析</DropdownMenuLabel>
-              <DropdownMenuItem asChild>
-                <Link href="/topology">
-                  <Network className="mr-2 h-4 w-4" />
-                  <span>连接拓扑图</span>
-                </Link>
-              </DropdownMenuItem>
+              {/* Topology link removed */}
               <DropdownMenuItem asChild>
                 <Link href="/traffic">
                   <BarChartHorizontalBig className="mr-2 h-4 w-4" />
@@ -155,5 +150,4 @@ export function Header({ onManageApiConfigs, onClearActiveConfig, hasActiveApiCo
     </header>
   );
 }
-
     

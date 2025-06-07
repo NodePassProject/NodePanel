@@ -17,7 +17,8 @@ import { useToast } from '@/hooks/use-toast';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { getEventsUrl } from '@/lib/api';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { cn } from '@/lib/utils';
+import { cn } from "@/lib/utils";
+// Removed import of parseNodePassUrlForTopology from topology-utils as it's no longer needed here or specific parsing handled internally.
 
 interface InstanceDetailsModalProps {
   instance: Instance | null;
@@ -91,7 +92,7 @@ function parseAndFormatLogLine(
     
     let parsedLevel = KNOWN_LOG_LEVELS.includes(levelString as any)
       ? (levelString as ParsedLogEntry['level'])
-      : 'INFO'; // Default to INFO if timestamped but level is not standard
+      : 'INFO'; 
 
     if (message.startsWith("Exchange complete: TRAFFIC_STATS|")) {
       try {
@@ -118,7 +119,7 @@ UDP 流量: ${formatBytes(udpRx)} / ${formatBytes(udpTx)}`;
           id: `${matchedFullTimestamp}-${index}-traffic-${Math.random()}`, 
           fullTimestamp: matchedFullTimestamp, 
           time, 
-          level: 'EVENT', // Traffic stats are considered 'EVENT' level
+          level: 'EVENT', 
           message: formattedMessage 
         };
       } catch (parseError) {
@@ -175,7 +176,6 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
     if (!instance || !apiRoot || !apiToken || !open) {
       return;
     }
-    // Special handling for API Key instance - no logs to show
     if(instance.id === '********') {
       setInstanceLogs([]); 
       addLogEntry(parseAndFormatLogLine("此为特殊API Key实例，不展示实时日志。", logCounterRef.current++, 'INFO'));
@@ -274,7 +274,6 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
               const eventInstanceId = jsonData.instance?.id || 
                                     (Array.isArray(jsonData.instance) && jsonData.instance.length > 0 ? jsonData.instance[0]?.id : null);
               
-              // Skip UI logging for API Key instance metadata events
               if (eventInstanceId === '********' && ['initial', 'create', 'update', 'delete'].includes(jsonData.type)) {
                 continue;
               }
@@ -299,7 +298,6 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
                 }
                 return; 
               } else if (jsonData.type === 'initial') {
-                  // Handled silently for API key instance, otherwise log for general instances
                   if (Array.isArray(jsonData.instance)) {
                     addLogEntry(parseAndFormatLogLine(`收到初始实例数据 (${jsonData.instance.length} 个)。`, logCounterRef.current++, 'INFO'));
                   } else if (typeof jsonData.instance === 'object' && jsonData.instance !== null && jsonData.instance.id !== '********') {
@@ -311,7 +309,7 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
                   addLogEntry(parseAndFormatLogLine(`实例已更新: ${jsonData.instance.id.substring(0,8)}... 状态: ${jsonData.instance.status}`, logCounterRef.current++, 'INFO'));
               } else if (jsonData.type === 'delete' && jsonData.instance && jsonData.instance.id !== '********') {
                   addLogEntry(parseAndFormatLogLine(`实例已删除: ${jsonData.instance.id.substring(0,8)}...`, logCounterRef.current++, 'INFO'));
-              } else if (eventInstanceId !== '********') { // Only warn if not for API key
+              } else if (eventInstanceId !== '********') { 
                 addLogEntry(parseAndFormatLogLine(`未识别的 'instance' 事件数据类型: ${jsonData.type}. Data: ${JSON.stringify(jsonData).substring(0,100)}...`, logCounterRef.current++, 'WARN'));
               }
 
@@ -521,8 +519,8 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
       case 'DEBUG':
         return <Bug className="h-3.5 w-3.5 mr-1" />;
       case 'EVENT':
-        return <FileText className="h-3.5 w-3.5 mr-1" />; // Changed icon for EVENT
-      default: // UNKNOWN
+        return <FileText className="h-3.5 w-3.5 mr-1" />; 
+      default: 
         return <HelpCircle className="h-3.5 w-3.5 mr-1" />;
     }
   };

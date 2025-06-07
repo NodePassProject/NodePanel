@@ -24,17 +24,11 @@ import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
 import { nodePassApi } from '@/lib/api';
 import { useApiConfig, type NamedApiConfig } from '@/hooks/use-api-key';
 import type { AppLogEntry } from '../EventLog';
-import { extractHostname, extractPort, parseNodePassUrlForTopology } from '@/app/topology/lib/topology-utils';
+import { extractHostname, extractPort, parseNodePassUrl, isWildcardHostname } from '@/lib/url-utils';
 
 import { CreateInstanceFormFields } from './CreateInstanceFormFields';
 import { buildUrlFromFormValues, formatHostForUrl } from './utils';
 
-// Helper to check for wildcard hostnames
-const isWildcardHostname = (host: string | null | undefined): boolean => {
-    if (!host) return true;
-    const lowerHost = host.toLowerCase();
-    return lowerHost === '0.0.0.0' || lowerHost === '[::]' || lowerHost === '::';
-};
 
 interface CreateInstanceDialogProps {
   open: boolean;
@@ -58,7 +52,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
     resolver: zodResolver(createInstanceFormSchema),
     defaultValues: {
       instanceType: '入口(c)',
-      isSingleEndedForward: false, // New field default
+      isSingleEndedForward: false, 
       autoCreateServer: false,
       serverApiId: undefined,
       tunnelAddress: '',
@@ -74,7 +68,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
   const instanceType = form.watch("instanceType");
   const tlsModeWatch = form.watch("tlsMode");
   const autoCreateServerWatched = form.watch("autoCreateServer");
-  const isSingleEndedForwardWatched = form.watch("isSingleEndedForward"); // Watch new field
+  const isSingleEndedForwardWatched = form.watch("isSingleEndedForward"); 
   const tunnelAddressValue = form.watch("tunnelAddress");
 
   useEffect(() => {
@@ -98,29 +92,23 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
   }, [open, form]);
 
  useEffect(() => {
-    // This effect handles cascading changes when primary mode selectors change.
     if (instanceType === "入口(c)") {
         if (isSingleEndedForwardWatched) {
-            // If single-ended is ON, autoCreateServer must be OFF.
             if (form.getValues("autoCreateServer") !== false) {
                  form.setValue("autoCreateServer", false, { shouldDirty: true });
             }
         }
-        // Ensure TLS related fields (certPath, keyPath) are cleared if TLS mode is not '2',
-        // but only if the user hasn't explicitly dirtied them.
         const currentTlsMode = form.getValues("tlsMode");
         if (currentTlsMode !== '2') {
             if (form.getValues("certPath") !== '') form.setValue("certPath", '');
             if (form.getValues("keyPath") !== '') form.setValue("keyPath", '');
         }
-    } else if (instanceType === "出口(s)") { // Server type
-        // Reset client-specific flags to their defaults for server
+    } else if (instanceType === "出口(s)") { 
         if (form.getValues("isSingleEndedForward") !== false) form.setValue("isSingleEndedForward", false);
         if (form.getValues("autoCreateServer") !== false) form.setValue("autoCreateServer", false);
         if (form.getValues("serverApiId") !== undefined) form.setValue("serverApiId", undefined);
         if (form.getValues("serverTargetAddressForAutoCreate") !== '') form.setValue("serverTargetAddressForAutoCreate", '');
 
-        // Clear cert/key paths if TLS mode is not '2'
         if (form.getValues("tlsMode") !== '2') {
             if (form.getValues("certPath") !== '') form.setValue("certPath", '');
             if (form.getValues("keyPath") !== '') form.setValue("keyPath", '');
@@ -130,27 +118,21 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
 
 
   useEffect(() => {
-    // This effect manages the serverApiId and serverTargetAddressForAutoCreate fields
-    // when in "入口(c)" mode and "autoCreateServer" is toggled.
     if (instanceType === "入口(c)" && autoCreateServerWatched && !isSingleEndedForwardWatched) {
       const otherMasters = apiConfigsList.filter(c => c.id !== activeApiConfig?.id);
       if (otherMasters.length > 0) {
         const currentServerApiId = form.getValues("serverApiId");
-        // If no serverApiId is selected, or the current one is not in otherMasters, pick the first one.
         if (!currentServerApiId || !otherMasters.some(m => m.id === currentServerApiId)) {
           form.setValue("serverApiId", otherMasters[0].id, { shouldValidate: true, shouldDirty: true });
         }
       } else {
-        // No other masters available, so clear serverApiId
         form.setValue("serverApiId", undefined, { shouldValidate: true, shouldDirty: true });
       }
-       // Ensure serverTargetAddressForAutoCreate has a chance to be filled if not already dirty
        if (!form.formState.dirtyFields.serverTargetAddressForAutoCreate) {
-         form.setValue("serverTargetAddressForAutoCreate", "", {shouldDirty: true}); // Keep as empty string for user input
+         form.setValue("serverTargetAddressForAutoCreate", "", {shouldDirty: true}); 
        }
 
     } else if (instanceType === "入口(c)" && (!autoCreateServerWatched || isSingleEndedForwardWatched) ) {
-       // If not auto-creating server, or if single-ended, these fields should be cleared/reset.
        if (form.getValues("serverApiId") !== undefined) form.setValue("serverApiId", undefined);
        if (form.getValues("serverTargetAddressForAutoCreate") !== '') form.setValue("serverTargetAddressForAutoCreate", '');
     }
@@ -158,7 +140,6 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
 
 
   useEffect(() => {
-    // This effect manages the external API suggestion.
     if (instanceType === '入口(c)' && tunnelAddressValue && !autoCreateServerWatched && !isSingleEndedForwardWatched) {
       const clientTunnelHost = extractHostname(tunnelAddressValue);
       if (!clientTunnelHost) {
@@ -217,7 +198,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
           const serversFromThisMaster = instances
             .filter(inst => inst.type === 'server')
             .map(serverInst => {
-              const parsedUrl = parseNodePassUrlForTopology(serverInst.url);
+              const parsedUrl = parseNodePassUrl(serverInst.url);
               if (!parsedUrl.tunnelAddress) return null;
               return {
                 id: serverInst.id,
@@ -231,7 +212,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
           const clientInstancesOnThisOtherMaster = instances.filter(inst => inst.type === 'client');
           const usedServerTunnelAddressesOnThisOtherMaster = new Set<string>();
           clientInstancesOnThisOtherMaster.forEach(clientInst => {
-            const parsedClientUrl = parseNodePassUrlForTopology(clientInst.url);
+            const parsedClientUrl = parseNodePassUrl(clientInst.url);
             if (parsedClientUrl.tunnelAddress) { usedServerTunnelAddressesOnThisOtherMaster.add(parsedClientUrl.tunnelAddress.toLowerCase()); }
           });
 
@@ -272,7 +253,6 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
       onLog?.(`实例创建成功于 ${masterNameForToast}: ${createdInstance.type === 'server' ? '出口(s)' : '入口(c)'} - ${createdInstance.id.substring(0,8)}... (URL: ${shortUrl})`, 'SUCCESS');
 
       queryClient.invalidateQueries({ queryKey: ['instances', variables.useApiRoot === apiRoot ? apiId : apiConfigsList.find(c => getApiRootUrl(c.id) === variables.useApiRoot)?.id] });
-      queryClient.invalidateQueries({ queryKey: ['allInstancesForTopologyPage']});
       queryClient.invalidateQueries({ queryKey: ['allInstancesForTraffic']});
     },
     onError: (error: any, variables) => {
@@ -303,15 +283,15 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
 
     if (values.instanceType === '入口(c)') {
         if (values.isSingleEndedForward) {
-            const localListeningPort = values.tunnelAddress; // This is the local port from form, validated as port number
-            const remoteTarget = values.targetAddress; // This is the remote host:port from form
+            const localListeningPort = values.tunnelAddress; 
+            const remoteTarget = values.targetAddress; 
             if (!remoteTarget || remoteTarget.trim() === "") {
                 toast({ title: "错误", description: "单端转发模式下，目标地址 (业务数据) 是必需的。", variant: "destructive"}); return;
             }
             clientInstanceUrl = buildUrlFromFormValues({
                 instanceType: '入口(c)',
                 isSingleEndedForward: true,
-                tunnelAddress: `[::]:${localListeningPort}`, // Ensure host for standard URL format for single-ended listener
+                tunnelAddress: `[::]:${localListeningPort}`, 
                 targetAddress: remoteTarget,
                 logLevel: values.logLevel,
                 tlsMode: values.tlsMode, 
@@ -357,6 +337,10 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
             
             let clientActualLocalForwardPort: string;
             const clientLocalForwardPortFromForm = values.targetAddress?.trim();
+             // When auto-creating server, client's targetAddress (local forward port) should use server's master API host
+            const clientLocalForwardHostForDisplay = clientConnectToServerHost;
+
+
             if (clientLocalForwardPortFromForm && /^[0-9]+$/.test(clientLocalForwardPortFromForm)) {
                 clientActualLocalForwardPort = clientLocalForwardPortFromForm;
             } else {
@@ -365,7 +349,8 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
                     onLog?.(`入口(c)本地转发端口 "${clientLocalForwardPortFromForm}" 无效，已自动设为 ${clientActualLocalForwardPort}。`, 'WARN');
                 }
             }
-            const clientFullLocalForwardTargetAddress = `[::]:${clientActualLocalForwardPort}`;
+            const clientFullLocalForwardTargetAddress = `${formatHostForUrl(clientLocalForwardHostForDisplay)}:${clientActualLocalForwardPort}`;
+
 
             clientInstanceUrl = buildUrlFromFormValues({
                 instanceType: '入口(c)',

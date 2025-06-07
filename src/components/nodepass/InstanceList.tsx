@@ -25,9 +25,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import type { NamedApiConfig } from '@/hooks/use-api-key';
 import type { AppLogEntry } from './EventLog';
-import { extractHostname, extractPort, parseNodePassUrlForTopology } from '@/app/topology/lib/topology-utils';
-// formatHostForUrl was previously in create-instance-dialog/utils.ts, moved to topology-utils.ts or defined locally if not general enough
-// For this change, I'll define a local helper as it's simple.
+import { extractHostname, extractPort, parseNodePassUrl, isWildcardHostname } from '@/lib/url-utils';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Button } from '@/components/ui/button';
 import { BulkDeleteInstancesDialog } from './BulkDeleteInstancesDialog';
@@ -41,23 +39,13 @@ function formatBytes(bytes: number) {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
 }
 
-// Helper to format host for URL (e.g., add brackets for IPv6)
 function formatHostForDisplay(host: string | null | undefined): string {
   if (!host) return '未知主机';
-  // Check if it's an IPv6 address and doesn't already have brackets
   if (host.includes(':') && !host.startsWith('[') && !host.endsWith(']')) {
     return `[${host}]`;
   }
   return host;
 }
-
-// Helper to check for wildcard hostnames (0.0.0.0, [::], ::)
-const isWildcardHost = (host: string | null | undefined): boolean => {
-    if (!host) return false;
-    const lowerHost = host.toLowerCase();
-    return lowerHost === '0.0.0.0' || lowerHost === '[::]' || lowerHost === '::';
-};
-
 
 interface InstanceListProps {
   apiId: string | null;
@@ -131,7 +119,6 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
       });
       onLog?.(`实例 ${instanceId.substring(0,8)}... 已删除。`, 'SUCCESS');
       queryClient.invalidateQueries({ queryKey: ['instances', apiId] });
-      queryClient.invalidateQueries({ queryKey: ['allInstancesForTopologyPage']});
       queryClient.invalidateQueries({ queryKey: ['allInstancesForTraffic']});
       setSelectedInstanceForDelete(null);
       setSelectedInstanceIds(prev => {
@@ -222,7 +209,6 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
     onLog?.(`批量删除完成: ${successCount} 成功, ${errorCount} 失败。`, errorCount > 0 ? 'ERROR' : 'SUCCESS');
 
     queryClient.invalidateQueries({ queryKey: ['instances', apiId] });
-    queryClient.invalidateQueries({ queryKey: ['allInstancesForTopologyPage'] });
     queryClient.invalidateQueries({ queryKey: ['allInstancesForTraffic'] });
     setSelectedInstanceIds(new Set());
     setIsBulkDeleting(false);
@@ -250,7 +236,7 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
   };
 
   const renderInstanceRow = (instance: Instance) => {
-    const parsedUrl = instance.id !== '********' ? parseNodePassUrlForTopology(instance.url) : null;
+    const parsedUrl = instance.id !== '********' ? parseNodePassUrl(instance.url) : null;
 
     let displayTargetTunnelContent: React.ReactNode = "N/A";
     let copyTitle = "目标/隧道地址";
@@ -290,33 +276,26 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
         );
     } else if (instance.type === 'client' && parsedUrl && activeApiConfig) {
         const clientMasterApiHost = extractHostname(activeApiConfig.apiUrl);
-
-        // Check if the client instance was created as a single-ended forwarder
-        // A single-ended client's tunnelAddress in its NodePass URL is typically like "[::]:<local_port>" or "0.0.0.0:<local_port>"
-        const isSingleEnded = parsedUrl.tunnelAddress && (parsedUrl.tunnelAddress.startsWith('[::]:') || parsedUrl.tunnelAddress.startsWith('0.0.0.0:'));
+        const isSingleEnded = parsedUrl.tunnelAddress && isWildcardHostname(extractHostname(parsedUrl.tunnelAddress));
 
         if (isSingleEnded) {
-            const clientLocalListeningPort = extractPort(parsedUrl.tunnelAddress || ''); // Port it listens on locally
+            const clientLocalListeningPort = extractPort(parsedUrl.tunnelAddress || '');
             if (clientMasterApiHost && clientLocalListeningPort) {
                 stringToCopy = `${formatHostForDisplay(clientMasterApiHost)}:${clientLocalListeningPort}`;
                 copyTitle = `入口(c)本地监听 (单端模式, 主控: ${activeApiConfig.name})`;
             } else {
-                // Fallback if master host is somehow unavailable, but local port is known
-                stringToCopy = `${parsedUrl.tunnelAddress || '[::]:????'}`;
-                copyTitle = `入口(c)本地监听 (单端模式, 主控地址或端口解析失败)`;
+                stringToCopy = `[::]:${clientLocalListeningPort || '????'}`;
+                copyTitle = `入口(c)本地监听 (单端模式, 主控地址未知)`;
             }
         } else { // Normal client (not single-ended)
-            const clientLocalForwardPort = extractPort(parsedUrl.targetAddress || ''); // Port it forwards to locally (on its own machine)
-            if (clientMasterApiHost && clientLocalForwardPort) {
+            const clientLocalForwardPort = extractPort(parsedUrl.targetAddress || '');
+             if (clientMasterApiHost && clientLocalForwardPort) {
                 stringToCopy = `${formatHostForDisplay(clientMasterApiHost)}:${clientLocalForwardPort}`;
                 copyTitle = `入口(c)本地转发 (主控: ${activeApiConfig.name})`;
             } else if (clientLocalForwardPort) {
-                 // Fallback if master host is somehow unavailable, but local port is known
-                stringToCopy = `127.0.0.1:${clientLocalForwardPort}`; // Default to localhost if master host is not found
+                stringToCopy = `127.0.0.1:${clientLocalForwardPort}`;
                 copyTitle = `入口(c)本地转发 (主控地址未知)`;
-            }
-             else {
-                // Fallback if even local forward port cannot be determined
+            } else {
                 stringToCopy = parsedUrl.targetAddress || "N/A (解析目标失败)";
                 copyTitle = "入口(c)本地转发目标";
             }
@@ -574,4 +553,3 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
   );
 }
     
-
