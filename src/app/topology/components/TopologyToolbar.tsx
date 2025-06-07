@@ -23,7 +23,7 @@ export function TopologyToolbar({
   canSubmit,
 }: TopologyToolbarProps) {
   return (
-    <div className="flex flex-row flex-wrap gap-2"> {/* Changed to flex-row and added flex-wrap */}
+    <div className="flex flex-row flex-wrap gap-2"> {/* Ensures buttons are horizontal and wrap */}
       <Button onClick={onAddNode} size="sm" variant="outline" className="font-sans">
         <PlusCircle className="mr-2 h-4 w-4" />
         添加节点
@@ -47,3 +47,4 @@ export function TopologyToolbar({
     </div>
   );
 }
+

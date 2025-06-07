@@ -42,7 +42,7 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
-import { Card } from '@/components/ui/card'; // Used for consistency in Popover/Sheet content
+import { Card } from '@/components/ui/card';
 
 const initialNodes: Node[] = [];
 const initialEdges: Edge[] = [];
@@ -99,10 +99,10 @@ function TopologyFlow() {
     
     const newNode: Node = {
       id: newNodeId,
-      type: 'default',
+      type: 'default', // You might want a custom type later for master nodes
       data: {
         label: `主控: ${masterConfig.name}`,
-        nodeType: 'masterRepresentation',
+        nodeType: 'masterRepresentation', // Custom property to identify master nodes
         masterId: masterConfig.id,
         masterName: masterConfig.name,
       },
@@ -113,16 +113,16 @@ function TopologyFlow() {
     };
     setNodes((nds) => nds.concat(newNode));
     toast({ title: "主控节点已添加", description: `添加主控 "${masterConfig.name}" 到画布.` });
-    setIsMastersSheetOpen(false);
+    setIsMastersSheetOpen(false); // Close sheet after adding
   }, [nodeIdCounter, setNodes, setNodeIdCounter, toast, reactFlowInstance]);
 
   const handleClearCanvas = useCallback(() => {
     setNodes([]);
     setEdges([]);
     setNodeIdCounter(0);
-    setSelectedNode(null);
+    setSelectedNode(null); // Clear selected node as well
     toast({ title: "画布已清空" });
-    setIsToolbarPopoverOpen(false);
+    setIsToolbarPopoverOpen(false); // Close popover if open
   }, [setNodes, setEdges, setNodeIdCounter, toast]);
 
   const handleCenterView = useCallback(() => {
@@ -132,43 +132,53 @@ function TopologyFlow() {
       reactFlowInstance.fitView({ nodes: [{ id: firstMasterNode.id }], duration: 300, padding: 0.3 });
       toast({ title: "视图已居中", description: `聚焦于主控 "${firstMasterNode.data.label}".` });
     } else if (nodes.length > 0) {
-      reactFlowInstance.fitView({ duration: 300, padding: 0.1 });
+      reactFlowInstance.fitView({ duration: 300, padding: 0.1 }); // Fit all nodes if no master node
       toast({ title: "视图已适应所有节点" });
     } else {
       toast({ title: "画布为空", description: "没有可居中的节点.", variant: "destructive" });
     }
-    setIsToolbarPopoverOpen(false);
+    setIsToolbarPopoverOpen(false); // Close popover
   }, [reactFlowInstance, nodes, toast]);
 
   const handleFormatLayout = useCallback(() => {
+    // Placeholder for actual layout formatting logic (e.g., using ELK.js or Dagre)
     toast({ title: "格式化布局", description: "此功能待实现." });
     console.log("Format Layout button clicked. Nodes:", nodes, "Edges:", edges);
-    setIsToolbarPopoverOpen(false);
+    setIsToolbarPopoverOpen(false); // Close popover
   }, [nodes, edges, toast]);
 
   const handleSubmitTopology = useCallback(() => {
+    // Placeholder for actual topology submission logic
     toast({ title: "提交拓扑", description: "此功能待实现." });
     console.log("Submit Topology button clicked. Nodes:", nodes, "Edges:", edges);
-    setIsToolbarPopoverOpen(false);
+    setIsToolbarPopoverOpen(false); // Close popover
   }, [nodes, edges, toast]);
 
   const onSelectionChange = useCallback(({ nodes: selectedNodesList }: { nodes: Node[], edges: Edge[] }) => {
     if (selectedNodesList.length === 1) {
       setSelectedNode(selectedNodesList[0]);
+      // Automatically open properties sheet if a node is selected and sheet isn't already open by this selection
+      if (!isPropertiesSheetOpen) {
+          // This logic might need refinement based on desired UX for auto-opening
+      }
     } else {
       setSelectedNode(null);
+      // Optionally close properties sheet if no node or multiple nodes are selected
+      // setIsPropertiesSheetOpen(false); 
     }
-  }, []);
+  }, [isPropertiesSheetOpen]); // Removed setIsPropertiesSheetOpen from deps to avoid loop if auto-opening
 
+  // Effect to clear selectedNode if it's removed from the canvas
   useEffect(() => {
     if (selectedNode && !nodes.find(n => n.id === selectedNode.id)) {
       setSelectedNode(null);
-      setIsPropertiesSheetOpen(false);
+      setIsPropertiesSheetOpen(false); // Close properties sheet if selected node is deleted
     }
   }, [nodes, selectedNode]);
 
   return (
-    <div className="h-full w-full relative" data-testid="topology-page-container">
+    // This div will grow to fill the space provided by AppLayout's main area
+    <div className="flex-grow w-full relative" data-testid="topology-page-container">
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -184,13 +194,14 @@ function TopologyFlow() {
         panOnScroll
         selectionOnDrag
         panOnDrag={[PanOnScrollMode.Free, PanOnScrollMode.Right, PanOnScrollMode.Left]}
-        className="h-full w-full bg-background"
+        className="h-full w-full bg-background" // Ensures ReactFlow takes full space of its parent
       >
         <Controls style={{ bottom: 10, right: 10, left: 'auto', top: 'auto' }} />
         <MiniMap nodeStrokeWidth={3} zoomable pannable style={{ bottom: 10, left: 10, right: 'auto', top: 'auto' }} />
         <Background variant="dots" gap={16} size={1} />
       </ReactFlow>
 
+      {/* Toolbar Popover Trigger */}
       <Popover open={isToolbarPopoverOpen} onOpenChange={setIsToolbarPopoverOpen}>
         <PopoverTrigger asChild>
           <Button
@@ -202,18 +213,19 @@ function TopologyFlow() {
             <Settings className="h-5 w-5" />
           </Button>
         </PopoverTrigger>
-        <PopoverContent className="p-2" side="bottom" align="start">
+        <PopoverContent className="w-auto p-2" side="bottom" align="start">
           <TopologyToolbar
             onAddNode={handleAddGenericNode}
             onCenterView={handleCenterView}
             onFormatLayout={handleFormatLayout}
             onClearCanvas={handleClearCanvas}
             onSubmitTopology={handleSubmitTopology}
-            canSubmit={nodes.length > 0}
+            canSubmit={nodes.length > 0} // Example condition for submit
           />
         </PopoverContent>
       </Popover>
 
+      {/* Masters Palette Sheet Trigger */}
       <Sheet open={isMastersSheetOpen} onOpenChange={setIsMastersSheetOpen}>
         <SheetTrigger asChild>
           <Button
@@ -225,19 +237,20 @@ function TopologyFlow() {
             <ListTree className="h-5 w-5" />
           </Button>
         </SheetTrigger>
-        <SheetContent side="left" className="w-72 p-0 flex flex-col">
+        <SheetContent side="left" className="w-72 p-0 flex flex-col"> {/* Ensure sheet content can flex */}
           <SheetHeader className="p-4 border-b">
             <SheetTitle className="font-title text-lg">主控列表</SheetTitle>
             <SheetDescription className="font-sans text-xs">
               点击主控将其添加到画布。
             </SheetDescription>
           </SheetHeader>
-          <div className="p-4 flex-grow overflow-y-auto">
+          <div className="p-4 flex-grow overflow-y-auto"> {/* Allow scrolling for masters list */}
             <MastersPalette onAddMasterNode={handleAddMasterNodeFromPalette} />
           </div>
         </SheetContent>
       </Sheet>
 
+      {/* Properties Panel Sheet Trigger - only show if a node is selected */}
       {selectedNode && (
         <Sheet open={isPropertiesSheetOpen} onOpenChange={setIsPropertiesSheetOpen}>
           <SheetTrigger asChild>
@@ -250,7 +263,7 @@ function TopologyFlow() {
               <InfoIcon className="h-5 w-5" />
             </Button>
           </SheetTrigger>
-          <SheetContent side="right" className="w-80 p-0 flex flex-col">
+          <SheetContent side="right" className="w-80 p-0 flex flex-col"> {/* Ensure sheet content can flex */}
              <PropertiesDisplayPanel selectedNode={selectedNode} />
           </SheetContent>
         </Sheet>
@@ -262,7 +275,8 @@ function TopologyFlow() {
 export default function TopologyPageContainer() {
   return (
     <AppLayout>
-      <div className="flex-grow h-full w-full"> {/* Ensure this container also takes full height */}
+      {/* This div will be the flex child of AppLayout's main area, allowing TopologyFlow to grow. */}
+      <div className="flex flex-col flex-grow"> 
         <ReactFlowProvider>
           <TopologyFlow />
         </ReactFlowProvider>
