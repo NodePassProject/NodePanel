@@ -4,7 +4,6 @@
 import React, { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-// import type { z } from 'zod'; // No longer needed
 import {
   Dialog,
   DialogContent,
@@ -41,7 +40,7 @@ interface ModifyInstanceDialogProps {
 }
 
 interface ParsedNodePassUrl {
-  instanceType: 'server' | 'client' | null;
+  instanceType: 'server' | 'client' | null; // API still uses server/client
   tunnelAddress: string | null;
   targetAddress: string | null;
   logLevel: MasterLogLevel;
@@ -121,14 +120,15 @@ function parseNodePassUrl(url: string): ParsedNodePassUrl {
 }
 
 function buildUrl(values: ModifyInstanceFormValues): string {
-  let url = `${values.instanceType}://${values.tunnelAddress}/${values.targetAddress}`;
+  const schemeType = values.instanceType === "出口(s)" ? "server" : "client"; // Map to API expected values
+  let url = `${schemeType}://${values.tunnelAddress}/${values.targetAddress}`;
   const queryParams = new URLSearchParams();
 
   if (values.logLevel !== "master") {
     queryParams.append('log', values.logLevel);
   }
 
-  if (values.instanceType === 'server') {
+  if (schemeType === 'server') { // Use mapped schemeType
     if (values.tlsMode && values.tlsMode !== "master") {
       queryParams.append('tls', values.tlsMode);
       if (values.tlsMode === '2') {
@@ -156,7 +156,7 @@ export function ModifyInstanceDialog({ instance, open, onOpenChange, apiId, apiR
   const form = useForm<ModifyInstanceFormValues>({
     resolver: zodResolver(modifyInstanceFormSchema),
     defaultValues: { 
-      instanceType: 'server', 
+      instanceType: '出口(s)', // Default will be overridden by instance data
       tunnelAddress: '',
       targetAddress: '',
       logLevel: 'master',
@@ -174,7 +174,7 @@ export function ModifyInstanceDialog({ instance, open, onOpenChange, apiId, apiR
     if (instance && open) {
       const parsedUrl = parseNodePassUrl(instance.url);
       form.reset({
-        instanceType: parsedUrl.instanceType || instance.type,
+        instanceType: parsedUrl.instanceType === 'server' ? "出口(s)" : "入口(c)", // Map here
         tunnelAddress: parsedUrl.tunnelAddress || '',
         targetAddress: parsedUrl.targetAddress || '',
         logLevel: parsedUrl.logLevel || 'master',
@@ -183,7 +183,7 @@ export function ModifyInstanceDialog({ instance, open, onOpenChange, apiId, apiR
         keyPath: parsedUrl.keyPath || '',
       });
     } else if (!open) {
-      form.reset(); // Reset form when dialog closes
+      form.reset(); 
     }
   }, [instance, open, form]);
 
@@ -245,7 +245,7 @@ export function ModifyInstanceDialog({ instance, open, onOpenChange, apiId, apiR
             修改实例配置
           </DialogTitle>
           <DialogDescription className="font-sans">
-            编辑实例 <span className="font-semibold font-mono">{instance.id.substring(0,12)}...</span> 的配置 (主控: {apiName || 'N/A'})。
+            编辑实例 <span className="font-semibold font-mono">{instance.id.substring(0,12)}...</span> (主控: {apiName || 'N/A'})。
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
@@ -267,11 +267,11 @@ export function ModifyInstanceDialog({ instance, open, onOpenChange, apiId, apiR
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      <SelectItem value="server" className="font-sans">服务端</SelectItem>
-                      <SelectItem value="client" className="font-sans">客户端</SelectItem>
+                      <SelectItem value="出口(s)" className="font-sans">出口(s)</SelectItem>
+                      <SelectItem value="入口(c)" className="font-sans">入口(c)</SelectItem>
                     </SelectContent>
                   </Select>
-                  <FormDescription className="font-sans text-xs">实例的类型创建后不可更改。</FormDescription>
+                  <FormDescription className="font-sans text-xs">实例类型创建后不可更改。</FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
@@ -286,14 +286,14 @@ export function ModifyInstanceDialog({ instance, open, onOpenChange, apiId, apiR
                   <FormControl>
                     <Input
                       className="text-sm font-mono"
-                      placeholder={instanceType === "server" ? "控制通道监听地址 (例: 0.0.0.0:10101)" : "连接的服务端控制通道地址 (例: your.server.com:10101)"}
+                      placeholder={instanceType === "出口(s)" ? "监听地址 (例: 0.0.0.0:10101)" : "连接的出口(s)地址 (例: your.server.com:10101)"}
                       {...field}
                     />
                   </FormControl>
                    <FormDescription className="font-sans text-xs">
-                    {instanceType === "server"
-                      ? "服务端监听控制连接的地址 (TCP控制通道)。"
-                      : "客户端连接的服务端控制通道地址。"}
+                    {instanceType === "出口(s)"
+                      ? "出口(s)监听控制连接的地址。"
+                      : "入口(c)连接的出口(s)控制通道地址。"}
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -309,14 +309,14 @@ export function ModifyInstanceDialog({ instance, open, onOpenChange, apiId, apiR
                   <FormControl>
                     <Input
                       className="text-sm font-mono"
-                      placeholder={instanceType === "server" ? "业务数据转发地址 (例: 0.0.0.0:8080)" : "本地业务数据转发地址 (例: 127.0.0.1:8000)"}
+                      placeholder={instanceType === "出口(s)" ? "转发地址 (例: 0.0.0.0:8080)" : "本地转发地址 (例: 127.0.0.1:8000)"}
                       {...field}
                     />
                   </FormControl>
                   <FormDescription className="font-sans text-xs">
-                    {instanceType === "server"
-                      ? "服务端业务数据的目标地址 (支持双向)。"
-                      : "客户端转发业务流量至的本地服务地址。"}
+                    {instanceType === "出口(s)"
+                      ? "出口(s)业务数据的目标地址。"
+                      : "入口(c)转发业务流量至的本地服务地址。"}
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -354,14 +354,14 @@ export function ModifyInstanceDialog({ instance, open, onOpenChange, apiId, apiR
               )}
             />
 
-            {instanceType === 'server' && (
+            {instanceType === '出口(s)' && (
               <>
                 <FormField
                   control={form.control}
                   name="tlsMode"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="font-sans">TLS 模式 (服务端数据通道)</FormLabel>
+                      <FormLabel className="font-sans">TLS 模式 (出口(s)数据通道)</FormLabel>
                       <Select onValueChange={field.onChange} value={field.value || "master"}>
                         <FormControl>
                           <SelectTrigger className="text-sm font-sans">
@@ -373,12 +373,12 @@ export function ModifyInstanceDialog({ instance, open, onOpenChange, apiId, apiR
                             默认 ({masterTlsModeDisplay})
                           </SelectItem>
                           <SelectItem value="0" className="font-sans">0: 无TLS (明文)</SelectItem>
-                          <SelectItem value="1" className="font-sans">1: 自签名证书</SelectItem>
-                          <SelectItem value="2" className="font-sans">2: 自定义证书</SelectItem>
+                          <SelectItem value="1" className="font-sans">1: 自签名</SelectItem>
+                          <SelectItem value="2" className="font-sans">2: 自定义</SelectItem>
                         </SelectContent>
                       </Select>
                       <FormDescription className="font-sans text-xs">
-                        服务端数据通道的TLS加密模式。选择“默认”将继承主控设置。
+                        出口(s)数据通道的TLS加密模式。
                       </FormDescription>
                       <FormMessage />
                     </FormItem>
@@ -425,6 +425,36 @@ export function ModifyInstanceDialog({ instance, open, onOpenChange, apiId, apiR
                   </>
                 )}
               </>
+            )}
+             {instanceType === '入口(c)' && (
+                <FormField
+                  control={form.control}
+                  name="tlsMode" // Retain for client, but it's informational.
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="font-sans">TLS 模式 (入口(c)连接行为)</FormLabel>
+                       <Select onValueChange={field.onChange} value={field.value || "master"}>
+                        <FormControl>
+                          <SelectTrigger className="text-sm font-sans">
+                            <SelectValue placeholder="选择TLS模式" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="master" className="font-sans">
+                             默认 (根据出口(s)自动判断)
+                          </SelectItem>
+                          <SelectItem value="0" className="font-sans">0: 连接明文出口(s)</SelectItem>
+                          <SelectItem value="1" className="font-sans">1: 连接自签名出口(s)</SelectItem>
+                          <SelectItem value="2" className="font-sans">2: 连接自定义证书出口(s)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormDescription className="font-sans text-xs">
+                        入口(c)连接目标出口(s)时采用的TLS行为。通常保持默认。
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
             )}
           </form>
         </Form>

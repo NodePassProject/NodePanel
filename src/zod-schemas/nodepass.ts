@@ -3,13 +3,13 @@ import { z } from 'zod';
 
 // Schema for the detailed create instance form
 export const createInstanceFormSchema = z.object({
-  instanceType: z.enum(["server", "client"], {
+  instanceType: z.enum(["出口(s)", "入口(c)"], { // Updated enum
     required_error: "实例类型是必需的。",
   }),
-  autoCreateServer: z.optional(z.boolean()),
-  serverApiId: z.optional(z.string()), // New field for server's master API ID
+  autoCreateServer: z.optional(z.boolean()), // Name kept for logic, label will change
+  serverApiId: z.optional(z.string()), 
   tunnelAddress: z.string().min(1, "隧道地址是必需的。").regex(/^(?:\[[0-9a-fA-F:]+\]|[0-9a-zA-Z.-]+):[0-9]+$/, "隧道地址格式无效 (例: host:port 或 [ipv6]:port)"),
-  targetAddress: z.string().optional(), // Made optional here, validated in superRefine
+  targetAddress: z.string().optional(), 
   logLevel: z.enum(["master", "debug", "info", "warn", "error", "fatal"], {
     required_error: "日志级别是必需的。",
   }),
@@ -18,32 +18,32 @@ export const createInstanceFormSchema = z.object({
   keyPath: z.optional(z.string()),
 }).superRefine((data, ctx) => {
   // TargetAddress validation
-  if (data.instanceType === "server" && (!data.targetAddress || data.targetAddress.trim() === "")) {
+  if (data.instanceType === "出口(s)" && (!data.targetAddress || data.targetAddress.trim() === "")) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
-      message: "目标地址是必需的。",
+      message: "目标地址 (业务数据) 是必需的。",
       path: ["targetAddress"],
     });
-  } else if (data.instanceType === "server" && data.targetAddress && !/^(?:\[[0-9a-fA-F:]+\]|[0-9a-zA-Z.-]+):[0-9]+$/.test(data.targetAddress)) {
+  } else if (data.instanceType === "出口(s)" && data.targetAddress && !/^(?:\[[0-9a-fA-F:]+\]|[0-9a-zA-Z.-]+):[0-9]+$/.test(data.targetAddress)) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
-      message: "目标地址格式无效 (例: host:port 或 [ipv6]:port)",
+      message: "目标地址 (业务数据) 格式无效 (例: host:port)",
       path: ["targetAddress"],
     });
   }
 
 
-  if (data.instanceType === "client" && data.autoCreateServer) {
+  if (data.instanceType === "入口(c)" && data.autoCreateServer) {
     if (!data.targetAddress || data.targetAddress.trim() === "") {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "自动创建服务端时，服务端转发目标地址是必需的。",
+        message: "自动创建出口(s)时，其转发目标地址是必需的。",
         path: ["targetAddress"],
       });
     } else if (data.targetAddress && !/^(?:\[[0-9a-fA-F:]+\]|[0-9a-zA-Z.-]+):[0-9]+$/.test(data.targetAddress)) {
        ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "服务端转发目标地址格式无效 (例: host:port 或 [ipv6]:port)",
+        message: "出口(s)转发目标地址格式无效 (例: host:port)",
         path: ["targetAddress"],
       });
     }
@@ -51,13 +51,13 @@ export const createInstanceFormSchema = z.object({
 
 
   // TLS Mode and Cert/Key Path validation
-  const effectiveTlsUser = data.instanceType === 'client' && data.autoCreateServer ? 'server' : data.instanceType;
+  const effectiveTlsUserType = data.instanceType === '入口(c)' && data.autoCreateServer ? '出口(s)' : data.instanceType;
 
-  if (effectiveTlsUser === "server") {
+  if (effectiveTlsUserType === "出口(s)") {
     if (!["master", "0", "1", "2"].includes(data.tlsMode)) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "服务端TLS模式无效。",
+        message: "出口(s) TLS模式无效。",
         path: ["tlsMode"],
       });
     }
@@ -69,17 +69,14 @@ export const createInstanceFormSchema = z.object({
         ctx.addIssue({ code: z.ZodIssueCode.custom, message: "TLS模式 '2' 需要密钥路径。", path: ["keyPath"] });
       }
     }
-  } else if (effectiveTlsUser === "client") { // This case implies client AND !autoCreateServer
+  } else if (effectiveTlsUserType === "入口(c)") { 
     if (!["master", "0", "1", "2"].includes(data.tlsMode)) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "客户端TLS模式无效。",
+        message: "入口(c) TLS模式无效。",
         path: ["tlsMode"],
       });
     }
-    // For a pure client, certPath and keyPath are not typically sent in its URL.
-    // If tlsMode '2' is selected for a pure client, it's informational for connection behavior,
-    // but the paths themselves aren't part of its own instance URL.
   }
 });
 
@@ -89,23 +86,23 @@ export type CreateInstanceFormValues = z.infer<typeof createInstanceFormSchema>;
 
 // Schema for the detailed modify instance form - Defined independently
 export const modifyInstanceFormSchema = z.object({
-  instanceType: z.enum(["server", "client"], {
+  instanceType: z.enum(["出口(s)", "入口(c)"], { // Updated enum
     required_error: "实例类型是必需的。",
   }),
-  tunnelAddress: z.string().min(1, "隧道地址是必需的。").regex(/^(?:\[[0-9a-fA-F:]+\]|[0-9a-zA-Z.-]+):[0-9]+$/, "隧道地址格式无效 (例: host:port 或 [ipv6]:port)"),
-  targetAddress: z.string().min(1, "目标地址是必需的。").regex(/^(?:\[[0-9a-fA-F:]+\]|[0-9a-zA-Z.-]+):[0-9]+$/, "目标地址格式无效 (例: host:port 或 [ipv6]:port)"),
+  tunnelAddress: z.string().min(1, "隧道地址是必需的。").regex(/^(?:\[[0-9a-fA-F:]+\]|[0-9a-zA-Z.-]+):[0-9]+$/, "隧道地址格式无效 (例: host:port)"),
+  targetAddress: z.string().min(1, "目标地址是必需的。").regex(/^(?:\[[0-9a-fA-F:]+\]|[0-9a-zA-Z.-]+):[0-9]+$/, "目标地址格式无效 (例: host:port)"),
   logLevel: z.enum(["master", "debug", "info", "warn", "error", "fatal"], {
     required_error: "日志级别是必需的。",
   }),
-  tlsMode: z.string(), // Similar to create, validated by superRefine based on instanceType
+  tlsMode: z.string(), 
   certPath: z.optional(z.string()),
   keyPath: z.optional(z.string()),
 }).superRefine((data, ctx) => {
-  if (data.instanceType === "server") {
+  if (data.instanceType === "出口(s)") {
     if (!["master", "0", "1", "2"].includes(data.tlsMode)) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "服务端TLS模式无效。",
+        message: "出口(s) TLS模式无效。",
         path: ["tlsMode"],
       });
     }
@@ -117,11 +114,11 @@ export const modifyInstanceFormSchema = z.object({
         ctx.addIssue({ code: z.ZodIssueCode.custom, message: "TLS模式 '2' 需要密钥路径。", path: ["keyPath"] });
       }
     }
-  } else if (data.instanceType === "client") {
+  } else if (data.instanceType === "入口(c)") {
      if (!["master", "0", "1", "2"].includes(data.tlsMode)) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "客户端TLS模式无效。",
+        message: "入口(c) TLS模式无效。",
         path: ["tlsMode"],
       });
     }
@@ -147,3 +144,4 @@ export const modifyInstanceConfigApiSchema = z.object({
 export const updateInstanceSchema = z.object({
   action: z.enum(["start", "stop", "restart"]),
 });
+

@@ -13,36 +13,36 @@ export function formatHostForUrl(host: string | null | undefined): string {
 }
 
 export function buildUrlFromFormValues(params: {
-  instanceType: 'server' | 'client';
+  instanceType: "入口(c)" | "出口(s)"; // Updated to use new terminology
   tunnelAddress: string;
   targetAddress: string;
   logLevel: MasterLogLevel;
-  tlsMode?: MasterTlsMode | '2'; // tlsMode from form
+  tlsMode?: MasterTlsMode | '2'; 
   certPath?: string;
   keyPath?: string;
-}, activeApiConfig: NamedApiConfig | null): string { // Added activeApiConfig
-  let url = `${params.instanceType}://${params.tunnelAddress}/${params.targetAddress}`;
+}, activeApiConfig: NamedApiConfig | null): string { 
+  const schemeType = params.instanceType === "出口(s)" ? "server" : "client"; // Map to API expected values
+  let url = `${schemeType}://${params.tunnelAddress}/${params.targetAddress}`;
   const queryParams = new URLSearchParams();
 
   if (params.logLevel && params.logLevel !== "master") {
     queryParams.append('log', params.logLevel);
   }
 
-  if (params.instanceType === 'server') {
+  if (schemeType === 'server') { // Use mapped schemeType for logic
     let effectiveTlsMode = params.tlsMode;
 
     if (effectiveTlsMode === 'master') {
       if (activeApiConfig?.masterDefaultTlsMode && activeApiConfig.masterDefaultTlsMode !== 'master') {
         effectiveTlsMode = activeApiConfig.masterDefaultTlsMode;
       } else {
-        effectiveTlsMode = '1'; // Default to '1' (self-signed) for servers if master default is also 'master' or undefined
+        effectiveTlsMode = '1'; 
       }
     }
     
-    if (effectiveTlsMode && effectiveTlsMode !== "master") { // Should not be master after resolution
+    if (effectiveTlsMode && effectiveTlsMode !== "master") { 
       queryParams.append('tls', effectiveTlsMode);
       if (effectiveTlsMode === '2') {
-        // Cert/Key paths are taken directly from params, which should be from the form
         if (params.certPath && params.certPath.trim() !== '') queryParams.append('crt', params.certPath.trim());
         if (params.keyPath && params.keyPath.trim() !== '') queryParams.append('key', params.keyPath.trim());
       }
