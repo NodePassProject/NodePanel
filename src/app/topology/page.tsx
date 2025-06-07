@@ -18,28 +18,46 @@ import ReactFlow, {
   type Node,
   PanOnScrollMode,
 } from 'reactflow';
-import 'reactflow/dist/style.css'; // Essential for ReactFlow styles
+import 'reactflow/dist/style.css';
 
 import { AppLayout } from '@/components/layout/AppLayout';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { TopologyToolbar } from './components/TopologyToolbar';
 import { MastersPalette } from './components/MastersPalette';
-import { PropertiesDisplayPanel } from './components/PropertiesDisplayPanel'; // New component
+import { PropertiesDisplayPanel } from './components/PropertiesDisplayPanel';
 import type { NamedApiConfig } from '@/hooks/use-api-key';
 import { useToast } from '@/hooks/use-toast';
+import { Button } from '@/components/ui/button';
+import { Settings, ListTree, InfoIcon as Info } from 'lucide-react'; // Renamed Info from lucide-react to avoid conflict
 
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
 
 const initialNodes: Node[] = [];
 const initialEdges: Edge[] = [];
 
-// ReactFlow canvas component
-function FlowCanvas() {
+function TopologyFlow() {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
   const [nodeIdCounter, setNodeIdCounter] = useState(0);
   const { toast } = useToast();
   const reactFlowInstance = useReactFlow();
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
+
+  // State for dynamic panel visibility
+  const [isToolbarPopoverOpen, setIsToolbarPopoverOpen] = useState(false);
+  const [isMastersSheetOpen, setIsMastersSheetOpen] = useState(false);
+  const [isPropertiesSheetOpen, setIsPropertiesSheetOpen] = useState(false);
 
 
   const onConnect = useCallback(
@@ -52,161 +70,222 @@ function FlowCanvas() {
     const newCounter = nodeIdCounter + 1;
     setNodeIdCounter(newCounter);
     const newNodeId = `node-${newCounter}`;
-    const newNodeData = { label: `Node ${newCounter}` };
+    const newNodeData = { label: `新节点 ${newCounter}` };
     const newNode: Node = {
       id: newNodeId,
-      type: 'default', // Or your custom node type
+      type: 'default',
       data: newNodeData,
       position: {
-        x: Math.random() * 400 + 50,
-        y: Math.random() * 200 + 50,
+        x: Math.random() * reactFlowInstance.getViewport().width / 2 + 50,
+        y: Math.random() * reactFlowInstance.getViewport().height / 2 + 50,
       },
       sourcePosition: Position.Right,
       targetPosition: Position.Left,
     };
     setNodes((nds) => nds.concat(newNode));
-  }, [nodeIdCounter, setNodes, setNodeIdCounter]);
+    toast({ title: "节点已添加", description: `添加了节点 "${newNodeData.label}".` });
+  }, [nodeIdCounter, setNodes, setNodeIdCounter, reactFlowInstance, toast]);
 
   const handleAddMasterNodeFromPalette = useCallback((masterConfig: NamedApiConfig) => {
     const newCounter = nodeIdCounter + 1;
     setNodeIdCounter(newCounter);
-    const newNodeId = `master-node-${masterConfig.id}-${newCounter}`; 
+    const newNodeId = `master-node-${masterConfig.id}-${newCounter}`;
     const newNode: Node = {
       id: newNodeId,
-      type: 'default', 
-      data: { 
-        label: `Master: ${masterConfig.name}`,
-        nodeType: 'masterRepresentation', 
+      type: 'default',
+      data: {
+        label: `主控: ${masterConfig.name}`,
+        nodeType: 'masterRepresentation',
         masterId: masterConfig.id,
         masterName: masterConfig.name,
       },
       position: {
-        x: Math.random() * 200 + 20, 
-        y: Math.random() * 150 + 20,
+        x: Math.random() * reactFlowInstance.getViewport().width / 2 + 20,
+        y: Math.random() * reactFlowInstance.getViewport().height / 2 + 20,
       },
-      style: { borderColor: 'hsl(var(--primary))', borderWidth: 2, background: 'hsl(var(--primary)/10)' }, 
+      style: { borderColor: 'hsl(var(--primary))', borderWidth: 2, background: 'hsl(var(--primary)/10)' },
       sourcePosition: Position.Right,
       targetPosition: Position.Left,
     };
     setNodes((nds) => nds.concat(newNode));
-    toast({ title: "Master Node Added", description: `Added "${masterConfig.name}" to the canvas.`});
-  }, [nodeIdCounter, setNodes, setNodeIdCounter, toast]);
-
+    toast({ title: "主控节点已添加", description: `添加主控 "${masterConfig.name}" 到画布.` });
+    setIsMastersSheetOpen(false); // Close palette after adding
+  }, [nodeIdCounter, setNodes, setNodeIdCounter, toast, reactFlowInstance]);
 
   const handleClearCanvas = useCallback(() => {
     setNodes([]);
     setEdges([]);
     setNodeIdCounter(0);
     setSelectedNode(null);
-    toast({ title: "Canvas Cleared"});
+    toast({ title: "画布已清空" });
+    setIsToolbarPopoverOpen(false);
   }, [setNodes, setEdges, setNodeIdCounter, toast]);
 
   const handleCenterView = useCallback(() => {
     const masterNodes = nodes.filter(node => node.data?.nodeType === 'masterRepresentation');
     if (masterNodes.length > 0) {
       const firstMasterNode = masterNodes[0];
-      reactFlowInstance.fitView({ nodes: [{id: firstMasterNode.id}], duration: 300, padding: 0.3 });
-      toast({ title: "View Centered", description: `Focused on Master "${firstMasterNode.data.label}".`});
+      reactFlowInstance.fitView({ nodes: [{ id: firstMasterNode.id }], duration: 300, padding: 0.3 });
+      toast({ title: "视图已居中", description: `聚焦于主控 "${firstMasterNode.data.label}".` });
     } else if (nodes.length > 0) {
-      reactFlowInstance.fitView({duration: 300, padding: 0.1});
-      toast({ title: "View Fitted to All Nodes"});
+      reactFlowInstance.fitView({ duration: 300, padding: 0.1 });
+      toast({ title: "视图已适应所有节点" });
     } else {
-      toast({ title: "Canvas Empty", description: "No nodes to center." , variant: "destructive"});
+      toast({ title: "画布为空", description: "没有可居中的节点.", variant: "destructive" });
     }
+    setIsToolbarPopoverOpen(false);
   }, [reactFlowInstance, nodes, toast]);
 
   const handleFormatLayout = useCallback(() => {
-    toast({ title: "Format Layout", description: "This feature is pending implementation."});
+    toast({ title: "格式化布局", description: "此功能待实现." });
     console.log("Format Layout button clicked. Nodes:", nodes, "Edges:", edges);
+    setIsToolbarPopoverOpen(false);
   }, [nodes, edges, toast]);
 
   const handleSubmitTopology = useCallback(() => {
-    toast({ title: "Submit Topology", description: "This feature is pending implementation."});
+    toast({ title: "提交拓扑", description: "此功能待实现." });
     console.log("Submit Topology button clicked. Nodes:", nodes, "Edges:", edges);
+    setIsToolbarPopoverOpen(false);
   }, [nodes, edges, toast]);
 
   const onSelectionChange = useCallback((params: { nodes: Node[], edges: Edge[] }) => {
     if (params.nodes.length === 1) {
       setSelectedNode(params.nodes[0]);
+      if (!isPropertiesSheetOpen) { // Automatically open properties panel if a node is selected and panel is closed
+        // setIsPropertiesSheetOpen(true); // This can be annoying, let user click
+      }
     } else {
       setSelectedNode(null);
+      // setIsPropertiesSheetOpen(false); // Optionally close if no node is selected
     }
-  }, []);
+  }, [isPropertiesSheetOpen]);
 
+  useEffect(() => {
+    // Close properties panel if the selected node is deleted
+    if (selectedNode && !nodes.find(n => n.id === selectedNode.id)) {
+      setSelectedNode(null);
+      setIsPropertiesSheetOpen(false);
+    }
+  }, [nodes, selectedNode]);
 
   return (
-    <AppLayout>
-      <div className="flex flex-col h-full w-full gap-3" data-testid="topology-page-container">
-        
-        {/* Toolbar Header Card */}
-        <Card className="shrink-0">
-          <CardContent className="p-3">
-            <TopologyToolbar
-              onAddNode={handleAddGenericNode}
-              onCenterView={handleCenterView}
-              onFormatLayout={handleFormatLayout}
-              onClearCanvas={handleClearCanvas}
-              onSubmitTopology={handleSubmitTopology}
-              canSubmit={nodes.length > 0} 
-            />
-          </CardContent>
-        </Card>
+    <div className="h-full w-full relative" data-testid="topology-page-container">
+      <ReactFlow
+        nodes={nodes}
+        edges={edges}
+        onNodesChange={onNodesChange}
+        onEdgesChange={onEdgesChange}
+        onConnect={onConnect}
+        onSelectionChange={onSelectionChange}
+        fitView
+        nodesDraggable={true}
+        nodesConnectable={true}
+        elementsSelectable={true}
+        deleteKeyCode={['Backspace', 'Delete']}
+        panOnScroll
+        selectionOnDrag
+        panOnDrag={[PanOnScrollMode.Free, PanOnScrollMode.Right, PanOnScrollMode.Left]}
+        className="h-full w-full"
+      >
+        <Controls className="react-flow__controls_custom_position_BR" />
+        <MiniMap nodeStrokeWidth={3} zoomable pannable className="react-flow__minimap_custom_position_BL" />
+        <Background variant="dots" gap={16} size={1} />
+      </ReactFlow>
 
-        {/* Main Content Area: Sidebar + Canvas */}
-        <div className="flex flex-row flex-grow gap-3 min-h-0"> {/* min-h-0 is important for flex children to scroll */}
-          {/* Sidebar: Masters Palette and Properties Panel */}
-          <Card className="w-72 shrink-0 flex flex-col"> {/* Fixed width for sidebar */}
-            <CardHeader className="pb-2 pt-4">
-              <CardTitle className="text-lg font-title">主控列表</CardTitle>
-              <CardDescription className="font-sans text-xs">点击主控将其添加到画布。</CardDescription>
-            </CardHeader>
-            <CardContent className="flex-grow py-2 min-h-0 overflow-y-auto"> {/* Ensure MastersPalette can scroll if content overflows */}
-              <MastersPalette onAddMasterNode={handleAddMasterNodeFromPalette} />
-            </CardContent>
-            
-            <div className="my-2 border-t border-border mx-4"></div>
+      {/* Toolbar Popover Trigger */}
+      <Popover open={isToolbarPopoverOpen} onOpenChange={setIsToolbarPopoverOpen}>
+        <PopoverTrigger asChild>
+          <Button
+            variant="outline"
+            size="icon"
+            className="absolute top-4 left-4 z-10 shadow-md rounded-full bg-background/80 backdrop-blur-sm hover:bg-background"
+            aria-label="打开工具栏"
+          >
+            <Settings className="h-5 w-5" />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-auto p-2" side="bottom" align="start">
+          <TopologyToolbar
+            onAddNode={handleAddGenericNode}
+            onCenterView={handleCenterView}
+            onFormatLayout={handleFormatLayout}
+            onClearCanvas={handleClearCanvas}
+            onSubmitTopology={handleSubmitTopology}
+            canSubmit={nodes.length > 0}
+          />
+        </PopoverContent>
+      </Popover>
 
-            <PropertiesDisplayPanel selectedNode={selectedNode} />
-          </Card>
+      {/* Masters Palette Sheet Trigger */}
+      <Sheet open={isMastersSheetOpen} onOpenChange={setIsMastersSheetOpen}>
+        <SheetTrigger asChild>
+          <Button
+            variant="outline"
+            size="icon"
+            className="absolute left-4 top-1/2 -translate-y-[calc(50%+2.5rem)] z-10 shadow-md rounded-full bg-background/80 backdrop-blur-sm hover:bg-background"
+            aria-label="打开主控列表"
+          >
+            <ListTree className="h-5 w-5" />
+          </Button>
+        </SheetTrigger>
+        <SheetContent side="left" className="w-72 p-0 flex flex-col">
+          <SheetHeader className="p-4 border-b">
+            <SheetTitle className="font-title text-lg">主控列表</SheetTitle>
+            <SheetDescription className="font-sans text-xs">
+              点击或拖拽主控将其添加到画布。
+            </SheetDescription>
+          </SheetHeader>
+          <div className="p-4 flex-grow overflow-y-auto">
+            <MastersPalette onAddMasterNode={handleAddMasterNodeFromPalette} />
+          </div>
+        </SheetContent>
+      </Sheet>
 
-          {/* Canvas Area */}
-          <Card className="flex-grow overflow-hidden"> {/* Canvas card takes remaining space and handles its own overflow */}
-            <CardContent className="p-0 h-full w-full">
-                <ReactFlow
-                  nodes={nodes}
-                  edges={edges}
-                  onNodesChange={onNodesChange}
-                  onEdgesChange={onEdgesChange}
-                  onConnect={onConnect}
-                  onSelectionChange={onSelectionChange}
-                  fitView
-                  nodesDraggable={true}
-                  nodesConnectable={true}
-                  elementsSelectable={true}
-                  deleteKeyCode={['Backspace', 'Delete']}
-                  panOnScroll
-                  selectionOnDrag
-                  panOnDrag={[PanOnScrollMode.Free, PanOnScrollMode.Right, PanOnScrollMode.Left]} // Ensure panOnDrag is correctly typed
-                  className="h-full w-full" // ReactFlow will fill its parent
-                >
-                  <Controls />
-                  <MiniMap nodeStrokeWidth={3} zoomable pannable />
-                  <Background variant="dots" gap={12} size={1} />
-                </ReactFlow>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-    </AppLayout>
+      {/* Properties Panel Sheet Trigger - Only visible if a node is selected */}
+      {selectedNode && (
+        <Sheet open={isPropertiesSheetOpen} onOpenChange={setIsPropertiesSheetOpen}>
+          <SheetTrigger asChild>
+            <Button
+              variant="outline"
+              size="icon"
+              className="absolute right-4 top-1/2 -translate-y-1/2 z-10 shadow-md rounded-full bg-background/80 backdrop-blur-sm hover:bg-background"
+              aria-label="打开属性面板"
+            >
+              <Info className="h-5 w-5" />
+            </Button>
+          </SheetTrigger>
+          <SheetContent side="right" className="w-80 p-0 flex flex-col">
+             <PropertiesDisplayPanel selectedNode={selectedNode} />
+          </SheetContent>
+        </Sheet>
+      )}
+      
+      <style jsx global>{`
+        .react-flow__controls_custom_position_BR {
+          bottom: 10px !important;
+          right: 10px !important;
+          left: auto !important;
+          top: auto !important;
+          transform: none !important;
+        }
+        .react-flow__minimap_custom_position_BL {
+          bottom: 10px !important;
+          left: 10px !important;
+          right: auto !important;
+          top: auto !important;
+        }
+      `}</style>
+    </div>
   );
 }
 
-
 export default function TopologyPageContainer() {
   return (
-    <ReactFlowProvider>
-      <FlowCanvas />
-    </ReactFlowProvider>
-  )
+    <AppLayout>
+      <ReactFlowProvider>
+        <TopologyFlow />
+      </ReactFlowProvider>
+    </AppLayout>
+  );
 }
-
+    
