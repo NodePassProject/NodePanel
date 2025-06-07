@@ -20,8 +20,8 @@ import ReactFlow, {
   type Node,
   type OnNodesChange,
   type OnEdgesChange,
-  PanOnScrollMode,
-  Panel, // Import Panel
+  PanOnScrollMode, // Import PanOnScrollMode
+  Panel,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { useTheme } from 'next-themes';
@@ -33,6 +33,7 @@ import { PropertiesDisplayPanel } from './components/PropertiesDisplayPanel';
 import type { NamedApiConfig } from '@/hooks/use-api-key';
 import { useToast } from '@/hooks/use-toast';
 import { Separator } from '@/components/ui/separator';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'; // Import Card components
 
 const initialNodes: Node[] = [];
 const initialEdges: Edge[] = [];
@@ -45,6 +46,7 @@ interface ActualTopologyFlowWithStateProps {
   onConnect: (params: Connection | Edge) => void;
   onSelectionChange: ({ nodes, edges }: { nodes: Node[]; edges: Edge[] }) => void;
   reactFlowWrapperRef: React.RefObject<HTMLDivElement>;
+  // Props for toolbar actions
   onCenterView: (instance: ReturnType<typeof useReactFlow>) => void;
   onFormatLayout: () => void;
   onClearCanvas: () => void;
@@ -76,7 +78,7 @@ const ActualTopologyFlowWithState: React.FC<ActualTopologyFlowWithStateProps> = 
   const miniMapStyle = useMemo(() => ({
     backgroundColor: resolvedTheme === 'dark' ? 'hsl(var(--popover))' : 'hsl(var(--card))',
     border: `1px solid hsl(var(--border))`,
-    borderRadius: '0.375rem',
+    borderRadius: '0.375rem', // Ensure rounded corners
   }), [resolvedTheme]);
 
   const memoizedControls = useMemo(() => <Controls style={{ bottom: 10, right: 10 }} />, []);
@@ -101,12 +103,13 @@ const ActualTopologyFlowWithState: React.FC<ActualTopologyFlowWithStateProps> = 
         deleteKeyCode={['Backspace', 'Delete']}
         panOnScroll={false}
         zoomOnScroll={true}
-        selectionOnDrag
-        panOnDrag={[PanOnScrollMode.Free, PanOnScrollMode.Right, PanOnScrollMode.Left]}
+        panOnDrag={[PanOnScrollMode.Free, PanOnScrollMode.Right, PanOnScrollMode.Left]} // Enable panning
+        selectionOnDrag // Allow selection by dragging a box
         className="h-full w-full"
         nodeOrigin={[0.5, 0.5]}
       >
         <Panel position="top-right" className="!m-0 !p-2 bg-transparent">
+          {/* Toolbar is now a direct child of ReactFlow using Panel */}
           <ToolbarWrapperComponent
             onCenterView={onCenterView}
             onFormatLayout={onFormatLayout}
@@ -210,6 +213,7 @@ export default function TopologyPage() {
         position.x += (Math.random() * 50 - 25);
         position.y += (Math.random() * 50 - 25);
       } else {
+        // Fallback if bounds are not available (e.g., during initial render or if hidden)
         const currentViewport = reactFlowInstance.getViewport();
         position = {
             x: -currentViewport.x / currentViewport.zoom + 150 + (Math.random() * 50 - 25),
@@ -217,12 +221,14 @@ export default function TopologyPage() {
         };
       }
     } else {
-      const currentViewport = reactFlowInstance.getViewport();
-      position = {
-          x: -currentViewport.x / currentViewport.zoom + 150 + (Math.random() * 50 - 25),
-          y: -currentViewport.y / currentViewport.zoom + 150 + (Math.random() * 50 - 25),
-      };
+         // Fallback if ref is not available
+        const currentViewport = reactFlowInstance.getViewport();
+        position = {
+            x: -currentViewport.x / currentViewport.zoom + 150 + (Math.random() * 50 - 25),
+            y: -currentViewport.y / currentViewport.zoom + 150 + (Math.random() * 50 - 25),
+        };
     }
+
 
     const finalNewNode: Node = {
       id: newNodeId,
@@ -237,10 +243,10 @@ export default function TopologyPage() {
 
   const handleAddMasterNodeFromPalette = useCallback((masterConfig: NamedApiConfig, rfInstance: ReturnType<typeof useReactFlow>) => {
     const masterNodeData: Omit<Node, 'id' | 'position'> = {
-      type: 'default',
+      type: 'default', // Or a custom type if you have one for master nodes
       data: {
         label: `主控: ${masterConfig.name}`,
-        nodeType: 'masterRepresentation',
+        nodeType: 'masterRepresentation', // Custom property to identify node type
         masterId: masterConfig.id,
         masterName: masterConfig.name,
         apiUrl: masterConfig.apiUrl,
@@ -252,10 +258,10 @@ export default function TopologyPage() {
         borderWidth: 2,
         background: 'hsl(var(--primary)/10)',
         borderRadius: '0.375rem',
-        padding: '8px 12px',
-        fontSize: '0.75rem',
+        padding: '8px 12px', // Adjusted padding for visual
+        fontSize: '0.75rem', // Smaller font size for node
       },
-      sourcePosition: Position.Right,
+      sourcePosition: Position.Right, // Example positions
       targetPosition: Position.Left,
     };
     addNodeToCanvas(masterNodeData, rfInstance);
@@ -284,31 +290,38 @@ export default function TopologyPage() {
     toast({ title: "提交拓扑", description: "此功能待实现。" });
   }, [toast]);
 
+
   return (
     <AppLayout>
-      <ReactFlowProvider>
-        <div className="flex flex-row flex-grow h-full overflow-hidden">
+      <ReactFlowProvider> {/* Provider wraps the entire flex layout */}
+        <div className="flex flex-row flex-grow h-full overflow-hidden"> {/* Main horizontal layout */}
           {/* Left Sidebar */}
           <div className="w-60 flex-shrink-0 flex flex-col border-r bg-muted/30 shadow-sm">
-            {/* Masters Palette Section */}
-            <div className="p-2 flex flex-col" style={{ flexGrow: 1, flexBasis: 0, minHeight: '200px' }}>
-              <h2 className="text-base font-semibold font-title px-1 flex-shrink-0">主控列表</h2>
-              <p className="text-xs text-muted-foreground font-sans px-1 mb-2 flex-shrink-0">点击主控添加到画布。</p>
-              <div className="flex-grow overflow-y-auto">
+            {/* Masters Palette Section - Card 1 (Top half) */}
+            <Card className="flex flex-col h-1/2 m-2 shadow-md rounded-lg">
+              <CardHeader className="p-3 border-b">
+                <CardTitle className="text-base font-semibold font-title">主控列表</CardTitle>
+                <CardDescription className="text-xs text-muted-foreground font-sans">点击主控添加到画布。</CardDescription>
+              </CardHeader>
+              <CardContent className="flex-grow overflow-y-auto p-1">
                 <MastersPaletteWrapperComponent onAddMasterNodeFromPalette={handleAddMasterNodeFromPalette} />
-              </div>
-            </div>
-            <Separator />
-            {/* Properties Panel Section */}
-            <div className="p-2 flex flex-col" style={{ flexGrow: 1, flexBasis: 0, minHeight: '200px' }}>
-              <h2 className="text-base font-semibold font-title px-1 flex-shrink-0">节点属性</h2>
-              <p className="text-xs text-muted-foreground font-sans px-1 mb-2 flex-shrink-0">
-                {selectedNode ? `选中: ${selectedNode.data.label || selectedNode.id}` : '点击节点查看属性。'}
-              </p>
-              <div className="flex-grow overflow-y-auto">
+              </CardContent>
+            </Card>
+
+            <Separator className="my-0" />
+
+            {/* Properties Panel Section - Card 2 (Bottom half, grows) */}
+            <Card className="flex flex-col flex-grow m-2 shadow-md rounded-lg min-h-0">
+              <CardHeader className="p-3 border-b">
+                <CardTitle className="text-base font-semibold font-title">节点属性</CardTitle>
+                <CardDescription className="text-xs text-muted-foreground font-sans">
+                  {selectedNode ? `选中: ${selectedNode.data.label || selectedNode.id}` : '点击节点查看属性。'}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="flex-grow overflow-y-auto p-1">
                 <PropertiesDisplayPanel selectedNode={selectedNode} />
-              </div>
-            </div>
+              </CardContent>
+            </Card>
           </div>
 
           {/* Right Area (Canvas) */}

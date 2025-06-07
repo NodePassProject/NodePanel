@@ -3,10 +3,9 @@
 
 import React from 'react';
 import { Button } from '@/components/ui/button';
-import { LocateFixed, LayoutDashboard, Trash2, Send } from 'lucide-react'; // PlusCircle removed
+import { LocateFixed, LayoutDashboard, Trash2, Send } from 'lucide-react';
 
 interface TopologyToolbarProps {
-  // onAddNode prop removed
   onCenterView: () => void;
   onFormatLayout: () => void;
   onClearCanvas: () => void;
@@ -15,7 +14,6 @@ interface TopologyToolbarProps {
 }
 
 export function TopologyToolbar({
-  // onAddNode removed
   onCenterView,
   onFormatLayout,
   onClearCanvas,
@@ -24,7 +22,6 @@ export function TopologyToolbar({
 }: TopologyToolbarProps) {
   return (
     <div className="flex flex-row flex-wrap gap-2 items-center">
-      {/* "添加节点" (Add Node) button removed */}
       <Button onClick={onCenterView} size="sm" variant="outline" className="font-sans">
         <LocateFixed className="mr-2 h-4 w-4" />
         居中视图
@@ -37,7 +34,7 @@ export function TopologyToolbar({
         <Send className="mr-2 h-4 w-4" />
         提交拓扑
       </Button>
-      <Button onClick={onClearCanvas} size="sm" variant="destructive" className="font-sans"> {/* Removed ml-auto, parent will handle alignment */}
+      <Button onClick={onClearCanvas} size="sm" variant="destructive" className="font-sans">
         <Trash2 className="mr-2 h-4 w-4" />
         清空画布
       </Button>

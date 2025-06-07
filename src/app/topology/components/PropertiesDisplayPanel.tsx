@@ -12,17 +12,13 @@ export function PropertiesDisplayPanel({ selectedNode }: PropertiesDisplayPanelP
   if (!selectedNode) {
     return (
       <div className="p-1 text-xs text-muted-foreground font-sans text-center h-full flex items-center justify-center">
-        {/* Message is now handled by parent in page.tsx */}
+        {/* Message is handled by parent CardDescription */}
       </div>
     );
   }
 
   return (
     <div className="space-y-2 text-xs font-sans p-1"> {/* Padding for internal content */}
-      <div>
-        <strong className="text-muted-foreground">ID:</strong>
-        <span className="ml-1 font-mono break-all">{selectedNode.id}</span>
-      </div>
       <div>
         <strong className="text-muted-foreground">类型 (Type):</strong>
         <span className="ml-1">{selectedNode.type || 'N/A'}</span>
@@ -45,28 +41,7 @@ export function PropertiesDisplayPanel({ selectedNode }: PropertiesDisplayPanelP
           <span className="ml-1 font-mono break-all">{selectedNode.data.masterId}</span>
         </div>
       )}
-      <div>
-        <strong className="text-muted-foreground">位置 (Position):</strong>
-        <span className="ml-1 font-mono">
-          X: {selectedNode.position.x.toFixed(0)}, Y: {selectedNode.position.y.toFixed(0)}
-        </span>
-      </div>
-      {selectedNode.width && selectedNode.height && (
-         <div>
-          <strong className="text-muted-foreground">尺寸 (Size):</strong>
-          <span className="ml-1 font-mono">
-            W: {selectedNode.width.toFixed(0)}, H: {selectedNode.height.toFixed(0)}
-          </span>
-        </div>
-      )}
-      {Object.keys(selectedNode.data).length > 0 && (
-        <div className="pt-2">
-          <strong className="text-muted-foreground">其他数据 (Data):</strong>
-          <pre className="mt-1 p-2 text-[10px] bg-muted/30 rounded-md whitespace-pre-wrap break-all leading-snug">
-            {JSON.stringify(selectedNode.data, null, 2)}
-          </pre>
-        </div>
-      )}
+      {/* Removed ID, Position, Size, and Other Data sections */}
     </div>
   );
 }
