@@ -3,7 +3,6 @@
 
 import React from 'react';
 import { useApiConfig, type NamedApiConfig } from '@/hooks/use-api-key';
-import { Button } from '@/components/ui/button';
 import { Cog } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import type { ReactFlowInstance } from 'reactflow';
@@ -17,32 +16,33 @@ export function MastersPalette({ onAddMasterNode }: MastersPaletteProps) {
   // reactFlowInstance will be passed to onAddMasterNode by the wrapper component.
 
   return (
-    <div className="h-full"> {/* Removed p-1, parent div in page.tsx handles padding and scrolling */}
+    <div className="h-full">
       {isLoading ? (
-        <div className="space-y-2 p-1"> {/* Add p-1 back if needed for skeleton internal spacing */}
+        <div className="space-y-2">
           {Array.from({ length: 3 }).map((_, i) => (
-            <Skeleton key={i} className="h-9 w-full" />
+            <Skeleton key={i} className="h-10 w-full rounded-md" />
           ))}
         </div>
       ) : apiConfigsList.length === 0 ? (
-        <p className="text-xs text-muted-foreground p-1 font-sans text-center">未配置任何主控。</p>
+        <p className="text-xs text-muted-foreground font-sans text-center">未配置任何主控。</p>
       ) : (
-        <div className="space-y-1 p-1"> {/* Add p-1 back if needed for button list internal spacing */}
+        <div className="space-y-2">
           {apiConfigsList.map((config) => (
-            <Button
+            <div
               key={config.id}
-              variant="ghost"
-              size="sm"
-              className="w-full justify-start font-sans text-xs"
               onClick={(event) => {
-                  const mockReactFlowInstance = {} as ReactFlowInstance;
+                  // The actual ReactFlowInstance will be injected by the wrapper.
+                  // For type safety, we cast to a partial and then to full if really needed,
+                  // but here the wrapper handles the actual instance.
+                  const mockReactFlowInstance = {} as ReactFlowInstance; 
                   onAddMasterNode(config, mockReactFlowInstance);
               }}
+              className="flex items-center p-2 border rounded-md bg-card text-card-foreground hover:bg-muted/50 cursor-pointer transition-colors text-xs font-sans"
               title={`将主控 "${config.name}" 添加到画布`}
             >
-              <Cog className="mr-2 h-4 w-4 text-primary" />
-              {config.name}
-            </Button>
+              <Cog className="mr-2 h-4 w-4 text-primary flex-shrink-0" />
+              <span className="truncate">{config.name}</span>
+            </div>
           ))}
         </div>
       )}
