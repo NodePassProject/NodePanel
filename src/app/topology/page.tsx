@@ -42,7 +42,7 @@ export default function TopologyPageContainer() {
   return (
     <AppLayout>
       <div className="flex flex-col flex-grow"> {/* Ensures AppLayout's main area is used for height */}
-        <div className="flex-grow p-1 flex flex-col"> {/* p-1 for minimal margin */}
+        <div className="flex-grow p-1 flex flex-col"> {/* This div provides padding and flex context */}
           <ReactFlowProvider>
             <TopologyFlow />
           </ReactFlowProvider>
@@ -81,9 +81,8 @@ function TopologyFlow() {
     const fallbackX = 100; 
     const fallbackY = 100;
 
-    // Ensure viewport dimensions are valid before using them
-    const positionX = viewport.width > 0 ? (Math.random() * viewport.width * 0.5) + viewport.x : fallbackX;
-    const positionY = viewport.height > 0 ? (Math.random() * viewport.height * 0.5) + viewport.y : fallbackY;
+    const positionX = viewport.x + (viewport.width > 0 ? (Math.random() * viewport.width * 0.5) : fallbackX);
+    const positionY = viewport.y + (viewport.height > 0 ? (Math.random() * viewport.height * 0.5) : fallbackY);
     
     const newNode: Node = {
       id: newNodeId,
@@ -107,8 +106,8 @@ function TopologyFlow() {
     const fallbackX = 80;
     const fallbackY = 80;
     
-    const positionX = viewport.width > 0 ? (Math.random() * viewport.width * 0.4) + viewport.x : fallbackX;
-    const positionY = viewport.height > 0 ? (Math.random() * viewport.height * 0.4) + viewport.y : fallbackY;
+    const positionX = viewport.x + (viewport.width > 0 ? (Math.random() * viewport.width * 0.4) : fallbackX);
+    const positionY = viewport.y + (viewport.height > 0 ? (Math.random() * viewport.height * 0.4) : fallbackY);
         
     const newNode: Node = {
       id: newNodeId,
@@ -184,18 +183,28 @@ function TopologyFlow() {
        }
     } else {
       setSelectedNode(null);
-       if (isPropertiesPopoverOpen && selectedNodesList.length === 0) {
+       if (isPropertiesPopoverOpen && selectedNodesList.length === 0) { // Auto-close if selection cleared
          setIsPropertiesPopoverOpen(false);
        }
     }
   }, [isPropertiesPopoverOpen, setIsPropertiesPopoverOpen]);
 
+  // Auto-open/close Properties Popover based on selection and current state
+  useEffect(() => {
+    if (selectedNode && !isPropertiesPopoverOpen) {
+      setIsPropertiesPopoverOpen(true);
+    } else if (!selectedNode && isPropertiesPopoverOpen) {
+      setIsPropertiesPopoverOpen(false);
+    }
+  }, [selectedNode, isPropertiesPopoverOpen]);
+
+  // Deselect node if it's removed from the nodes array
   useEffect(() => {
     if (selectedNode && !nodes.find(n => n.id === selectedNode.id)) {
       setSelectedNode(null);
-      if (isPropertiesPopoverOpen) setIsPropertiesPopoverOpen(false);
+      // Properties popover will close via the onSelectionChange effect
     }
-  }, [nodes, selectedNode, isPropertiesPopoverOpen]);
+  }, [nodes, selectedNode]);
 
   const memoizedControls = useMemo(() => <Controls style={{ bottom: 10, right: 10 }} />, []);
   const memoizedMiniMap = useMemo(() => <MiniMap nodeStrokeWidth={3} zoomable pannable style={{ bottom: 10, left: 10, backgroundColor: 'hsl(var(--background)/0.8)'}} className="rounded-md shadow-md border border-border" />, []);
@@ -225,7 +234,7 @@ function TopologyFlow() {
         {memoizedBackground}
       </ReactFlow>
 
-      <div className="absolute top-3 left-3 z-20 flex items-center space-x-2 p-1.5 bg-background/60 backdrop-blur-sm rounded-lg shadow-md border border-border">
+      <div className="absolute top-3 left-3 z-10 flex items-center space-x-2 p-1.5 bg-background/60 backdrop-blur-sm rounded-lg shadow-md border border-border">
         <Popover open={isToolbarPopoverOpen} onOpenChange={setIsToolbarPopoverOpen}>
           <PopoverTrigger asChild>
             <Button
@@ -277,7 +286,7 @@ function TopologyFlow() {
                 <InfoIcon className="h-4 w-4" />
               </Button>
             </PopoverTrigger>
-            <PopoverContent side="bottom" align="start" className="w-80 p-0 flex flex-col">
+            <PopoverContent side="bottom" align="start" className="w-80 p-0 flex flex-col max-h-[400px]">
                <PropertiesDisplayPanel selectedNode={selectedNode} />
             </PopoverContent>
           </Popover>
@@ -286,3 +295,4 @@ function TopologyFlow() {
     </div>
   );
 }
+
