@@ -11,14 +11,14 @@ interface PropertiesDisplayPanelProps {
 export function PropertiesDisplayPanel({ selectedNode }: PropertiesDisplayPanelProps) {
   if (!selectedNode) {
     return (
-      <div className="p-3 text-xs text-muted-foreground font-sans text-center h-full flex items-center justify-center">
-        点击画布上的节点以查看其详细属性。
+      <div className="p-1 text-xs text-muted-foreground font-sans text-center h-full flex items-center justify-center">
+        {/* Message is now handled by parent in page.tsx */}
       </div>
     );
   }
 
   return (
-    <div className="space-y-2 text-xs font-sans p-1">
+    <div className="space-y-2 text-xs font-sans p-1"> {/* Padding for internal content */}
       <div>
         <strong className="text-muted-foreground">ID:</strong>
         <span className="ml-1 font-mono break-all">{selectedNode.id}</span>
