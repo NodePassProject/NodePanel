@@ -69,6 +69,13 @@ export const createInstanceFormSchema = z.object({
           path: ["serverTargetAddressForAutoCreate"],
         });
       }
+      if (!data.serverApiId) { 
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "自动创建出口(s)时，必须选择出口(s)所属主控。",
+          path: ["serverApiId"],
+        });
+      }
     } else {
       // Mode: 入口(c) direct connect to existing server
       // tunnelAddress must be host:port
@@ -164,3 +171,4 @@ export const createInstanceApiSchema = z.object({
 export const updateInstanceSchema = z.object({
   action: z.enum(["start", "stop", "restart"]),
 });
+

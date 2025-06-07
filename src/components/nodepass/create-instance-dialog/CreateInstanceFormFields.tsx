@@ -7,7 +7,7 @@ import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, For
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, Info, Network, Settings2, Share2, Zap } from 'lucide-react'; // Added Zap icon
+import { Loader2, Info, Network, Settings2, Share2, Zap } from 'lucide-react';
 import type { CreateInstanceFormValues } from '@/zod-schemas/nodepass';
 import type { NamedApiConfig } from '@/hooks/use-api-key';
 import { MASTER_TLS_MODE_DISPLAY_MAP } from './constants';
@@ -16,7 +16,7 @@ interface CreateInstanceFormFieldsProps {
   form: UseFormReturn<CreateInstanceFormValues>;
   instanceType: "入口(c)" | "出口(s)";
   tlsMode?: string;
-  isSingleEndedForward: boolean; // New prop
+  isSingleEndedForward: boolean;
   autoCreateServer: boolean;
   activeApiConfig: NamedApiConfig | null;
   apiConfigsList: NamedApiConfig[];
@@ -31,7 +31,7 @@ export function CreateInstanceFormFields({
   form,
   instanceType,
   tlsMode,
-  isSingleEndedForward, // Use new prop
+  isSingleEndedForward,
   autoCreateServer,
   activeApiConfig,
   apiConfigsList,
@@ -50,7 +50,7 @@ export function CreateInstanceFormFields({
     ? MASTER_TLS_MODE_DISPLAY_MAP[activeApiConfig.masterDefaultTlsMode as keyof typeof MASTER_TLS_MODE_DISPLAY_MAP] || '主控配置'
     : '主控配置';
 
-  const otherApiConfigs = apiConfigsList.filter(config => config.id !== activeApiConfig?.id);
+  const allMasterConfigsForServerSelection = apiConfigsList;
 
   return (
     <Form {...form}>
@@ -107,7 +107,7 @@ export function CreateInstanceFormFields({
           />
         )}
 
-        {instanceType === '入口(c)' && !isSingleEndedForward && ( // Show autoCreateServer only if NOT single-ended
+        {instanceType === '入口(c)' && !isSingleEndedForward && (
           <FormField
             control={form.control}
             name="autoCreateServer"
@@ -136,7 +136,7 @@ export function CreateInstanceFormFields({
           />
         )}
 
-        {instanceType === '入口(c)' && autoCreateServer && !isSingleEndedForward && ( // Show serverApiId only if autoCreate and NOT single-ended
+        {instanceType === '入口(c)' && autoCreateServer && !isSingleEndedForward && (
           <FormField
             control={form.control}
             name="serverApiId"
@@ -149,17 +149,17 @@ export function CreateInstanceFormFields({
                 <Select
                   onValueChange={field.onChange}
                   value={field.value || ""}
-                  disabled={otherApiConfigs.length === 0}
+                  disabled={allMasterConfigsForServerSelection.length === 0}
                 >
                   <FormControl>
                     <SelectTrigger className="text-xs font-sans h-9">
-                      <SelectValue placeholder={otherApiConfigs.length === 0 ? "无其他可用主控" : "选择出口(s)创建主控"} />
+                      <SelectValue placeholder={allMasterConfigsForServerSelection.length === 0 ? "无可用主控" : "选择出口(s)创建主控"} />
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
-                    {otherApiConfigs.map(config => (
+                    {allMasterConfigsForServerSelection.map(config => (
                       <SelectItem key={config.id} value={config.id} className="font-sans text-xs">
-                        {config.name}
+                        {config.name}{config.id === activeApiConfig?.id ? " (当前客户端主控)" : ""}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -167,11 +167,6 @@ export function CreateInstanceFormFields({
                 {showDetailedDescriptions && (
                   <FormDescription className="font-sans text-xs mt-0.5">
                     选择自动创建的出口(s)实例将归属于哪个主控。
-                  </FormDescription>
-                )}
-                {autoCreateServer && otherApiConfigs.length === 0 && (
-                  <FormDescription className="font-sans text-xs text-destructive pt-0.5">
-                    自动创建出口(s)需要至少一个其他主控配置。
                   </FormDescription>
                 )}
                 <FormMessage className="text-xs" />
