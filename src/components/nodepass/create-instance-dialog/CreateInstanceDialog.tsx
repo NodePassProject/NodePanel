@@ -24,7 +24,7 @@ import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
 import { nodePassApi } from '@/lib/api';
 import { useApiConfig, type NamedApiConfig } from '@/hooks/use-api-key';
 import type { AppLogEntry } from '../EventLog';
-import { extractHostname, extractPort, isWildcardHostname } from '@/lib/url-utils'; // parseNodePassUrl removed as not directly used here for parsing
+import { extractHostname, extractPort, isWildcardHostname, parseNodePassUrl } from '@/lib/url-utils';
 
 import { CreateInstanceFormFields } from './CreateInstanceFormFields';
 import { buildUrlFromFormValues, formatHostForUrl, type BuildUrlParams } from './utils';
@@ -69,7 +69,8 @@ function prepareClientUrlParams(
       onLog?.('单端转发模式下，目标地址 (业务数据) 是必需的。', 'ERROR');
       return null;
     }
-    clientTunnelAddress = `[::]:${values.tunnelAddress}`; // tunnelAddress from form is local port
+    // For single-ended, tunnelAddress from form IS the local port. URL construction will prepend [::]:
+    clientTunnelAddress = values.tunnelAddress;
     clientTargetAddress = values.targetAddress; // targetAddress from form is remote target
   } else if (values.autoCreateServer) {
     // Mode: Client - Auto-Create Server
@@ -107,8 +108,9 @@ function prepareClientUrlParams(
     }
     clientTunnelAddress = `${formatHostForUrl(clientConnectToServerHost)}:${serverListenPortFromForm}`;
 
+    // For auto-create server, client's local forward target should default to [::]:<auto_generated_port>
     let clientActualLocalForwardPort: string;
-    const clientLocalForwardPortFromForm = values.targetAddress?.trim();
+    const clientLocalForwardPortFromForm = values.targetAddress?.trim(); // targetAddress from form is local port hint
     if (clientLocalForwardPortFromForm && /^[0-9]+$/.test(clientLocalForwardPortFromForm)) {
       clientActualLocalForwardPort = clientLocalForwardPortFromForm;
     } else {
@@ -117,7 +119,7 @@ function prepareClientUrlParams(
         onLog?.(`入口(c)本地转发端口 "${clientLocalForwardPortFromForm}" 无效，已自动设为 ${clientActualLocalForwardPort}。`, 'WARN');
       }
     }
-    clientTargetAddress = `[::]:${clientActualLocalForwardPort}`; // Client listens on all local interfaces for forwarding
+    clientTargetAddress = `[::]:${clientActualLocalForwardPort}`;
   } else {
     // Mode: Client - Direct Connect to Existing Server
     clientTunnelAddress = values.tunnelAddress; // tunnelAddress from form is remote server's tunnel
@@ -141,7 +143,7 @@ function prepareClientUrlParams(
     tunnelAddress: clientTunnelAddress,
     targetAddress: clientTargetAddress,
     logLevel: values.logLevel,
-    tlsMode: values.tlsMode, // For client, tlsMode dictates connection behavior or mTLS certs
+    tlsMode: values.tlsMode, 
     certPath: values.tlsMode === '2' ? values.certPath : '',
     keyPath: values.tlsMode === '2' ? values.keyPath : '',
   };
@@ -182,7 +184,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
     resolver: zodResolver(createInstanceFormSchema),
     defaultValues: {
       instanceType: '入口(c)',
-      isSingleEndedForward: false, 
+      isSingleEndedForward: false,
       autoCreateServer: false,
       serverApiId: undefined,
       tunnelAddress: '',
@@ -198,7 +200,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
   const instanceType = form.watch("instanceType");
   const tlsModeWatch = form.watch("tlsMode");
   const autoCreateServerWatched = form.watch("autoCreateServer");
-  const isSingleEndedForwardWatched = form.watch("isSingleEndedForward"); 
+  const isSingleEndedForwardWatched = form.watch("isSingleEndedForward");
   const tunnelAddressValue = form.watch("tunnelAddress");
 
   useEffect(() => {
@@ -222,57 +224,61 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
   }, [open, form]);
 
  useEffect(() => {
-    // When instanceType changes, reset some fields to avoid invalid states
+    // When instanceType changes, or related flags change, reset some fields to avoid invalid states
     if (instanceType === "入口(c)") {
-        // If switched to client and single-ended is on, ensure autoCreateServer is off
-        if (form.getValues("isSingleEndedForward")) {
-            if (form.getValues("autoCreateServer") !== false) {
+        if (isSingleEndedForwardWatched) {
+            // If single-ended is true, autoCreateServer must be false.
+            if (autoCreateServerWatched) { // if autoCreateServer is true
                  form.setValue("autoCreateServer", false, { shouldDirty: true });
             }
         }
-        // Reset TLS cert/key if TLS mode is not '2'
-        const currentTlsMode = form.getValues("tlsMode");
-        if (currentTlsMode !== '2') {
+        // If TLS mode is not '2', clear cert and key paths.
+        if (tlsModeWatch !== '2') {
             if (form.getValues("certPath") !== '') form.setValue("certPath", '');
             if (form.getValues("keyPath") !== '') form.setValue("keyPath", '');
         }
-    } else if (instanceType === "出口(s)") { 
-        // If switched to server, client-specific flags should be reset
-        if (form.getValues("isSingleEndedForward") !== false) form.setValue("isSingleEndedForward", false);
-        if (form.getValues("autoCreateServer") !== false) form.setValue("autoCreateServer", false);
-        if (form.getValues("serverApiId") !== undefined) form.setValue("serverApiId", undefined);
-        if (form.getValues("serverTargetAddressForAutoCreate") !== '') form.setValue("serverTargetAddressForAutoCreate", '');
+    } else if (instanceType === "出口(s)") {
+        // If type is server, client-specific flags must be false.
+        if (isSingleEndedForwardWatched) {
+            form.setValue("isSingleEndedForward", false, {shouldDirty: true});
+        }
+        if (autoCreateServerWatched) {
+            form.setValue("autoCreateServer", false, {shouldDirty: true});
+        }
+        // Server doesn't use serverApiId or serverTargetAddressForAutoCreate for itself.
+        if (form.getValues("serverApiId") !== undefined) {
+            form.setValue("serverApiId", undefined);
+        }
+        if (form.getValues("serverTargetAddressForAutoCreate") !== '') {
+            form.setValue("serverTargetAddressForAutoCreate", '');
+        }
 
-        // Reset TLS cert/key if TLS mode is not '2'
-        if (form.getValues("tlsMode") !== '2') {
+        // If TLS mode is not '2', clear cert and key paths for server.
+        if (tlsModeWatch !== '2') {
             if (form.getValues("certPath") !== '') form.setValue("certPath", '');
             if (form.getValues("keyPath") !== '') form.setValue("keyPath", '');
         }
     }
-  }, [instanceType, form]); // Removed isSingleEndedForwardWatched, autoCreateServerWatched to avoid loops and let primary effect handle
+  }, [instanceType, form, isSingleEndedForwardWatched, autoCreateServerWatched, tlsModeWatch]);
 
 
   useEffect(() => {
-    // Effect for autoCreateServerWatched logic
+    // Effect for autoCreateServerWatched logic (selecting serverApiId, etc.)
     if (instanceType === "入口(c)" && autoCreateServerWatched && !isSingleEndedForwardWatched) {
       const otherMasters = apiConfigsList.filter(c => c.id !== activeApiConfig?.id);
       if (otherMasters.length > 0) {
         const currentServerApiId = form.getValues("serverApiId");
-        // Only set if not already set or if current selection is invalid
         if (!currentServerApiId || !otherMasters.some(m => m.id === currentServerApiId)) {
           form.setValue("serverApiId", otherMasters[0].id, { shouldValidate: true, shouldDirty: true });
         }
       } else {
-        // No other masters, so cannot select one
         form.setValue("serverApiId", undefined, { shouldValidate: true, shouldDirty: true });
       }
-       // Ensure serverTargetAddressForAutoCreate is available for input if not dirty
        if (!form.formState.dirtyFields.serverTargetAddressForAutoCreate) {
-         form.setValue("serverTargetAddressForAutoCreate", "", {shouldDirty: true}); // Allow user to input
+         form.setValue("serverTargetAddressForAutoCreate", "", {shouldDirty: true});
        }
 
     } else if (instanceType === "入口(c)" && (!autoCreateServerWatched || isSingleEndedForwardWatched) ) {
-       // Reset serverApiId and serverTargetAddressForAutoCreate if autoCreateServer is off OR single-ended is on
        if (form.getValues("serverApiId") !== undefined) form.setValue("serverApiId", undefined);
        if (form.getValues("serverTargetAddressForAutoCreate") !== '') form.setValue("serverTargetAddressForAutoCreate", '');
     }
@@ -338,7 +344,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
           const serversFromThisMaster = instances
             .filter(inst => inst.type === 'server')
             .map(serverInst => {
-              const parsedUrl = parseNodePassUrl(serverInst.url); // Assuming parseNodePassUrl is available from url-utils
+              const parsedUrl = parseNodePassUrl(serverInst.url); 
               if (!parsedUrl.tunnelAddress) return null;
               return {
                 id: serverInst.id,
@@ -453,7 +459,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
       secondaryInstanceUrl = buildUrlFromFormValues(secondaryUrlParams, secondaryMasterConfig);
       onLog?.(`准备创建从实例于 "${secondaryMasterConfig.name}": ${secondaryInstanceUrl}`, 'INFO');
     }
-    
+
     try {
       let serverCreationOk = true;
       if (secondaryInstanceUrl && secondaryMasterConfig) {
@@ -471,19 +477,19 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
               useApiToken: serverTargetApiToken,
             });
           } catch (e) {
-            serverCreationOk = false; 
+            serverCreationOk = false;
           }
         }
       }
 
-      if (primaryInstanceUrl && serverCreationOk) { 
+      if (primaryInstanceUrl && serverCreationOk) {
         await createInstanceMutation.mutateAsync({
             data: { url: primaryInstanceUrl },
             useApiRoot: apiRoot, // Primary instance uses the current active master's root/token
             useApiToken: apiToken,
          });
       }
-      
+
       const wasAnyMutationInErrorState = createInstanceMutation.isError;
 
       if (!wasAnyMutationInErrorState && serverCreationOk) {
@@ -495,7 +501,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
        onLog?.(`创建实例序列中发生错误: ${error.message}`, 'ERROR');
     }
   }
-  
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg p-4">
@@ -557,6 +563,3 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
     </Dialog>
   );
 }
-    
-
-    
