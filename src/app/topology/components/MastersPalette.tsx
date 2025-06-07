@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Cog } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
-import type { useReactFlow } from 'reactflow';
+import { useReactFlow } from 'reactflow'; // Changed from "import type"
 
 interface MastersPaletteProps {
   onAddMasterNode: (masterConfig: NamedApiConfig, reactFlowInstance: ReturnType<typeof useReactFlow>) => void;
