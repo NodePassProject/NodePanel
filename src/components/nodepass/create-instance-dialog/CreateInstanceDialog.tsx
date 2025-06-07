@@ -311,7 +311,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
             clientInstanceUrl = buildUrlFromFormValues({
                 instanceType: '入口(c)',
                 isSingleEndedForward: true,
-                tunnelAddress: `0.0.0.0:${localListeningPort}`, // Ensure host for standard URL format
+                tunnelAddress: `[::]:${localListeningPort}`, // Ensure host for standard URL format for single-ended listener
                 targetAddress: remoteTarget,
                 logLevel: values.logLevel,
                 tlsMode: values.tlsMode, 
