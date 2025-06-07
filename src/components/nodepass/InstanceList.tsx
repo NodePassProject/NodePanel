@@ -157,7 +157,7 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
             <Skeleton className="h-4 w-20" />
           </div>
         </TableCell>
-        <TableCell><Skeleton className="h-4 w-16" /></TableCell>
+        <TableCell className="text-right"><Skeleton className="h-8 w-24 ml-auto" /></TableCell>
       </TableRow>
     ));
   };
@@ -170,25 +170,31 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
       if (instance.type === 'server') {
         displayTargetTunnel = parsedUrl.targetAddress || "N/A";
       } else if (instance.type === 'client') {
-        const clientConfiguredServerHost = parsedUrl.tunnelAddress ? extractHostname(parsedUrl.tunnelAddress) : 'N/A';
-        
         let clientLocalForwardPort: string | null = null;
-        if (parsedUrl.targetAddress) { // Primary source for client's local forward port
-          clientLocalForwardPort = extractPort(parsedUrl.targetAddress);
+        if (parsedUrl.targetAddress) {
+            clientLocalForwardPort = extractPort(parsedUrl.targetAddress);
         }
-        if (!clientLocalForwardPort && parsedUrl.tunnelAddress) { // Fallback
-          const serverTunnelPort = extractPort(parsedUrl.tunnelAddress);
-          if (serverTunnelPort && /^\d+$/.test(serverTunnelPort)) {
-            clientLocalForwardPort = (parseInt(serverTunnelPort, 10) + 1).toString();
-          }
+        // Fallback if no port in targetAddress, or targetAddress is missing/malformed for port extraction
+        if (!clientLocalForwardPort && parsedUrl.tunnelAddress) {
+            const serverTunnelPort = extractPort(parsedUrl.tunnelAddress);
+            if (serverTunnelPort && /^\d+$/.test(serverTunnelPort)) {
+                clientLocalForwardPort = (parseInt(serverTunnelPort, 10) + 1).toString();
+            }
         }
-        const finalClientLocalForwardPort = clientLocalForwardPort || "N/A";
 
-        displayTargetTunnel = clientConfiguredServerHost !== 'N/A' && finalClientLocalForwardPort !== 'N/A' 
-          ? `${formatHostForUrl(clientConfiguredServerHost)}:${finalClientLocalForwardPort}`
-          : "N/A";
+        let managingMasterHost: string | null = null;
+        if (activeApiConfig?.apiUrl) {
+            managingMasterHost = extractHostname(activeApiConfig.apiUrl);
+        }
+
+        if (managingMasterHost && clientLocalForwardPort) {
+            displayTargetTunnel = `${formatHostForUrl(managingMasterHost)}:${clientLocalForwardPort}`;
+        } else {
+            displayTargetTunnel = "N/A (信息不完整)";
+        }
       }
     }
+
 
     return (
       <TableRow
@@ -224,13 +230,13 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
         </TableCell>
         <TableCell 
           className="truncate max-w-[200px] text-xs font-mono" 
-          title={displayTargetTunnel !== "N/A" ? displayTargetTunnel : ""}
         >
           <span
             className="cursor-pointer hover:text-primary transition-colors duration-150"
+             title={displayTargetTunnel !== "N/A" && displayTargetTunnel !== "N/A (信息不完整)" ? `点击复制: ${displayTargetTunnel}` : ""}
             onClick={(e) => {
               e.stopPropagation();
-              if (displayTargetTunnel !== "N/A") {
+              if (displayTargetTunnel !== "N/A" && displayTargetTunnel !== "N/A (信息不完整)") {
                 handleCopyToClipboard(displayTargetTunnel, "目标/隧道地址");
               }
             }}
@@ -243,7 +249,7 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
         >
           <span
             className="cursor-pointer hover:text-primary transition-colors duration-150"
-            title={instance.id === '********' ? `点击复制主控 "${apiName || '当前主控'}" 的 API 密钥` : `点击复制: ${instance.url}`}
+            title={instance.id === '********' && apiName ? `点击复制主控 "${apiName}" 的 API 密钥` : `点击复制: ${instance.url}`}
             onClick={(e) => {
               e.stopPropagation();
               handleCopyToClipboard(instance.url, instance.id === '********' ? 'API 密钥' : 'URL');
