@@ -53,25 +53,25 @@ export function CreateInstanceFormFields({
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmitHandler)} className="space-y-4 py-2 max-h-[65vh] overflow-y-auto pr-2" id="create-instance-form">
+      <form onSubmit={form.handleSubmit(onSubmitHandler)} className="space-y-3 py-1 max-h-[calc(65vh-50px)] overflow-y-auto pr-2" id="create-instance-form">
         <FormField
           control={form.control}
           name="instanceType"
           render={({ field }) => (
-            <FormItem>
-              <FormLabel className="font-sans">实例类型</FormLabel>
+            <FormItem className="space-y-1">
+              <FormLabel className="font-sans text-xs">实例类型</FormLabel>
               <Select onValueChange={field.onChange} value={field.value}>
                 <FormControl>
-                  <SelectTrigger className="text-sm font-sans">
+                  <SelectTrigger className="text-xs font-sans h-9">
                     <SelectValue placeholder="选择实例类型" />
                   </SelectTrigger>
                 </FormControl>
                 <SelectContent>
-                  <SelectItem value="入口(c)" className="font-sans">入口(c)</SelectItem>
-                  <SelectItem value="出口(s)" className="font-sans">出口(s)</SelectItem>
+                  <SelectItem value="入口(c)" className="font-sans text-xs">入口(c)</SelectItem>
+                  <SelectItem value="出口(s)" className="font-sans text-xs">出口(s)</SelectItem>
                 </SelectContent>
               </Select>
-              <FormMessage />
+              <FormMessage className="text-xs" />
             </FormItem>
           )}
         />
@@ -81,20 +81,21 @@ export function CreateInstanceFormFields({
             control={form.control}
             name="autoCreateServer"
             render={({ field }) => (
-              <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-3 shadow-sm bg-muted/30">
+              <FormItem className="flex flex-row items-center space-x-2 space-y-0 rounded-md border p-2 shadow-sm bg-muted/30">
                 <FormControl>
                   <Checkbox
                     checked={field.value}
                     onCheckedChange={field.onChange}
                     id="autoCreateServerCheckbox"
+                    className="h-3.5 w-3.5"
                   />
                 </FormControl>
-                <div className="space-y-1 leading-none">
-                  <FormLabel htmlFor="autoCreateServerCheckbox" className="font-sans cursor-pointer text-sm">
+                <div className="space-y-0.5 leading-none">
+                  <FormLabel htmlFor="autoCreateServerCheckbox" className="font-sans cursor-pointer text-xs">
                     自动创建匹配的出口(s)
                   </FormLabel>
                   {showDetailedDescriptions && (
-                    <FormDescription className="font-sans text-xs">
+                    <FormDescription className="font-sans text-xs mt-0.5">
                       在选定主控下创建相应出口(s)。入口(c)本地监听端口将使用出口(s)隧道监听端口+1。
                     </FormDescription>
                   )}
@@ -109,9 +110,9 @@ export function CreateInstanceFormFields({
             control={form.control}
             name="serverApiId"
             render={({ field }) => (
-              <FormItem>
-                <FormLabel className="font-sans flex items-center">
-                  <Network size={16} className="mr-1.5 text-primary" />
+              <FormItem className="space-y-1">
+                <FormLabel className="font-sans text-xs flex items-center">
+                  <Network size={14} className="mr-1 text-primary" />
                   出口(s)所属主控
                 </FormLabel>
                 <Select
@@ -120,29 +121,29 @@ export function CreateInstanceFormFields({
                   disabled={otherApiConfigs.length === 0}
                 >
                   <FormControl>
-                    <SelectTrigger className="text-sm font-sans">
+                    <SelectTrigger className="text-xs font-sans h-9">
                       <SelectValue placeholder={otherApiConfigs.length === 0 ? "无其他可用主控" : "选择出口(s)创建主控"} />
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
                     {otherApiConfigs.map(config => (
-                      <SelectItem key={config.id} value={config.id} className="font-sans">
+                      <SelectItem key={config.id} value={config.id} className="font-sans text-xs">
                         {config.name}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
                 {showDetailedDescriptions && (
-                  <FormDescription className="font-sans text-xs">
+                  <FormDescription className="font-sans text-xs mt-0.5">
                     选择自动创建的出口(s)实例将归属于哪个主控。
                   </FormDescription>
                 )}
                 {autoCreateServer && otherApiConfigs.length === 0 && (
-                  <FormDescription className="font-sans text-xs text-destructive pt-1">
+                  <FormDescription className="font-sans text-xs text-destructive pt-0.5">
                     自动创建出口(s)需要至少一个其他主控配置。
                   </FormDescription>
                 )}
-                <FormMessage />
+                <FormMessage className="text-xs" />
               </FormItem>
             )}
           />
@@ -153,14 +154,14 @@ export function CreateInstanceFormFields({
           control={form.control}
           name="tunnelAddress"
           render={({ field }) => (
-            <FormItem>
-              <FormLabel className="font-sans">
+            <FormItem className="space-y-1">
+              <FormLabel className="font-sans text-xs">
                 {instanceType === '出口(s)' ? '出口(s)隧道监听地址' :
                  (autoCreateServer ? '出口(s)隧道端口' : '连接的出口(s)隧道地址')}
               </FormLabel>
               <FormControl>
                 <Input
-                  className="text-sm font-mono"
+                  className="text-xs font-mono h-9"
                   placeholder={
                     instanceType === "出口(s)"
                       ? "例: 0.0.0.0:10101"
@@ -172,7 +173,7 @@ export function CreateInstanceFormFields({
                 />
               </FormControl>
                {showDetailedDescriptions && (
-                <FormDescription className="font-sans text-xs">
+                <FormDescription className="font-sans text-xs mt-0.5">
                   {instanceType === "出口(s)"
                     ? "出口(s)在此地址监听控制连接。"
                     : (autoCreateServer
@@ -181,19 +182,19 @@ export function CreateInstanceFormFields({
                 </FormDescription>
                )}
               {externalApiSuggestion && showDetailedDescriptions && (
-                <FormDescription className="text-xs text-amber-600 dark:text-amber-400 mt-1 font-sans">
-                  <Info size={14} className="inline-block mr-1.5 align-text-bottom" />
+                <FormDescription className="text-xs text-amber-600 dark:text-amber-400 mt-0.5 font-sans">
+                  <Info size={12} className="inline-block mr-1 align-text-bottom" />
                   {externalApiSuggestion}
                 </FormDescription>
               )}
-              <FormMessage />
+              <FormMessage className="text-xs" />
             </FormItem>
           )}
         />
 
         {instanceType === '入口(c)' && !autoCreateServer && (
-          <FormItem>
-            <FormLabel className="font-sans">或从其他主控的现有出口(s)选择隧道</FormLabel>
+          <FormItem className="space-y-1">
+            <FormLabel className="font-sans text-xs">或从其他主控的现有出口(s)选择隧道</FormLabel>
             <Select
               onValueChange={(selectedServerId) => {
                 if (selectedServerId) {
@@ -206,7 +207,7 @@ export function CreateInstanceFormFields({
               disabled={isLoadingServerInstances || !serverInstancesForDropdown || serverInstancesForDropdown.length === 0}
             >
               <FormControl>
-                <SelectTrigger className="text-sm font-sans">
+                <SelectTrigger className="text-xs font-sans h-9">
                   <SelectValue placeholder={
                     isLoadingServerInstances ? "加载出口(s)中..." :
                     (!serverInstancesForDropdown || serverInstancesForDropdown.length === 0) ? "无其他主控的可用出口(s)" : "选择出口(s)隧道"
@@ -215,19 +216,19 @@ export function CreateInstanceFormFields({
               </FormControl>
               <SelectContent>
                 {isLoadingServerInstances && (
-                    <div className="flex items-center justify-center p-2 font-sans">
-                        <Loader2 className="h-4 w-4 animate-spin mr-2"/> 加载中...
+                    <div className="flex items-center justify-center p-2 font-sans text-xs">
+                        <Loader2 className="h-3.5 w-3.5 animate-spin mr-2"/> 加载中...
                     </div>
                 )}
                 {serverInstancesForDropdown && serverInstancesForDropdown.map(server => (
-                  <SelectItem key={server.id} value={server.id} className="font-sans">
+                  <SelectItem key={server.id} value={server.id} className="font-sans text-xs">
                     {server.display}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
             {showDetailedDescriptions && serverInstancesForDropdown && serverInstancesForDropdown.length === 0 && !isLoadingServerInstances && (
-                <FormDescription className="font-sans text-xs">在其他主控下无可用出口(s)实例供选择。</FormDescription>
+                <FormDescription className="font-sans text-xs mt-0.5">在其他主控下无可用出口(s)实例供选择。</FormDescription>
             )}
           </FormItem>
         )}
@@ -237,14 +238,14 @@ export function CreateInstanceFormFields({
             control={form.control}
             name="targetAddress"
             render={({ field }) => (
-              <FormItem>
-                <FormLabel className="font-sans">
+              <FormItem className="space-y-1">
+                <FormLabel className="font-sans text-xs">
                   {instanceType === '出口(s)' ? '出口(s)目标地址 (业务数据)' : 
                    (instanceType === '入口(c)' && autoCreateServer ? '出口(s)转发目标地址 (业务数据)' : '入口(c)本地转发地址 (可选)')}
                 </FormLabel>
                 <FormControl>
                   <Input
-                    className="text-sm font-mono"
+                    className="text-xs font-mono h-9"
                     placeholder={
                         instanceType === '出口(s)' ? "例: 10.0.0.5:3000" :
                         (instanceType === '入口(c)' && autoCreateServer ? "例: 10.0.0.5:3000" : "例: [::]:8000 (默认为[::]:隧道端口+1)")
@@ -253,7 +254,7 @@ export function CreateInstanceFormFields({
                   />
                 </FormControl>
                 {showDetailedDescriptions && (
-                  <FormDescription className="font-sans text-xs">
+                  <FormDescription className="font-sans text-xs mt-0.5">
                     {instanceType === "出口(s)"
                       ? "出口(s)业务数据的目标地址。"
                       : (autoCreateServer
@@ -261,7 +262,7 @@ export function CreateInstanceFormFields({
                           : "入口(c)将流量转发到的本地服务地址。若留空，将使用 `[::]:(连接的出口(s)隧道端口+1)` 自动生成。")}
                   </FormDescription>
                 )}
-                <FormMessage />
+                <FormMessage className="text-xs" />
               </FormItem>
             )}
           />
@@ -272,21 +273,21 @@ export function CreateInstanceFormFields({
             control={form.control}
             name="targetAddress" 
             render={({ field }) => (
-              <FormItem>
-                <FormLabel className="font-sans">入口(c)本地转发地址 (可选)</FormLabel>
+              <FormItem className="space-y-1">
+                <FormLabel className="font-sans text-xs">入口(c)本地转发地址 (可选)</FormLabel>
                 <FormControl>
                   <Input
-                    className="text-sm font-mono"
+                    className="text-xs font-mono h-9"
                     placeholder={"例: [::]:8000 (默认为[::]:隧道端口+1)"}
                     {...field}
                   />
                 </FormControl>
                 {showDetailedDescriptions && (
-                  <FormDescription className="font-sans text-xs">
+                  <FormDescription className="font-sans text-xs mt-0.5">
                     入口(c)将流量转发到的本地服务地址。若留空，将使用 `[::]:(连接的出口(s)隧道端口+1)` 自动生成。
                   </FormDescription>
                 )}
-                <FormMessage />
+                <FormMessage className="text-xs" />
               </FormItem>
             )}
           />
@@ -297,32 +298,32 @@ export function CreateInstanceFormFields({
           control={form.control}
           name="logLevel"
           render={({ field }) => (
-            <FormItem>
-              <FormLabel className="font-sans">日志级别</FormLabel>
+            <FormItem className="space-y-1">
+              <FormLabel className="font-sans text-xs">日志级别</FormLabel>
               <Select onValueChange={field.onChange} value={field.value}>
                 <FormControl>
-                  <SelectTrigger className="text-sm font-sans">
+                  <SelectTrigger className="text-xs font-sans h-9">
                     <SelectValue placeholder="选择日志级别" />
                   </SelectTrigger>
                 </FormControl>
                 <SelectContent>
-                   <SelectItem value="master" className="font-sans">
+                   <SelectItem value="master" className="font-sans text-xs">
                      默认 ({masterLogLevelDisplay})
                   </SelectItem>
-                  <SelectItem value="debug" className="font-sans">Debug</SelectItem>
-                  <SelectItem value="info" className="font-sans">Info</SelectItem>
-                  <SelectItem value="warn" className="font-sans">Warn</SelectItem>
-                  <SelectItem value="error" className="font-sans">Error</SelectItem>
-                  <SelectItem value="event" className="font-sans">Event</SelectItem>
+                  <SelectItem value="debug" className="font-sans text-xs">Debug</SelectItem>
+                  <SelectItem value="info" className="font-sans text-xs">Info</SelectItem>
+                  <SelectItem value="warn" className="font-sans text-xs">Warn</SelectItem>
+                  <SelectItem value="error" className="font-sans text-xs">Error</SelectItem>
+                  <SelectItem value="event" className="font-sans text-xs">Event</SelectItem>
                 </SelectContent>
               </Select>
               {showDetailedDescriptions && (
-                <FormDescription className="font-sans text-xs">
+                <FormDescription className="font-sans text-xs mt-0.5">
                   实例日志级别。
                   {autoCreateServer && instanceType === '入口(c)' && " 此设置亦用于自动创建的出口(s)。"}
                 </FormDescription>
               )}
-              <FormMessage />
+              <FormMessage className="text-xs" />
             </FormItem>
           )}
         />
@@ -331,28 +332,28 @@ export function CreateInstanceFormFields({
           control={form.control}
           name="tlsMode"
           render={({ field }) => (
-            <FormItem>
-              <FormLabel className="font-sans">
+            <FormItem className="space-y-1">
+              <FormLabel className="font-sans text-xs">
                 {instanceType === '出口(s)' ? "TLS 模式 (出口(s)数据通道)"
                   : (instanceType === '入口(c)' && autoCreateServer ? "TLS 模式 (自动创建的出口(s))" : "TLS 模式 (入口(c)连接行为)")}
               </FormLabel>
               <Select onValueChange={field.onChange} value={field.value || "master"}>
                 <FormControl>
-                  <SelectTrigger className="text-sm font-sans">
+                  <SelectTrigger className="text-xs font-sans h-9">
                     <SelectValue placeholder="选择 TLS 模式" />
                   </SelectTrigger>
                 </FormControl>
                 <SelectContent>
-                  <SelectItem value="master" className="font-sans">
+                  <SelectItem value="master" className="font-sans text-xs">
                     默认 ({effectiveTlsModeDisplay})
                   </SelectItem>
-                  <SelectItem value="0" className="font-sans">0: 无TLS (明文)</SelectItem>
-                  <SelectItem value="1" className="font-sans">1: 自签名</SelectItem>
-                  <SelectItem value="2" className="font-sans">2: 自定义</SelectItem>
+                  <SelectItem value="0" className="font-sans text-xs">0: 无TLS (明文)</SelectItem>
+                  <SelectItem value="1" className="font-sans text-xs">1: 自签名</SelectItem>
+                  <SelectItem value="2" className="font-sans text-xs">2: 自定义</SelectItem>
                 </SelectContent>
               </Select>
               {showDetailedDescriptions && (
-                <FormDescription className="font-sans text-xs">
+                <FormDescription className="font-sans text-xs mt-0.5">
                   {instanceType === '出口(s)'
                     ? "出口(s)数据通道的TLS加密模式。"
                     : (autoCreateServer
@@ -360,7 +361,7 @@ export function CreateInstanceFormFields({
                         : "入口(c)连接目标出口(s)时的TLS行为。")}
                 </FormDescription>
               )}
-              <FormMessage />
+              <FormMessage className="text-xs" />
             </FormItem>
           )}
         />
@@ -370,22 +371,22 @@ export function CreateInstanceFormFields({
               control={form.control}
               name="certPath"
               render={({ field }) => (
-                <FormItem>
-                  <FormLabel className="font-sans">证书路径 (TLS 2)</FormLabel>
+                <FormItem className="space-y-1">
+                  <FormLabel className="font-sans text-xs">证书路径 (TLS 2)</FormLabel>
                   <FormControl>
                     <Input
-                      className="text-sm font-mono"
+                      className="text-xs font-mono h-9"
                       placeholder="例: /path/to/cert.pem"
                       {...field}
                       value={field.value || ""}
                     />
                   </FormControl>
                    {showDetailedDescriptions && (
-                    <FormDescription className="font-sans text-xs">
+                    <FormDescription className="font-sans text-xs mt-0.5">
                       {instanceType === '入口(c)' && autoCreateServer ? "用于自动创建的出口(s)。" : ""}
                     </FormDescription>
                    )}
-                  <FormMessage />
+                  <FormMessage className="text-xs" />
                 </FormItem>
               )}
             />
@@ -393,22 +394,22 @@ export function CreateInstanceFormFields({
               control={form.control}
               name="keyPath"
               render={({ field }) => (
-                <FormItem>
-                  <FormLabel className="font-sans">密钥路径 (TLS 2)</FormLabel>
+                <FormItem className="space-y-1">
+                  <FormLabel className="font-sans text-xs">密钥路径 (TLS 2)</FormLabel>
                   <FormControl>
                     <Input
-                      className="text-sm font-mono"
+                      className="text-xs font-mono h-9"
                       placeholder="例: /path/to/key.pem"
                       {...field}
                       value={field.value || ""}
                     />
                   </FormControl>
                    {showDetailedDescriptions && (
-                    <FormDescription className="font-sans text-xs">
+                    <FormDescription className="font-sans text-xs mt-0.5">
                     {instanceType === '入口(c)' && autoCreateServer ? "用于自动创建的出口(s)。" : ""}
                     </FormDescription>
                    )}
-                  <FormMessage />
+                  <FormMessage className="text-xs" />
                 </FormItem>
               )}
             />
@@ -418,3 +419,5 @@ export function CreateInstanceFormFields({
     </Form>
   );
 }
+
+    

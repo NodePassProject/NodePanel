@@ -411,25 +411,25 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
   
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
-        <DialogHeader>
+      <DialogContent className="sm:max-w-lg p-4">
+        <DialogHeader className="pb-3">
           <DialogTitle className="flex items-center font-title">
-            <PlusCircle className="mr-2 h-6 w-6 text-primary" />
+            <PlusCircle className="mr-2 h-5 w-5 text-primary" />
             创建新实例
           </DialogTitle>
-          <DialogDescription className="font-sans">
+          <DialogDescription className="font-sans text-xs">
             为当前主控 “{apiName || 'N/A'}” 配置新实例。
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex items-center space-x-2 my-3">
+        <div className="flex items-center space-x-2 my-2">
           <Switch
             id="toggle-descriptions"
             checked={showDetailedDescriptions}
             onCheckedChange={setShowDetailedDescriptions}
             aria-label="切换详细参数说明"
           />
-          <Label htmlFor="toggle-descriptions" className="font-sans text-sm cursor-pointer">显示参数说明</Label>
+          <Label htmlFor="toggle-descriptions" className="font-sans text-xs cursor-pointer">显示参数说明</Label>
         </div>
         
         <CreateInstanceFormFields
@@ -446,7 +446,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
             showDetailedDescriptions={showDetailedDescriptions}
         />
 
-        <DialogFooter className="pt-4 font-sans">
+        <DialogFooter className="pt-3 font-sans">
           <DialogClose asChild>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={createInstanceMutation.isPending}>
               取消
@@ -467,3 +467,5 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
     </Dialog>
   );
 }
+
+    
