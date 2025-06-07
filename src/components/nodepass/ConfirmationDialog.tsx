@@ -21,6 +21,7 @@ interface ConfirmationDialogProps {
   onOpenChange: (open: boolean) => void;
   title: string;
   description: React.ReactNode; // Allow for more complex descriptions
+  children?: React.ReactNode; // Added to allow for more complex content below description
   onConfirm: () => void;
   confirmText?: string;
   confirmButtonVariant?: VariantProps<typeof buttonVariants>["variant"];
@@ -34,6 +35,7 @@ export function ConfirmationDialog({
   onOpenChange,
   title,
   description,
+  children, // Destructure new prop
   onConfirm,
   confirmText = "确认",
   confirmButtonVariant = "default",
@@ -52,6 +54,7 @@ export function ConfirmationDialog({
             {description}
           </AlertDialogDescription>
         </AlertDialogHeader>
+        {children && <div className="py-2">{children}</div>} 
         <AlertDialogFooter className="font-sans">
           <AlertDialogCancel disabled={isLoading} onClick={() => onOpenChange(false)}>
             {cancelText}
@@ -73,3 +76,4 @@ export function ConfirmationDialog({
     </AlertDialog>
   );
 }
+
