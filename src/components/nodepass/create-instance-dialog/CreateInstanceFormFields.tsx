@@ -15,7 +15,7 @@ import { MASTER_TLS_MODE_DISPLAY_MAP } from './constants';
 
 interface CreateInstanceFormFieldsProps {
   form: UseFormReturn<CreateInstanceFormValues>;
-  instanceType: "入口(c)" | "出口(s)"; // Updated to use new terminology
+  instanceType: "入口(c)" | "出口(s)"; 
   tlsMode?: string;
   autoCreateServer: boolean;
   activeApiConfig: NamedApiConfig | null;
@@ -46,6 +46,8 @@ export function CreateInstanceFormFields({
   const effectiveTlsModeDisplay = activeApiConfig?.masterDefaultTlsMode && activeApiConfig.masterDefaultTlsMode !== 'master'
     ? MASTER_TLS_MODE_DISPLAY_MAP[activeApiConfig.masterDefaultTlsMode as keyof typeof MASTER_TLS_MODE_DISPLAY_MAP] || '主控配置'
     : '主控配置';
+  
+  const otherApiConfigs = apiConfigsList.filter(config => config.id !== activeApiConfig?.id);
 
   return (
     <Form {...form}>
@@ -110,17 +112,18 @@ export function CreateInstanceFormFields({
                 </FormLabel>
                 <Select
                   onValueChange={field.onChange}
-                  defaultValue={field.value || activeApiConfig?.id || ""}
+                  value={field.value || ""} 
+                  disabled={otherApiConfigs.length === 0}
                 >
                   <FormControl>
                     <SelectTrigger className="text-sm font-sans">
-                      <SelectValue placeholder="选择出口(s)将创建于哪个主控" />
+                      <SelectValue placeholder={otherApiConfigs.length === 0 ? "无其他可用主控" : "选择出口(s)创建主控"} />
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
-                    {apiConfigsList.map(config => (
+                    {otherApiConfigs.map(config => (
                       <SelectItem key={config.id} value={config.id} className="font-sans">
-                        {config.name} {config.id === activeApiConfig?.id ? "(当前入口(c)主控)" : ""}
+                        {config.name}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -128,6 +131,11 @@ export function CreateInstanceFormFields({
                 <FormDescription className="font-sans text-xs">
                   选择自动创建的出口(s)实例将归属于哪个主控。
                 </FormDescription>
+                {autoCreateServer && otherApiConfigs.length === 0 && (
+                  <FormDescription className="font-sans text-xs text-destructive pt-1">
+                    自动创建出口(s)需要至少一个其他主控配置。
+                  </FormDescription>
+                )}
                 <FormMessage />
               </FormItem>
             )}
@@ -141,15 +149,16 @@ export function CreateInstanceFormFields({
           render={({ field }) => (
             <FormItem>
               <FormLabel className="font-sans">
-                {instanceType === '出口(s)' ? '出口(s)隧道监听地址 (控制通道)' :
-                 (autoCreateServer ? '出口(s)隧道监听地址 (控制通道)' : '连接的出口(s)隧道地址 (控制通道)')}
+                {instanceType === '出口(s)' ? '出口(s)隧道监听地址' :
+                 (autoCreateServer ? '出口(s)隧道监听地址' : '连接的出口(s)隧道地址')}
               </FormLabel>
               <FormControl>
                 <Input
                   className="text-sm font-mono"
                   placeholder={
-                    instanceType === "出口(s)" ? "例: 0.0.0.0:10101 或 [::]:10101" :
-                    (autoCreateServer ? "例: [::]:8080 或 your.host.com:8080" : "例: your.server.com:10101")
+                    (instanceType === "出口(s)" || (instanceType === "入口(c)" && autoCreateServer)) 
+                      ? "例: 0.0.0.0:10101" 
+                      : "例: your.server.com:10101"
                   }
                   {...field}
                 />
@@ -176,7 +185,7 @@ export function CreateInstanceFormFields({
           <FormItem>
             <FormLabel className="font-sans">或从其他主控的现有出口(s)选择隧道</FormLabel>
             <Select
-              onValueChange={(selectedServerId) => { // selectedServerId here is actually the instance ID
+              onValueChange={(selectedServerId) => { 
                 if (selectedServerId) {
                   const selectedServer = serverInstancesForDropdown?.find(s => s.id === selectedServerId);
                   if (selectedServer) {
@@ -225,10 +234,7 @@ export function CreateInstanceFormFields({
                 <FormControl>
                   <Input
                     className="text-sm font-mono"
-                    placeholder={
-                      instanceType === "出口(s)" ? "例: 0.0.0.0:8080 或 10.0.0.5:3000" :
-                      (autoCreateServer ? "例: 192.168.1.100:80" : "")
-                    }
+                    placeholder="例: 10.0.0.5:3000"
                     {...field}
                   />
                 </FormControl>
@@ -245,7 +251,6 @@ export function CreateInstanceFormFields({
           />
         )}
         
-        {/* Target address for client type when NOT auto-creating server (OPTIONAL) */}
         {instanceType === '入口(c)' && !autoCreateServer && (
            <FormField
             control={form.control}
@@ -387,4 +392,3 @@ export function CreateInstanceFormFields({
     </Form>
   );
 }
-
