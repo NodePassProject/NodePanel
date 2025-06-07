@@ -40,8 +40,8 @@ import { useToast } from '@/hooks/use-toast';
 import { Separator } from '@/components/ui/separator';
 import { Button } from '@/components/ui/button';
 import { nodePassApi } from '@/lib/api';
-import { buildUrlFromFormValues, type BuildUrlParams, formatHostForUrl } from '@/components/nodepass/create-instance-dialog/utils';
-import { extractPort, extractHostname } from '@/lib/url-utils';
+import { buildUrlFromFormValues, type BuildUrlParams } from '@/components/nodepass/create-instance-dialog/utils';
+import { extractPort, extractHostname, formatHostForDisplay, isWildcardHostname, formatHostForUrl } from '@/lib/url-utils';
 import { SubmitTopologyConfirmationDialog, type InstanceUrlConfigWithName } from './components/SubmitTopologyConfirmationDialog';
 import { EditTopologyNodeDialog } from './components/EditTopologyNodeDialog';
 
@@ -72,10 +72,10 @@ export interface CustomNodeData {
   port?: string; 
   submissionStatus?: 'pending' | 'success' | 'error'; 
   submissionMessage?: string; 
-  logLevel?: string; // Added for S/C edit
-  tlsMode?: string; // Added for S edit
-  certPath?: string; // Added for S edit (TLS 2)
-  keyPath?: string; // Added for S edit (TLS 2)
+  logLevel?: string; 
+  tlsMode?: string; 
+  certPath?: string; 
+  keyPath?: string; 
 }
 
 export interface Node extends ReactFlowNode<CustomNodeData> {
@@ -187,7 +187,7 @@ const nodeTypes = {
   masterNode: MasterNode,
 };
 
-const nodeStyles = { // Updated S and T colors
+const nodeStyles = { 
     m: {
         base: {
             color: 'hsl(var(--foreground))', 
@@ -202,10 +202,10 @@ const nodeStyles = { // Updated S and T colors
             textAlign: 'center'
         }
     },
-    s: { base: { background: 'hsl(210, 100%, 97%)', borderColor: 'hsl(210, 80%, 60%)', color: 'hsl(210, 90%, 30%)' } }, // Server - Blueish
-    c: { base: { background: 'hsl(145, 63%, 96%)', borderColor: 'hsl(145, 60%, 45%)', color: 'hsl(145, 80%, 20%)' } }, // Client - Greenish
-    t: { base: { background: 'hsl(35, 100%, 96%)', borderColor: 'hsl(35, 90%, 60%)', color: 'hsl(35, 90%, 35%)' } },   // Landing - Orangeish
-    u: { base: { background: 'hsl(265, 80%, 97%)', borderColor: 'hsl(265, 70%, 60%)', color: 'hsl(265, 70%, 40%)' } }  // User - Purpleish
+    s: { base: { background: 'hsl(210, 100%, 97%)', borderColor: 'hsl(210, 80%, 60%)', color: 'hsl(210, 90%, 30%)' } }, 
+    c: { base: { background: 'hsl(145, 63%, 96%)', borderColor: 'hsl(145, 60%, 45%)', color: 'hsl(145, 80%, 20%)' } }, 
+    t: { base: { background: 'hsl(35, 100%, 96%)', borderColor: 'hsl(35, 90%, 60%)', color: 'hsl(35, 90%, 35%)' } },   
+    u: { base: { background: 'hsl(265, 80%, 97%)', borderColor: 'hsl(265, 70%, 60%)', color: 'hsl(265, 70%, 40%)' } }  
 }
 
 interface ActualTopologyFlowWithStateProps {
@@ -218,7 +218,7 @@ interface ActualTopologyFlowWithStateProps {
   reactFlowWrapperRef: React.RefObject<HTMLDivElement>;
   onCenterView: (instance: ReturnType<typeof useReactFlow>) => void;
   onClearCanvas: () => void;
-  onTriggerSubmitTopology: () => void; // Renamed from onSubmitTopology
+  onTriggerSubmitTopology: () => void; 
   canSubmit: boolean;
   isSubmitting: boolean;
   onNodeDropOnCanvas: (
@@ -309,8 +309,8 @@ const ToolbarWrapperComponent: React.FC<ToolbarWrapperComponentProps> = ({ onCen
 
 
 function TopologyEditorCore() {
-  const [nodesInternal, setNodesInternal, onNodesChange] = useNodesState<Node>(initialNodes);
-  const [edgesInternal, setEdgesInternal, onEdgesChange] = useEdgesState(initialEdges);
+  const [nodesInternal, setNodesInternal, onNodesChangeInternal] = useNodesState<Node>(initialNodes);
+  const [edgesInternal, setEdgesInternal, onEdgesChangeInternal] = useEdgesState(initialEdges);
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
   const [nodeIdCounter, setNodeIdCounter] = useState(0);
   const { toast } = useToast();
@@ -385,14 +385,13 @@ function TopologyEditorCore() {
         const sourceIsMaster = sourceNode.data.role === 'M';
         const sourceIsInMaster = !!sourceNode.data.parentNode;
         if (!sourceIsMaster && !sourceIsInMaster) {
-            toast({ title: '连接无效', description: '落地端 (T) 节点只能被主控 (M) 或其内部节点 (S/C) 链接。', variant: 'destructive' });
+            toast({ title: '连接无效', description: '落地端 (T) 节点只能被主控 (M) 或其内部节点 (出口(s)/入口(c)) 链接。', variant: 'destructive' });
             return;
         }
       }
       
       const sourceParentId = sourceNode.data.parentNode;
       const targetParentId = targetNode.data.parentNode;
-      
       const isInternalConnection = sourceParentId && targetParentId && sourceParentId === targetParentId;
       
       if (isInternalConnection && !(sourceNode.data.role === 'C' && targetNode.data.role === 'S')) {
@@ -409,35 +408,76 @@ function TopologyEditorCore() {
       };
       
       setEdgesInternal((eds) => addEdge(newEdge, eds));
+      let updatedNodes = [...nodesInternal];
 
-      if (isInternalConnection && sourceNode.data.role === 'C' && targetNode.data.role === 'S') {
+      // Point 2: Client (C) connects to Server (S) - Update Client's tunnelAddress
+      if (sourceNode.data.role === 'C' && targetNode.data.role === 'S') { // C -> S
         const clientNode = sourceNode;
         const serverNode = targetNode;
+        const serverNodeData = serverNode.data;
         
-        setNodesInternal(nds => nds.map(n => {
-          if (n.id === clientNode.id) {
-            const serverTunnelAddr = serverNode.data.tunnelAddress || "";
-            let clientTargetPort = "0";
-            const serverPortNum = parseInt(extractPort(serverTunnelAddr) || "0", 10);
-            if (serverPortNum > 0) clientTargetPort = (serverPortNum + 1).toString();
-            
-            return {
-              ...n,
-              data: {
-                ...n.data,
-                tunnelAddress: serverTunnelAddr, 
-                targetAddress: `[::]:${clientTargetPort}` 
-              }
-            };
-          }
-          return n;
-        }));
-        toast({ title: "入口(c)地址已更新", description: `入口(c) ${clientNode.data.label} 已配置连接到出口(s) ${serverNode.data.label}。`});
+        let masterApiHost: string | null = null;
+        const serverMasterNodeId = serverNodeData.parentNode || serverNodeData.representedMasterId;
+
+        if (serverMasterNodeId) {
+            const masterContainerNode = serverNodeData.parentNode ? getNodeById(serverMasterNodeId) : null;
+            const actualMasterId = masterContainerNode ? masterContainerNode.data.masterId : serverMasterNodeId;
+            if (actualMasterId) {
+                const masterConfig = getApiConfigById(actualMasterId);
+                if (masterConfig?.apiUrl) {
+                    masterApiHost = extractHostname(masterConfig.apiUrl);
+                }
+            }
+        }
+
+        const serverListenHost = extractHostname(serverNodeData.tunnelAddress || "");
+        const serverListenPort = extractPort(serverNodeData.tunnelAddress || "");
+        let clientEffectiveTunnelHost = serverListenHost;
+
+        if (serverListenHost && isWildcardHostname(serverListenHost) && masterApiHost) {
+            clientEffectiveTunnelHost = masterApiHost;
+        }
+        
+        const newClientTunnelAddress = serverListenPort && clientEffectiveTunnelHost 
+            ? `${formatHostForUrl(clientEffectiveTunnelHost)}:${serverListenPort}`
+            : serverNodeData.tunnelAddress || ""; // Fallback
+
+        // Auto-set client's local listen port if not already set
+        let clientLocalTargetPort = extractPort(clientNode.data.targetAddress || "");
+        if (!clientLocalTargetPort && serverListenPort) {
+            clientLocalTargetPort = (parseInt(serverListenPort, 10) + 1).toString();
+        }
+        const clientLocalTargetHost = extractHostname(clientNode.data.targetAddress || "") || "[::]";
+        const newClientTargetAddress = clientLocalTargetPort ? `${formatHostForDisplay(clientLocalTargetHost)}:${clientLocalTargetPort}` : clientNode.data.targetAddress;
+
+        updatedNodes = updatedNodes.map(n => {
+            if (n.id === clientNode.id) {
+                return { ...n, data: { ...n.data, tunnelAddress: newClientTunnelAddress, targetAddress: newClientTargetAddress } };
+            }
+            return n;
+        });
+        toast({ title: "入口(c) 地址已更新", description: `入口(c) ${clientNode.data.label} 已自动配置连接到 出口(s) ${serverNode.data.label}。`});
       }
 
-
+      // Point 3: Sync S/C with T
+      if ((sourceNode.data.role === 'S' || sourceNode.data.role === 'C') && targetNode.data.role === 'T') { // S/C -> T
+        const scNode = sourceNode;
+        const tNode = targetNode;
+        if (scNode.data.targetAddress) {
+          const host = extractHostname(scNode.data.targetAddress);
+          const port = extractPort(scNode.data.targetAddress);
+          updatedNodes = updatedNodes.map(n => 
+            n.id === tNode.id ? { ...n, data: { ...n.data, ipAddress: host || "", port: port || "" } } : n
+          );
+        } else if (tNode.data.ipAddress && tNode.data.port) {
+          updatedNodes = updatedNodes.map(n =>
+            n.id === scNode.id ? { ...n, data: { ...n.data, targetAddress: `${formatHostForDisplay(tNode.data.ipAddress!)}:${tNode.data.port!}` } } : n
+          );
+        }
+      }
+      setNodesInternal(updatedNodes);
     },
-    [edgesInternal, setEdgesInternal, toast, getNodeById, setNodesInternal]
+    [edgesInternal, setEdgesInternal, toast, getNodeById, setNodesInternal, nodesInternal, getApiConfigById]
   );
 
   const onSelectionChange = useCallback(({ nodes: selectedNodesList }: { nodes: Node[]; edges: Edge[] }) => {
@@ -542,7 +582,7 @@ function TopologyEditorCore() {
                   data: { 
                     label: '本地 (C)', role: 'C', icon: DatabaseZap, parentNode: mId, isDefaultClient: true,
                     logLevel: draggedData.masterDefaultLogLevel || 'master',
-                    targetAddress: `[::]:${10001 + currentCounter}` // Default local listen for C
+                    targetAddress: `[::]:${10001 + currentCounter}` 
                   },
                   width: CARD_NODE_WIDTH, height: CARD_NODE_HEIGHT,
               });
@@ -690,19 +730,11 @@ function TopologyEditorCore() {
           continue;
         }
         
-        const connectedEdges = edgesInternal.filter(e => e.source === node.id || e.target === node.id);
-        const sourceNodeForClient = node.data.role === 'C' ? connectedEdges.map(e => getNodeById(e.source)).find(n => n?.data.role === 'S') : undefined;
-        const targetNodeForServerOrClient = connectedEdges.map(e => getNodeById(e.target)).find(n => n?.data.role === 'T');
-
         let urlParams: BuildUrlParams | null = null;
         const instanceTypeForBuild: "入口(c)" | "出口(s)" = node.data.role === 'S' ? "出口(s)" : "入口(c)";
 
         if (node.data.role === 'S') { // 出口(s)
-          let sTargetAddress = node.data.targetAddress || "";
-          if (targetNodeForServerOrClient && targetNodeForServerOrClient.data.role === 'T') {
-            sTargetAddress = `${targetNodeForServerOrClient.data.ipAddress}:${targetNodeForServerOrClient.data.port}`;
-          }
-          if (!sTargetAddress) {
+          if (!node.data.targetAddress) {
             setNodesInternal(nds => nds.map(n => n.id === node.id ? { ...n, data: { ...n.data, submissionStatus: 'error', submissionMessage: '无目标地址' } } : n));
             continue;
           }
@@ -713,34 +745,29 @@ function TopologyEditorCore() {
           urlParams = {
             instanceType: instanceTypeForBuild,
             tunnelAddress: node.data.tunnelAddress,
-            targetAddress: sTargetAddress,
+            targetAddress: node.data.targetAddress,
             logLevel: (node.data.logLevel as any) || 'master',
             tlsMode: (node.data.tlsMode as any) || 'master',
             certPath: node.data.certPath,
             keyPath: node.data.keyPath,
           };
         } else if (node.data.role === 'C') { // 入口(c)
-          let cTunnelAddress = node.data.tunnelAddress || ""; 
-          if (sourceNodeForClient) {
-             cTunnelAddress = sourceNodeForClient.data.tunnelAddress || "";
-          }
-          if (!cTunnelAddress) {
+          if (!node.data.tunnelAddress) {
             setNodesInternal(nds => nds.map(n => n.id === node.id ? { ...n, data: { ...n.data, submissionStatus: 'error', submissionMessage: '无服务端地址' } } : n));
             continue;
           }
-          
-          let cTargetAddress = node.data.targetAddress || ""; 
-          if (!cTargetAddress) {
-            const serverPort = extractPort(cTunnelAddress);
-            cTargetAddress = `[::]:${serverPort ? (parseInt(serverPort, 10) + 1) : (10000 + nodeIdCounter + Math.floor(Math.random()*100)) }`;
+          if (!node.data.targetAddress) { // C-node's targetAddress is its local listen.
+            setNodesInternal(nds => nds.map(n => n.id === node.id ? { ...n, data: { ...n.data, submissionStatus: 'error', submissionMessage: '无本地监听地址' } } : n));
+            continue;
           }
-
           urlParams = {
             instanceType: instanceTypeForBuild,
-            tunnelAddress: cTunnelAddress,
-            targetAddress: cTargetAddress,
+            tunnelAddress: node.data.tunnelAddress, // This is the S-node's address it connects to
+            targetAddress: node.data.targetAddress, // This is the C-node's local listen address
             logLevel: (node.data.logLevel as any) || 'master',
-            // tlsMode for client usually not set via URL, determined by server or client's direct config
+            tlsMode: (node.data.tlsMode as any), // Client TLS for connecting to server
+            certPath: node.data.certPath, // For mTLS if client uses mode 2
+            keyPath: node.data.keyPath,   // For mTLS if client uses mode 2
           };
         }
 
@@ -758,11 +785,10 @@ function TopologyEditorCore() {
       }
     }
     return instancesToCreate;
-  }, [nodesInternal, edgesInternal, getNodeById, getApiConfigById, nodeIdCounter]);
+  }, [nodesInternal, getNodeById, getApiConfigById]);
 
   const handleTriggerSubmitTopology = useCallback(() => {
     setContextMenu(null);
-    // Clear previous submission statuses
     setNodesInternal(nds => nds.map(n => ({ ...n, data: { ...n.data, submissionStatus: undefined, submissionMessage: undefined } })));
 
     const instancesToCreate = prepareInstancesForSubmission();
@@ -810,38 +836,98 @@ function TopologyEditorCore() {
     setContextMenu(null);
   };
 
-  const handleSaveNodeProperties = useCallback((nodeId: string, updatedData: Partial<CustomNodeData>) => {
-    setNodesInternal(nds =>
-      nds.map(n => {
-        if (n.id === nodeId) {
-          const mergedData = { ...n.data, ...updatedData };
-          // If server's tunnelAddress changed, update connected clients
-          if (n.data.role === 'S' && updatedData.tunnelAddress && updatedData.tunnelAddress !== n.data.tunnelAddress) {
-            edgesInternal.forEach(edge => {
-              if (edge.source === n.id) {
-                const clientNode = getNodeById(edge.target);
-                if (clientNode && clientNode.data.role === 'C') {
-                  const serverPort = parseInt(extractPort(updatedData.tunnelAddress!) || "0", 10);
-                  const clientTargetPort = serverPort > 0 ? (serverPort + 1).toString() : "0";
-                  
-                  setNodesInternal(prevNds => prevNds.map(cn => 
-                    cn.id === clientNode.id ? {
-                      ...cn, data: { ...cn.data, tunnelAddress: updatedData.tunnelAddress, targetAddress: `[::]:${clientTargetPort}` }
-                    } : cn
-                  ));
+  const handleSaveNodeProperties = useCallback((nodeId: string, updatedDataFromDialog: Partial<CustomNodeData>) => {
+    let newNodes = [...nodesInternal];
+    const nodeIndex = newNodes.findIndex(n => n.id === nodeId);
+    if (nodeIndex === -1) return;
+
+    const originalNode = newNodes[nodeIndex];
+    const mergedData = { ...originalNode.data, ...updatedDataFromDialog };
+    newNodes[nodeIndex] = { ...originalNode, data: mergedData };
+
+    // Point 2 & 3 Sync Logic
+    if (mergedData.role === 'S') {
+        // If S-node's tunnelAddress (listen) or master changes, update connected C-nodes' tunnelAddress
+        const serverNode = newNodes[nodeIndex];
+        edgesInternal.forEach(edge => {
+            if (edge.target === serverNode.id) { // C -> S connection
+                const clientNodeIndex = newNodes.findIndex(n => n.id === edge.source && n.data.role === 'C');
+                if (clientNodeIndex !== -1) {
+                    const clientNode = newNodes[clientNodeIndex];
+                    let masterApiHost: string | null = null;
+                    const serverMasterNodeId = serverNode.data.parentNode || serverNode.data.representedMasterId;
+                     if (serverMasterNodeId) {
+                        const masterContainerNode = serverNode.data.parentNode ? getNodeById(serverMasterNodeId) : null;
+                        const actualMasterId = masterContainerNode ? masterContainerNode.data.masterId : serverMasterNodeId;
+                        if (actualMasterId) {
+                            const masterConfig = getApiConfigById(actualMasterId);
+                            if (masterConfig?.apiUrl) masterApiHost = extractHostname(masterConfig.apiUrl);
+                        }
+                    }
+
+                    const serverListenHost = extractHostname(serverNode.data.tunnelAddress || "");
+                    const serverListenPort = extractPort(serverNode.data.tunnelAddress || "");
+                    let clientEffectiveTunnelHost = serverListenHost;
+
+                    if (serverListenHost && isWildcardHostname(serverListenHost) && masterApiHost) {
+                        clientEffectiveTunnelHost = masterApiHost;
+                    }
+                    const newClientTunnelAddress = serverListenPort && clientEffectiveTunnelHost 
+                        ? `${formatHostForUrl(clientEffectiveTunnelHost)}:${serverListenPort}`
+                        : serverNode.data.tunnelAddress || "";
+                    
+                    newNodes[clientNodeIndex] = { ...clientNode, data: { ...clientNode.data, tunnelAddress: newClientTunnelAddress }};
                 }
-              }
-            });
-          }
-          return { ...n, data: mergedData };
-        }
-        return n;
-      })
-    );
-    toast({ title: `节点 "${updatedData.label || nodeId.substring(0,8)}" 属性已更新`});
+            }
+        });
+
+        // If S-node's targetAddress changes, update connected T-node
+        edgesInternal.forEach(edge => {
+            if (edge.source === serverNode.id && getNodeById(edge.target)?.data.role === 'T') {
+                const tNodeIndex = newNodes.findIndex(n => n.id === edge.target);
+                if (tNodeIndex !== -1) {
+                    const newTargetHost = extractHostname(mergedData.targetAddress || "");
+                    const newTargetPort = extractPort(mergedData.targetAddress || "");
+                    newNodes[tNodeIndex] = { ...newNodes[tNodeIndex], data: { ...newNodes[tNodeIndex].data, ipAddress: newTargetHost || "", port: newTargetPort || "" }};
+                }
+            }
+        });
+
+    } else if (mergedData.role === 'C') {
+        // If C-node's targetAddress (local listen) changes. (No direct sync needed unless other logic depends on it)
+        // If C-node's tunnelAddress (remote server) changes, this might require re-eval if it was auto-set. (Handled by user edit mostly)
+         // If C-node's targetAddress changes, update connected T-node (if C -> T)
+        const clientNode = newNodes[nodeIndex];
+        edgesInternal.forEach(edge => {
+            if (edge.source === clientNode.id && getNodeById(edge.target)?.data.role === 'T') {
+                const tNodeIndex = newNodes.findIndex(n => n.id === edge.target);
+                 if (tNodeIndex !== -1) {
+                    const newTargetHost = extractHostname(mergedData.targetAddress || "");
+                    const newTargetPort = extractPort(mergedData.targetAddress || "");
+                    newNodes[tNodeIndex] = { ...newNodes[tNodeIndex], data: { ...newNodes[tNodeIndex].data, ipAddress: newTargetHost || "", port: newTargetPort || "" }};
+                }
+            }
+        });
+
+    } else if (mergedData.role === 'T') {
+        const tNode = newNodes[nodeIndex];
+        // If T-node's ipAddress or port changes, update connected S or C node's targetAddress
+        edgesInternal.forEach(edge => {
+            if (edge.target === tNode.id) { // S/C -> T connection
+                const scNodeIndex = newNodes.findIndex(n => n.id === edge.source && (n.data.role === 'S' || n.data.role === 'C'));
+                if (scNodeIndex !== -1) {
+                    const newScTargetAddress = `${formatHostForDisplay(mergedData.ipAddress || "")}:${mergedData.port || ""}`;
+                    newNodes[scNodeIndex] = { ...newNodes[scNodeIndex], data: { ...newNodes[scNodeIndex].data, targetAddress: newScTargetAddress }};
+                }
+            }
+        });
+    }
+    
+    setNodesInternal(newNodes);
+    toast({ title: `节点 "${mergedData.label || nodeId.substring(0,8)}" 属性已更新`});
     setIsEditNodeDialogOpen(false);
     setNodeToEdit(null);
-  }, [setNodesInternal, toast, edgesInternal, getNodeById]);
+  }, [nodesInternal, edgesInternal, setNodesInternal, toast, getNodeById, getApiConfigById]);
 
 
   const handleDeleteNode = (nodeToDelete: Node) => { deleteElements({ nodes: [nodeToDelete] }); toast({ title: `节点 "${nodeToDelete.data.label || nodeToDelete.id}" 已删除` }); if (selectedNode?.id === nodeToDelete.id) setSelectedNode(null); setContextMenu(null); };
@@ -875,7 +961,7 @@ function TopologyEditorCore() {
           <div className="flex-grow relative">
             <div className="absolute inset-0">
               <ActualTopologyFlowWithState
-                nodes={nodesInternal} edges={edgesInternal} onNodesChange={onNodesChange} onEdgesChange={onEdgesChange} onConnect={onConnect}
+                nodes={nodesInternal} edges={edgesInternal} onNodesChange={onNodesChangeInternal} onEdgesChange={onEdgesChangeInternal} onConnect={onConnect}
                 onSelectionChange={onSelectionChange} reactFlowWrapperRef={reactFlowWrapperRef} onCenterView={handleCenterViewCallback}
                 onClearCanvas={handleClearCanvasCallback} onTriggerSubmitTopology={handleTriggerSubmitTopology} 
                 canSubmit={(nodesInternal.length > 0 || edgesInternal.length > 0) && !isSubmitting}
