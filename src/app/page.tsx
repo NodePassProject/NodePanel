@@ -95,12 +95,6 @@ export default function HomePage() {
     <AppLayout onLog={addPageLog}>
         {activeApiConfig ? (
           <div className="space-y-8">
-            <div className="text-right">
-              <Button onClick={() => setIsCreateInstanceDialogOpen(true)} disabled={!currentApiRoot || !currentToken} className="font-sans">
-                <PlusCircle className="mr-2 h-5 w-5" />
-                创建新实例
-              </Button>
-            </div>
             <InstanceList
               key={activeApiConfig.id} 
               apiId={currentApiId}
@@ -110,6 +104,7 @@ export default function HomePage() {
               activeApiConfig={activeApiConfig}
               apiConfigsList={apiConfigsList} // Pass the full list
               onLog={addPageLog}
+              onOpenCreateInstanceDialog={() => setIsCreateInstanceDialogOpen(true)}
             />
           </div>
         ) : (

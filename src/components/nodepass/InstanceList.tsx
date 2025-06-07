@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { AlertTriangle, Eye, Trash2, ServerIcon, SmartphoneIcon, Search, KeyRound } from 'lucide-react';
+import { AlertTriangle, Eye, Trash2, ServerIcon, SmartphoneIcon, Search, KeyRound, PlusCircle } from 'lucide-react';
 import type { Instance, UpdateInstanceRequest } from '@/types/nodepass';
 import { InstanceStatusBadge } from './InstanceStatusBadge';
 import { InstanceControls } from './InstanceControls';
@@ -25,7 +25,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import type { NamedApiConfig } from '@/hooks/use-api-key';
 import type { AppLogEntry } from './EventLog';
-import { extractHostname, extractPort, parseNodePassUrl, isWildcardHostname } from '@/lib/url-utils';
+import { extractHostname, extractPort, parseNodePassUrl, isWildcardHostname, formatHostForDisplay } from '@/lib/url-utils';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Button } from '@/components/ui/button';
 import { BulkDeleteInstancesDialog } from './BulkDeleteInstancesDialog';
@@ -39,14 +39,6 @@ function formatBytes(bytes: number) {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
 }
 
-function formatHostForDisplay(host: string | null | undefined): string {
-  if (!host) return '未知主机';
-  if (host.includes(':') && !host.startsWith('[') && !host.endsWith(']')) {
-    return `[${host}]`;
-  }
-  return host;
-}
-
 interface InstanceListProps {
   apiId: string | null;
   apiName: string | null;
@@ -55,9 +47,10 @@ interface InstanceListProps {
   activeApiConfig: NamedApiConfig | null;
   apiConfigsList: NamedApiConfig[];
   onLog?: (message: string, type: AppLogEntry['type']) => void;
+  onOpenCreateInstanceDialog: () => void;
 }
 
-export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfig, apiConfigsList, onLog }: InstanceListProps) {
+export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfig, apiConfigsList, onLog, onOpenCreateInstanceDialog }: InstanceListProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -452,28 +445,32 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
           <CardDescription className="font-sans">管理和监控 NodePass 实例。</CardDescription>
         </div>
         <div className="flex items-center gap-2 mt-4 sm:mt-0 w-full sm:w-auto">
-          {selectedInstanceIds.size > 1 && (
+           {selectedInstanceIds.size > 1 && (
             <Button
               variant="destructive"
               size="sm"
               onClick={() => setIsBulkDeleteDialogOpen(true)}
               disabled={isBulkDeleting}
-              className="font-sans"
+              className="font-sans h-9"
             >
               <Trash2 className="mr-2 h-4 w-4" />
               删除选中 ({selectedInstanceIds.size})
             </Button>
           )}
-          <div className="relative w-full sm:w-64">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+          <div className="relative w-full sm:w-auto flex-grow sm:flex-grow-0">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
               type="search"
               placeholder="搜索实例..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-8 w-full font-sans"
+              className="pl-8 w-full font-sans h-9"
             />
           </div>
+          <Button onClick={onOpenCreateInstanceDialog} disabled={!apiRoot || !apiToken} className="font-sans h-9">
+            <PlusCircle className="mr-2 h-4 w-4" />
+            创建新实例
+          </Button>
         </div>
       </CardHeader>
       <CardContent>
