@@ -34,14 +34,6 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetDescription,
-  SheetTrigger,
-} from "@/components/ui/sheet";
 
 const initialNodes: Node[] = [];
 const initialEdges: Edge[] = [];
@@ -50,7 +42,8 @@ function TopologyPageContainer() {
   return (
     <AppLayout>
       <div className="flex flex-col flex-grow">
-        <div className="flex-grow p-3 flex flex-col"> {/* Reduced padding for larger canvas */}
+        {/* Reduced padding here to p-1 for larger canvas */}
+        <div className="flex-grow p-1 flex flex-col"> 
           <ReactFlowProvider>
             <TopologyFlow />
           </ReactFlowProvider>
@@ -69,7 +62,7 @@ function TopologyFlow() {
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
 
   const [isToolbarPopoverOpen, setIsToolbarPopoverOpen] = useState(false);
-  const [isMastersSheetOpen, setIsMastersSheetOpen] = useState(false);
+  const [isMastersPopoverOpen, setIsMastersPopoverOpen] = useState(false); // Changed from Sheet to Popover
   const [isPropertiesPopoverOpen, setIsPropertiesPopoverOpen] = useState(false);
 
 
@@ -89,8 +82,8 @@ function TopologyFlow() {
     const fallbackX = 100; 
     const fallbackY = 100;
 
-    const positionX = viewport.x + ((viewport.width && viewport.width > 0) ? (Math.random() * viewport.width * 0.5) : fallbackX);
-    const positionY = viewport.y + ((viewport.height && viewport.height > 0) ? (Math.random() * viewport.height * 0.5) : fallbackY);
+    const positionX = viewport.width > 0 ? (viewport.x + (Math.random() * viewport.width * 0.5)) : fallbackX;
+    const positionY = viewport.height > 0 ? (viewport.y + (Math.random() * viewport.height * 0.5)) : fallbackY;
     
     const newNode: Node = {
       id: newNodeId,
@@ -114,8 +107,8 @@ function TopologyFlow() {
     const fallbackX = 80;
     const fallbackY = 80;
     
-    const positionX = viewport.x + ((viewport.width && viewport.width > 0) ? (Math.random() * viewport.width * 0.4) : fallbackX);
-    const positionY = viewport.y + ((viewport.height && viewport.height > 0) ? (Math.random() * viewport.height * 0.4) : fallbackY);
+    const positionX = viewport.width > 0 ? (viewport.x + (Math.random() * viewport.width * 0.4)) : fallbackX;
+    const positionY = viewport.height > 0 ? (viewport.y + (Math.random() * viewport.height * 0.4)) : fallbackY;
         
     const newNode: Node = {
       id: newNodeId,
@@ -142,7 +135,7 @@ function TopologyFlow() {
     };
     setNodes((nds) => nds.concat(newNode));
     toast({ title: "主控节点已添加", description: `已将主控 "${masterConfig.name}" 添加到画布。` });
-    setIsMastersSheetOpen(false); 
+    setIsMastersPopoverOpen(false); // Close Popover
   }, [nodeIdCounter, setNodes, setNodeIdCounter, toast, reactFlowInstance]);
 
   const handleClearCanvas = useCallback(() => {
@@ -153,6 +146,7 @@ function TopologyFlow() {
     toast({ title: "画布已清空" });
     setIsToolbarPopoverOpen(false); 
     setIsPropertiesPopoverOpen(false);
+    setIsMastersPopoverOpen(false);
   }, [setNodes, setEdges, setNodeIdCounter, toast]);
 
   const handleCenterView = useCallback(() => {
@@ -185,12 +179,12 @@ function TopologyFlow() {
   const onSelectionChange = useCallback(({ nodes: selectedNodesList }: { nodes: Node[], edges: Edge[] }) => {
     if (selectedNodesList.length === 1) {
       setSelectedNode(selectedNodesList[0]);
-       if (!isPropertiesPopoverOpen) {
+       if (!isPropertiesPopoverOpen) { // Auto-open properties if a single node is selected and popover is closed
          setIsPropertiesPopoverOpen(true);
        }
     } else {
       setSelectedNode(null);
-       if (isPropertiesPopoverOpen && selectedNodesList.length === 0) {
+       if (isPropertiesPopoverOpen && selectedNodesList.length === 0) { // Close if no nodes are selected
          setIsPropertiesPopoverOpen(false);
        }
     }
@@ -199,9 +193,9 @@ function TopologyFlow() {
   useEffect(() => {
     if (selectedNode && !nodes.find(n => n.id === selectedNode.id)) {
       setSelectedNode(null);
-      setIsPropertiesPopoverOpen(false);
+      if (isPropertiesPopoverOpen) setIsPropertiesPopoverOpen(false);
     }
-  }, [nodes, selectedNode]);
+  }, [nodes, selectedNode, isPropertiesPopoverOpen]);
 
   const memoizedControls = useMemo(() => <Controls style={{ bottom: 10, right: 10 }} />, []);
   const memoizedMiniMap = useMemo(() => <MiniMap nodeStrokeWidth={3} zoomable pannable style={{ bottom: 10, left: 10, backgroundColor: 'hsl(var(--background)/0.8)'}} className="rounded-md shadow-md border border-border" />, []);
@@ -255,8 +249,8 @@ function TopologyFlow() {
           </PopoverContent>
         </Popover>
 
-        <Sheet open={isMastersSheetOpen} onOpenChange={setIsMastersSheetOpen}>
-          <SheetTrigger asChild>
+        <Popover open={isMastersPopoverOpen} onOpenChange={setIsMastersPopoverOpen}>
+          <PopoverTrigger asChild>
             <Button
               variant="ghost"
               size="icon"
@@ -265,19 +259,11 @@ function TopologyFlow() {
             >
               <ListTree className="h-4 w-4" />
             </Button>
-          </SheetTrigger>
-          <SheetContent side="left" className="w-72 p-0 flex flex-col">
-            <SheetHeader className="p-4 border-b">
-              <SheetTitle className="font-title text-base">主控列表</SheetTitle>
-              <SheetDescription className="font-sans text-xs">
-                点击一个主控将其代表添加到画布。
-              </SheetDescription>
-            </SheetHeader>
-            <div className="p-4 flex-grow overflow-y-auto">
-              <MastersPalette onAddMasterNode={handleAddMasterNodeFromPalette} />
-            </div>
-          </SheetContent>
-        </Sheet>
+          </PopoverTrigger>
+          <PopoverContent side="bottom" align="start" className="w-72 p-0">
+             <MastersPalette onAddMasterNode={handleAddMasterNodeFromPalette} />
+          </PopoverContent>
+        </Popover>
 
         {selectedNode && (
           <Popover open={isPropertiesPopoverOpen} onOpenChange={setIsPropertiesPopoverOpen}>
@@ -291,7 +277,7 @@ function TopologyFlow() {
                 <InfoIcon className="h-4 w-4" />
               </Button>
             </PopoverTrigger>
-            <PopoverContent side="right" align="start" className="w-80 p-0 flex flex-col">
+            <PopoverContent side="bottom" align="start" className="w-80 p-0 flex flex-col">
                <PropertiesDisplayPanel selectedNode={selectedNode} />
             </PopoverContent>
           </Popover>
@@ -302,4 +288,6 @@ function TopologyFlow() {
 }
 
 export default TopologyPageContainer;
+    
+
     
