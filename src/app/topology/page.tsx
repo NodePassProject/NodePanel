@@ -38,12 +38,11 @@ import {
 const initialNodes: Node[] = [];
 const initialEdges: Edge[] = [];
 
-function TopologyPageContainer() {
+export default function TopologyPageContainer() {
   return (
     <AppLayout>
-      <div className="flex flex-col flex-grow">
-        {/* Reduced padding here to p-1 for larger canvas */}
-        <div className="flex-grow p-1 flex flex-col"> 
+      <div className="flex flex-col flex-grow"> {/* Ensures AppLayout's main area is used for height */}
+        <div className="flex-grow p-1 flex flex-col"> {/* p-1 for minimal margin */}
           <ReactFlowProvider>
             <TopologyFlow />
           </ReactFlowProvider>
@@ -62,7 +61,7 @@ function TopologyFlow() {
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
 
   const [isToolbarPopoverOpen, setIsToolbarPopoverOpen] = useState(false);
-  const [isMastersPopoverOpen, setIsMastersPopoverOpen] = useState(false); // Changed from Sheet to Popover
+  const [isMastersPopoverOpen, setIsMastersPopoverOpen] = useState(false);
   const [isPropertiesPopoverOpen, setIsPropertiesPopoverOpen] = useState(false);
 
 
@@ -82,8 +81,9 @@ function TopologyFlow() {
     const fallbackX = 100; 
     const fallbackY = 100;
 
-    const positionX = viewport.width > 0 ? (viewport.x + (Math.random() * viewport.width * 0.5)) : fallbackX;
-    const positionY = viewport.height > 0 ? (viewport.y + (Math.random() * viewport.height * 0.5)) : fallbackY;
+    // Ensure viewport dimensions are valid before using them
+    const positionX = viewport.width > 0 ? (Math.random() * viewport.width * 0.5) + viewport.x : fallbackX;
+    const positionY = viewport.height > 0 ? (Math.random() * viewport.height * 0.5) + viewport.y : fallbackY;
     
     const newNode: Node = {
       id: newNodeId,
@@ -107,8 +107,8 @@ function TopologyFlow() {
     const fallbackX = 80;
     const fallbackY = 80;
     
-    const positionX = viewport.width > 0 ? (viewport.x + (Math.random() * viewport.width * 0.4)) : fallbackX;
-    const positionY = viewport.height > 0 ? (viewport.y + (Math.random() * viewport.height * 0.4)) : fallbackY;
+    const positionX = viewport.width > 0 ? (Math.random() * viewport.width * 0.4) + viewport.x : fallbackX;
+    const positionY = viewport.height > 0 ? (Math.random() * viewport.height * 0.4) + viewport.y : fallbackY;
         
     const newNode: Node = {
       id: newNodeId,
@@ -135,7 +135,7 @@ function TopologyFlow() {
     };
     setNodes((nds) => nds.concat(newNode));
     toast({ title: "主控节点已添加", description: `已将主控 "${masterConfig.name}" 添加到画布。` });
-    setIsMastersPopoverOpen(false); // Close Popover
+    setIsMastersPopoverOpen(false);
   }, [nodeIdCounter, setNodes, setNodeIdCounter, toast, reactFlowInstance]);
 
   const handleClearCanvas = useCallback(() => {
@@ -179,12 +179,12 @@ function TopologyFlow() {
   const onSelectionChange = useCallback(({ nodes: selectedNodesList }: { nodes: Node[], edges: Edge[] }) => {
     if (selectedNodesList.length === 1) {
       setSelectedNode(selectedNodesList[0]);
-       if (!isPropertiesPopoverOpen) { // Auto-open properties if a single node is selected and popover is closed
+       if (!isPropertiesPopoverOpen) {
          setIsPropertiesPopoverOpen(true);
        }
     } else {
       setSelectedNode(null);
-       if (isPropertiesPopoverOpen && selectedNodesList.length === 0) { // Close if no nodes are selected
+       if (isPropertiesPopoverOpen && selectedNodesList.length === 0) {
          setIsPropertiesPopoverOpen(false);
        }
     }
@@ -202,7 +202,7 @@ function TopologyFlow() {
   const memoizedBackground = useMemo(() => <Background variant="dots" gap={16} size={1} />, []);
 
   return (
-    <div className="flex-grow w-full relative bg-card rounded-lg shadow-md border border-border overflow-hidden">
+    <div className="h-full w-full relative bg-card rounded-lg shadow-md border border-border overflow-hidden" data-testid="topology-page-container">
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -286,8 +286,3 @@ function TopologyFlow() {
     </div>
   );
 }
-
-export default TopologyPageContainer;
-    
-
-    
