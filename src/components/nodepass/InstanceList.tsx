@@ -25,6 +25,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import type { NamedApiConfig } from '@/hooks/use-api-key';
 import type { AppLogEntry } from './EventLog';
+import { parseNodePassUrlForTopology } from '@/app/topology/lib/topology-utils';
 
 function formatBytes(bytes: number) {
   if (bytes === 0) return '0 B';
@@ -143,98 +144,116 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
   const renderSkeletons = () => {
     return Array.from({ length: 3 }).map((_, i) => (
       <TableRow key={`skeleton-${i}`}>
-        {[...Array(7)].map((_, cellIndex) => (
+        {[...Array(8)].map((_, cellIndex) => (
           <TableCell key={`skeleton-cell-${i}-${cellIndex}`}>
-            <Skeleton className={`h-4 ${cellIndex === 3 ? 'w-40' : cellIndex === 0 ? 'w-24' : 'w-16'}`} />
+            <Skeleton className={`h-4 ${cellIndex === 3 || cellIndex === 4 ? 'w-40' : cellIndex === 0 ? 'w-24' : 'w-16'}`} />
           </TableCell>
         ))}
       </TableRow>
     ));
   };
 
-  const renderInstanceRow = (instance: Instance) => (
-    <TableRow
-      key={instance.id}
-      className="text-foreground/90 hover:text-foreground"
-      onDoubleClick={() => setSelectedInstanceForDetails(instance)}
-    >
-      <TableCell className="font-medium font-mono text-xs max-w-[100px] truncate" title={instance.id}>{instance.id}</TableCell>
-        <TableCell>
-        {instance.id === '********' ? (
-            <Badge variant="outline" className="border-yellow-500 text-yellow-600 items-center whitespace-nowrap text-xs py-0.5 px-1.5 font-sans">
-            <KeyRound className="h-3 w-3 mr-1" />API 密钥
-            </Badge>
-        ) : (
-          <Badge
-            variant={instance.type === 'server' ? 'default' : 'accent'}
-            className="items-center whitespace-nowrap text-xs font-sans"
-          >
-            {instance.type === 'server' ? <ServerIcon size={12} className="mr-1" /> : <SmartphoneIcon size={12} className="mr-1" />}
-            {instance.type === 'server' ? '出口(s)' : '入口(c)'}
-          </Badge>
-        )}
-      </TableCell>
-      <TableCell>
-        {instance.id === '********' ? (
-          <Badge variant="outline" className="border-yellow-500 text-yellow-600 whitespace-nowrap font-sans text-xs py-0.5 px-1.5">
-            <KeyRound className="mr-1 h-3.5 w-3.5" />
-            监听中
-          </Badge>
-        ) : (
-          <InstanceStatusBadge status={instance.status} />
-        )}
-      </TableCell>
-      <TableCell
-        className="truncate max-w-sm text-xs font-mono"
+  const renderInstanceRow = (instance: Instance) => {
+    const parsedUrl = instance.id !== '********' ? parseNodePassUrlForTopology(instance.url) : null;
+    let displayTargetTunnel = "N/A";
+    if (parsedUrl) {
+        if (instance.type === 'server') {
+            displayTargetTunnel = parsedUrl.targetAddress || "N/A";
+        } else if (instance.type === 'client') {
+            displayTargetTunnel = parsedUrl.tunnelAddress || "N/A";
+        }
+    }
+
+    return (
+      <TableRow
+        key={instance.id}
+        className="text-foreground/90 hover:text-foreground"
+        onDoubleClick={() => setSelectedInstanceForDetails(instance)}
       >
-          <span
-            className="cursor-pointer hover:text-primary transition-colors duration-150"
-            title={instance.id === '********' ? `点击复制主控 "${apiName || '当前主控'}" 的 API 密钥` : `点击复制: ${instance.url}`}
-            onClick={(e) => {
-              e.stopPropagation();
-              handleCopyToClipboard(instance.url, instance.id === '********' ? 'API 密钥' : 'URL');
-            }}
-          >
-            {instance.id === '********' ? (apiName ? `${apiName} (API 密钥)`: '主控 API 密钥') : instance.url}
-          </span>
-      </TableCell>
-      <TableCell className="text-center text-xs whitespace-nowrap font-mono">
-        {formatBytes(instance.tcprx)} / {formatBytes(instance.tcptx)}
-      </TableCell>
-      <TableCell className="text-center text-xs whitespace-nowrap font-mono">
-        {formatBytes(instance.udprx)} / {formatBytes(instance.udptx)}
-      </TableCell>
-      <TableCell className="text-right">
-        <div className="flex justify-end items-center space-x-1">
-          {instance.id !== '********' && (
-            <InstanceControls
-                instance={instance}
-                onAction={(id, action) => updateInstanceMutation.mutate({ instanceId: id, action })}
-                isLoading={updateInstanceMutation.isPending && updateInstanceMutation.variables?.instanceId === instance.id}
-            />
+        <TableCell className="font-medium font-mono text-xs max-w-[100px] truncate" title={instance.id}>{instance.id}</TableCell>
+          <TableCell>
+          {instance.id === '********' ? (
+              <Badge variant="outline" className="border-yellow-500 text-yellow-600 items-center whitespace-nowrap text-xs py-0.5 px-1.5 font-sans">
+              <KeyRound className="h-3 w-3 mr-1" />API 密钥
+              </Badge>
+          ) : (
+            <Badge
+              variant={instance.type === 'server' ? 'default' : 'accent'}
+              className="items-center whitespace-nowrap text-xs font-sans"
+            >
+              {instance.type === 'server' ? <ServerIcon size={12} className="mr-1" /> : <SmartphoneIcon size={12} className="mr-1" />}
+              {instance.type === 'server' ? '出口(s)' : '入口(c)'}
+            </Badge>
           )}
-          <button
-              className="p-2 rounded-md hover:bg-muted"
-              onClick={() => setSelectedInstanceForDetails(instance)}
-              aria-label="查看详情"
-          >
-              <Eye className="h-4 w-4" />
-          </button>
-          {instance.id !== '********' && (
-            <>
-              <button
-                  className="p-2 rounded-md hover:bg-destructive/10 text-destructive"
-                  onClick={() => setSelectedInstanceForDelete(instance)}
-                  aria-label="删除"
-              >
-                <Trash2 className="h-4 w-4" />
-              </button>
-            </>
+        </TableCell>
+        <TableCell>
+          {instance.id === '********' ? (
+            <Badge variant="outline" className="border-yellow-500 text-yellow-600 whitespace-nowrap font-sans text-xs py-0.5 px-1.5">
+              <KeyRound className="mr-1 h-3.5 w-3.5" />
+              监听中
+            </Badge>
+          ) : (
+            <InstanceStatusBadge status={instance.status} />
           )}
-        </div>
-      </TableCell>
-    </TableRow>
-  );
+        </TableCell>
+        <TableCell
+          className="truncate max-w-[200px] text-xs font-mono"
+        >
+            <span
+              className="cursor-pointer hover:text-primary transition-colors duration-150"
+              title={instance.id === '********' ? `点击复制主控 "${apiName || '当前主控'}" 的 API 密钥` : `点击复制: ${instance.url}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleCopyToClipboard(instance.url, instance.id === '********' ? 'API 密钥' : 'URL');
+              }}
+            >
+              {instance.id === '********' ? (apiName ? `${apiName} (API 密钥)`: '主控 API 密钥') : instance.url}
+            </span>
+        </TableCell>
+        <TableCell 
+          className="truncate max-w-[200px] text-xs font-mono" 
+          title={displayTargetTunnel !== "N/A" ? displayTargetTunnel : ""}
+        >
+          {displayTargetTunnel}
+        </TableCell>
+        <TableCell className="text-center text-xs whitespace-nowrap font-mono">
+          {formatBytes(instance.tcprx)} / {formatBytes(instance.tcptx)}
+        </TableCell>
+        <TableCell className="text-center text-xs whitespace-nowrap font-mono">
+          {formatBytes(instance.udprx)} / {formatBytes(instance.udptx)}
+        </TableCell>
+        <TableCell className="text-right">
+          <div className="flex justify-end items-center space-x-1">
+            {instance.id !== '********' && (
+              <InstanceControls
+                  instance={instance}
+                  onAction={(id, action) => updateInstanceMutation.mutate({ instanceId: id, action })}
+                  isLoading={updateInstanceMutation.isPending && updateInstanceMutation.variables?.instanceId === instance.id}
+              />
+            )}
+            <button
+                className="p-2 rounded-md hover:bg-muted"
+                onClick={() => setSelectedInstanceForDetails(instance)}
+                aria-label="查看详情"
+            >
+                <Eye className="h-4 w-4" />
+            </button>
+            {instance.id !== '********' && (
+              <>
+                <button
+                    className="p-2 rounded-md hover:bg-destructive/10 text-destructive"
+                    onClick={() => setSelectedInstanceForDelete(instance)}
+                    aria-label="删除"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </>
+            )}
+          </div>
+        </TableCell>
+      </TableRow>
+    );
+  }
 
   return (
     <Card className="shadow-lg mt-6">
@@ -275,6 +294,7 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
                 <TableHead className="font-sans">类型</TableHead>
                 <TableHead className="font-sans">状态</TableHead>
                 <TableHead className="font-sans">URL / 密钥</TableHead>
+                <TableHead className="font-sans">目标/隧道地址</TableHead>
                 <TableHead className="text-center whitespace-nowrap font-sans">TCP Rx/Tx</TableHead>
                 <TableHead className="text-center whitespace-nowrap font-sans">UDP Rx/Tx</TableHead>
                 <TableHead className="text-right font-sans">操作</TableHead>
@@ -289,7 +309,7 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
                   </>
               ) : (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center h-24 font-sans">
+                  <TableCell colSpan={8} className="text-center h-24 font-sans">
                     {isLoadingInstances
                       ? "加载中..."
                       : !activeApiConfig
