@@ -33,6 +33,8 @@ import { PropertiesDisplayPanel } from './components/PropertiesDisplayPanel';
 import type { NamedApiConfig } from '@/hooks/use-api-key';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Separator } from '@/components/ui/separator';
+
 
 const initialNodes: Node[] = [];
 const initialEdges: Edge[] = [];
@@ -52,6 +54,7 @@ interface ActualTopologyFlowWithStateProps {
   canSubmit: boolean;
 }
 
+// Moved ActualTopologyFlowWithState outside TopologyPage
 const ActualTopologyFlowWithState: React.FC<ActualTopologyFlowWithStateProps> = ({
   nodes,
   edges,
@@ -81,8 +84,8 @@ const ActualTopologyFlowWithState: React.FC<ActualTopologyFlowWithStateProps> = 
 
   const memoizedControls = useMemo(() => <Controls style={{ bottom: 10, right: 10 }} />, []);
   const memoizedMiniMap = useMemo(() => (
-    <MiniMap style={miniMapStyle} nodeStrokeWidth={3} zoomable pannable />
-  ), [miniMapStyle]);
+    isClient ? <MiniMap style={miniMapStyle} nodeStrokeWidth={3} zoomable pannable /> : null
+  ), [miniMapStyle, isClient]);
   const memoizedBackground = useMemo(() => <Background variant="dots" gap={16} size={1} />, []);
 
   return (
@@ -116,7 +119,7 @@ const ActualTopologyFlowWithState: React.FC<ActualTopologyFlowWithStateProps> = 
           />
         </Panel>
         {memoizedControls}
-        {isClient && memoizedMiniMap}
+        {memoizedMiniMap}
         {memoizedBackground}
       </ReactFlow>
     </div>
@@ -131,6 +134,7 @@ interface ToolbarWrapperComponentProps {
   canSubmit: boolean;
 }
 
+// Moved ToolbarWrapperComponent outside TopologyPage
 const ToolbarWrapperComponent: React.FC<ToolbarWrapperComponentProps> = ({
   onCenterView,
   onFormatLayout,
@@ -154,6 +158,7 @@ interface MastersPaletteWrapperComponentProps {
   onAddMasterNodeFromPalette: (config: NamedApiConfig, instance: ReturnType<typeof useReactFlow>) => void;
 }
 
+// Moved MastersPaletteWrapperComponent outside TopologyPage
 const MastersPaletteWrapperComponent: React.FC<MastersPaletteWrapperComponentProps> = ({
   onAddMasterNodeFromPalette,
 }) => {
@@ -200,29 +205,35 @@ export default function TopologyPage() {
     setNodeIdCounter(newCounter);
     const newNodeId = `${newNodeData.type || 'node'}-${newCounter}`;
 
-    let position = { x: 100, y: 100 };
+    let position = { x: 100, y: 100 }; // Default fallback
 
     if (reactFlowWrapperRef.current) {
-      const bounds = reactFlowWrapperRef.current.getBoundingClientRect();
-      if (bounds.width > 0 && bounds.height > 0) {
-        const screenCenter = { x: bounds.width / 2, y: bounds.height / 2 };
-        position = reactFlowInstance.screenToFlowPosition(screenCenter);
-        position.x += (Math.random() * 50 - 25);
-        position.y += (Math.random() * 50 - 25);
-      } else {
-        const currentViewport = reactFlowInstance.getViewport();
-        position = {
-            x: -currentViewport.x / currentViewport.zoom + 150 + (Math.random() * 50 - 25),
-            y: -currentViewport.y / currentViewport.zoom + 150 + (Math.random() * 50 - 25),
-        };
-      }
+        const bounds = reactFlowWrapperRef.current.getBoundingClientRect();
+        // Check if bounds are valid (width and height are not 0)
+        if (bounds.width > 0 && bounds.height > 0) {
+            const screenCenter = { x: bounds.width / 2, y: bounds.height / 2 };
+            position = reactFlowInstance.screenToFlowPosition(screenCenter);
+            // Add slight random offset to prevent perfect overlap if multiple nodes are added quickly
+            position.x += (Math.random() * 50 - 25);
+            position.y += (Math.random() * 50 - 25);
+        } else {
+            // Fallback if bounds are not ready (e.g., initial render before layout)
+            // Use viewport center as a rough guide
+            const currentViewport = reactFlowInstance.getViewport();
+            position = {
+                x: -currentViewport.x / currentViewport.zoom + 150 + (Math.random() * 50 - 25), // 150 is an arbitrary offset
+                y: -currentViewport.y / currentViewport.zoom + 150 + (Math.random() * 50 - 25),
+            };
+        }
     } else {
+        // Fallback if wrapper ref is not yet available
         const currentViewport = reactFlowInstance.getViewport();
         position = {
             x: -currentViewport.x / currentViewport.zoom + 150 + (Math.random() * 50 - 25),
             y: -currentViewport.y / currentViewport.zoom + 150 + (Math.random() * 50 - 25),
         };
     }
+
 
     const finalNewNode: Node = {
       id: newNodeId,
@@ -237,23 +248,23 @@ export default function TopologyPage() {
 
   const handleAddMasterNodeFromPalette = useCallback((masterConfig: NamedApiConfig, rfInstance: ReturnType<typeof useReactFlow>) => {
     const masterNodeData: Omit<Node, 'id' | 'position'> = {
-      type: 'default',
+      type: 'default', // Or a custom type if defined
       data: {
         label: `主控: ${masterConfig.name}`,
-        nodeType: 'masterRepresentation',
+        nodeType: 'masterRepresentation', // Custom type identifier
         masterId: masterConfig.id,
         masterName: masterConfig.name,
         apiUrl: masterConfig.apiUrl,
         defaultLogLevel: masterConfig.masterDefaultLogLevel,
         defaultTlsMode: masterConfig.masterDefaultTlsMode,
       },
-      style: {
+      style: { // Example styling
         borderColor: 'hsl(var(--primary))',
         borderWidth: 2,
         background: 'hsl(var(--primary)/10)',
         borderRadius: '0.375rem',
-        padding: '8px 12px',
-        fontSize: '0.75rem',
+        padding: '8px 12px', // Adjusted padding
+        fontSize: '0.75rem', // Adjusted font size
       },
       sourcePosition: Position.Right,
       targetPosition: Position.Left,
@@ -272,67 +283,79 @@ export default function TopologyPage() {
 
   const handleCenterViewCallback = useCallback((instance: ReturnType<typeof useReactFlow> | null) => {
     if (!instance) return;
-    if (nodesInternal.length > 0) instance.fitView({ duration: 300, padding: 0.2 });
-    else toast({ title: "画布为空", description: "无法居中空画布。" });
+    if (nodesInternal.length > 0) {
+      instance.fitView({ duration: 300, padding: 0.2 });
+    } else {
+      toast({ title: "画布为空", description: "无法居中空画布。" });
+    }
   }, [nodesInternal, toast]);
 
   const handleFormatLayoutCallback = useCallback(() => {
     toast({ title: "格式化布局", description: "此功能待实现。" });
+    // Placeholder for actual layout logic (e.g., using Dagre or ELK)
   }, [toast]);
 
   const handleSubmitTopologyCallback = useCallback(() => {
     toast({ title: "提交拓扑", description: "此功能待实现。" });
+    // Placeholder for actual submission logic
   }, [toast]);
 
 
   return (
     <AppLayout>
-      <ReactFlowProvider>
-        <div className="flex flex-row flex-grow h-full overflow-hidden">
-          {/* Left Sidebar */}
-          <div className="w-60 flex-shrink-0 flex flex-col border-r bg-muted/30 shadow-sm p-2 space-y-2">
-            <Card className="flex flex-col h-1/2 shadow-md rounded-lg">
-              <CardHeader className="p-3 border-b">
-                <CardTitle className="text-base font-semibold font-title">主控列表</CardTitle>
-                <CardDescription className="text-xs text-muted-foreground font-sans">点击主控添加到画布。</CardDescription>
-              </CardHeader>
-              <CardContent className="flex-grow overflow-y-auto p-1">
-                <MastersPaletteWrapperComponent onAddMasterNodeFromPalette={handleAddMasterNodeFromPalette} />
-              </CardContent>
-            </Card>
+      <ReactFlowProvider> {/* Provider should wrap all components that use useReactFlow */}
+        <div className="flex flex-col flex-grow h-full"> {/* Main page flex container */}
+          {/* Top Toolbar Area - This is now inside the canvas panel */}
+          
+          {/* Content Row: Left Sidebar and Right Canvas Area */}
+          <div className="flex flex-row flex-grow overflow-hidden"> {/* Horizontal layout for sidebar and canvas */}
+            
+            {/* Left Sidebar */}
+            <div className="w-60 flex-shrink-0 flex flex-col bg-muted/30 border-r p-2 space-y-2">
+              <Card className="flex flex-col h-1/2 rounded-lg border"> {/* No shadow-md */}
+                <CardHeader className="p-3 border-b">
+                  <CardTitle className="text-base font-semibold font-title">主控列表</CardTitle>
+                  <CardDescription className="text-xs text-muted-foreground font-sans">点击主控添加到画布。</CardDescription>
+                </CardHeader>
+                <CardContent className="flex-grow overflow-y-auto p-1">
+                  <MastersPaletteWrapperComponent onAddMasterNodeFromPalette={handleAddMasterNodeFromPalette} />
+                </CardContent>
+              </Card>
 
-            <Card className="flex flex-col flex-grow shadow-md rounded-lg min-h-0">
-              <CardHeader className="p-3 border-b">
-                <CardTitle className="text-base font-semibold font-title">节点属性</CardTitle>
-                <CardDescription className="text-xs text-muted-foreground font-sans">
-                  {selectedNode ? `选中: ${selectedNode.data.label || selectedNode.id}` : '点击节点查看属性。'}
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="flex-grow overflow-y-auto p-1">
-                <PropertiesDisplayPanel selectedNode={selectedNode} />
-              </CardContent>
-            </Card>
-          </div>
+              {/* Node Properties Panel */}
+              <Card className="flex flex-col flex-grow min-h-0 rounded-lg border"> {/* No shadow-md */}
+                <CardHeader className="p-3 border-b">
+                  <CardTitle className="text-base font-semibold font-title">节点属性</CardTitle>
+                  <CardDescription className="text-xs text-muted-foreground font-sans">
+                    {selectedNode ? `选中: ${selectedNode.data.label || selectedNode.id}` : '点击节点查看属性。'}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="flex-grow overflow-y-auto p-1">
+                  <PropertiesDisplayPanel selectedNode={selectedNode} />
+                </CardContent>
+              </Card>
+            </div>
 
-          {/* Right Area (Canvas) */}
-          <div className="flex-grow flex flex-col overflow-hidden p-2">
-            {/* Canvas Area - Toolbar is now inside ActualTopologyFlowWithState */}
-            <div className="flex-grow relative">
-              <div className="absolute inset-0">
-                <ActualTopologyFlowWithState
-                  nodes={nodesInternal}
-                  edges={edgesInternal}
-                  onNodesChange={onNodesChange}
-                  onEdgesChange={onEdgesChange}
-                  onConnect={onConnect}
-                  onSelectionChange={onSelectionChange}
-                  reactFlowWrapperRef={reactFlowWrapperRef}
-                  onCenterView={handleCenterViewCallback}
-                  onFormatLayout={handleFormatLayoutCallback}
-                  onClearCanvas={handleClearCanvasCallback}
-                  onSubmitTopology={handleSubmitTopologyCallback}
-                  canSubmit={nodesInternal.length > 0 || edgesInternal.length > 0}
-                />
+            {/* Right Area (Canvas) */}
+            <div className="flex-grow flex flex-col overflow-hidden p-2">
+              {/* Canvas Area - Toolbar is now inside ActualTopologyFlowWithState */}
+              <div className="flex-grow relative">
+                <div className="absolute inset-0">
+                  <ActualTopologyFlowWithState
+                    nodes={nodesInternal}
+                    edges={edgesInternal}
+                    onNodesChange={onNodesChange}
+                    onEdgesChange={onEdgesChange}
+                    onConnect={onConnect}
+                    onSelectionChange={onSelectionChange}
+                    reactFlowWrapperRef={reactFlowWrapperRef}
+                    onCenterView={handleCenterViewCallback}
+                    onFormatLayout={handleFormatLayoutCallback}
+                    onClearCanvas={handleClearCanvasCallback}
+                    onSubmitTopology={handleSubmitTopologyCallback}
+                    canSubmit={nodesInternal.length > 0 || edgesInternal.length > 0}
+                  />
+                </div>
               </div>
             </div>
           </div>
