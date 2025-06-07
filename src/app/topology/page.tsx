@@ -32,7 +32,6 @@ import { MastersPalette } from './components/MastersPalette';
 import { PropertiesDisplayPanel } from './components/PropertiesDisplayPanel';
 import type { NamedApiConfig } from '@/hooks/use-api-key';
 import { useToast } from '@/hooks/use-toast';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'; // Card still used for structure if needed elsewhere
 import { Separator } from '@/components/ui/separator';
 
 
@@ -47,7 +46,6 @@ interface ActualTopologyFlowWithStateProps {
   onConnect: (params: Connection | Edge) => void;
   onSelectionChange: ({ nodes, edges }: { nodes: Node[]; edges: Edge[] }) => void;
   reactFlowWrapperRef: React.RefObject<HTMLDivElement>;
-  // Toolbar props
   onCenterView: (instance: ReturnType<typeof useReactFlow>) => void;
   onFormatLayout: () => void;
   onClearCanvas: () => void;
@@ -311,7 +309,7 @@ export default function TopologyPage() {
                   </div>
                 </div>
 
-                <Separator className="mx-3 my-0" /> 
+                <Separator className="my-0" /> {/* Separator uses its default margin if mx/my not specified */}
 
                 {/* Node Properties Section */}
                 <div className="flex flex-col flex-grow min-h-0 p-3">
@@ -353,3 +351,4 @@ export default function TopologyPage() {
     </AppLayout>
   );
 }
+
