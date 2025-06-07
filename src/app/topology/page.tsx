@@ -56,18 +56,20 @@ export default function TopologyPage() {
     const newNodeId = `master-node-${masterConfig.id}-${newCounter}`;
 
     const { x: viewX, y: viewY, zoom } = reactFlowInstanceRef.getViewport();
-    const canvasWidth = reactFlowInstanceRef.width / zoom;
-    const canvasHeight = reactFlowInstanceRef.height / zoom;
+    // Calculate center of the current viewport
+    const canvasWidth = reactFlowInstanceRef.width || 0;
+    const canvasHeight = reactFlowInstanceRef.height || 0;
+    
+    const positionX = viewX + (canvasWidth / (2 * zoom)) + (Math.random() * 100 - 50); // Place near center with some randomness
+    const positionY = viewY + (canvasHeight / (2 * zoom)) + (Math.random() * 100 - 50);
 
-    const positionX = viewX + (canvasWidth > 0 ? (Math.random() * canvasWidth * 0.2) : 50);
-    const positionY = viewY + (canvasHeight > 0 ? (Math.random() * canvasHeight * 0.2) : 50);
 
     const newNode: Node = {
       id: newNodeId,
-      type: 'default',
+      type: 'default', // Default type, can be customized later
       data: {
         label: `主控: ${masterConfig.name}`,
-        nodeType: 'masterRepresentation',
+        nodeType: 'masterRepresentation', // Custom type identifier
         masterId: masterConfig.id,
         masterName: masterConfig.name,
         apiUrl: masterConfig.apiUrl,
@@ -75,12 +77,13 @@ export default function TopologyPage() {
         defaultTlsMode: masterConfig.masterDefaultTlsMode,
       },
       position: { x: positionX, y: positionY },
-      style: {
+      style: { // Example styling for master nodes
         borderColor: 'hsl(var(--primary))',
         borderWidth: 2,
         background: 'hsl(var(--primary)/10)',
-        borderRadius: '0.375rem',
+        borderRadius: '0.375rem', // Equivalent to rounded-md
         padding: '8px 12px',
+        fontSize: '0.75rem', // text-xs
       },
       sourcePosition: Position.Right,
       targetPosition: Position.Left,
@@ -99,7 +102,7 @@ export default function TopologyPage() {
 
   const handleCenterViewCallback = useCallback((instance: ReturnType<typeof useReactFlow> | null) => {
      if (!instance) return;
-     if (nodes.length > 0) instance.fitView({duration: 300, padding: 0.2}); else toast({title: "画布为空"});
+     if (nodes.length > 0) instance.fitView({duration: 300, padding: 0.2}); else toast({title: "画布为空", description: "无法居中空画布。"});
   }, [nodes, toast]);
 
   const handleFormatLayoutCallback = useCallback(() => {
@@ -125,34 +128,8 @@ export default function TopologyPage() {
       [setEdges]
     );
 
-    const addGenericNodeFromToolbar = useCallback(() => {
-        const newCounter = nodeIdCounter + 1;
-        setNodeIdCounter(newCounter);
-        const newNodeId = `node-${newCounter}`;
-        const newNodeData = { label: `新节点 ${newCounter}` };
-
-        const { x: viewX, y: viewY, zoom } = reactFlowInstance.getViewport();
-        const canvasWidth = reactFlowInstance.width / zoom;
-        const canvasHeight = reactFlowInstance.height / zoom;
-
-        const positionX = viewX + (canvasWidth > 0 ? (Math.random() * canvasWidth * 0.3) : 100);
-        const positionY = viewY + (canvasHeight > 0 ? (Math.random() * canvasHeight * 0.3) : 100);
-
-        const newNodeToAdd: Node = {
-          id: newNodeId,
-          type: 'default',
-          data: newNodeData,
-          position: { x: positionX, y: positionY },
-          sourcePosition: Position.Right,
-          targetPosition: Position.Left,
-        };
-        setNodes((nds) => nds.concat(newNodeToAdd));
-        toast({ title: "节点已添加", description: `已添加节点 "${newNodeData.label}"。` });
-    }, [nodeIdCounter, setNodes, setNodeIdCounter, reactFlowInstance, toast]);
-
-
     const miniMapStyle = useMemo(() => ({
-      backgroundColor: resolvedTheme === 'dark' ? 'hsl(var(--popover))' : 'hsl(var(--card))',
+      backgroundColor: resolvedTheme === 'dark' ? 'hsl(var(--popover))' : 'hsl(var(--card))', // Theme-aware background
       border: `1px solid hsl(var(--border))`,
       borderRadius: '0.375rem',
     }), [resolvedTheme]);
@@ -199,15 +176,17 @@ export default function TopologyPage() {
             const newNodeData = { label: `新节点 ${newCounter}` };
 
             const { x: viewX, y: viewY, zoom } = reactFlowInstance.getViewport();
-            const canvasWidth = reactFlowInstance.width / zoom;
-            const canvasHeight = reactFlowInstance.height / zoom;
+            const canvasWidth = reactFlowInstance.width || 0; // Ensure these are not undefined
+            const canvasHeight = reactFlowInstance.height || 0;
+            
+            // Place near the center of the current view, or fallback if dimensions are zero
+            const positionX = viewX + (canvasWidth > 0 ? (canvasWidth / (2 * zoom)) : 100) + (Math.random() * 50 - 25);
+            const positionY = viewY + (canvasHeight > 0 ? (canvasHeight / (2 * zoom)) : 100) + (Math.random() * 50 - 25);
 
-            const positionX = viewX + (canvasWidth > 0 ? (Math.random() * canvasWidth * 0.3) : 100);
-            const positionY = viewY + (canvasHeight > 0 ? (Math.random() * canvasHeight * 0.3) : 100);
 
             const newNodeToAdd: Node = {
               id: newNodeId,
-              type: 'default',
+              type: 'default', // Use 'default' or a custom node type
               data: newNodeData,
               position: { x: positionX, y: positionY },
               sourcePosition: Position.Right,
@@ -232,53 +211,53 @@ export default function TopologyPage() {
 
   return (
     <AppLayout>
-      <div className="flex flex-col flex-grow h-full"> {/* Ensure this root div for the page content takes full height */}
-        <div className="flex flex-row flex-grow overflow-hidden">
-          {/* Left Sidebar */}
-          <div className="w-72 flex-shrink-0 flex flex-col border-r bg-muted/30 shadow-sm">
-            <Card className="flex flex-col h-1/2 m-2 shadow-md rounded-lg">
-              <CardHeader className="p-3 border-b">
-                <CardTitle className="text-base font-semibold font-title">主控列表</CardTitle>
-                <CardDescription className="text-xs text-muted-foreground font-sans">拖拽主控到画布。</CardDescription>
-              </CardHeader>
-              <CardContent className="flex-grow overflow-y-auto p-1">
-                 <MastersPaletteWrapper />
-              </CardContent>
-            </Card>
+      <ReactFlowProvider> {/* Provider moved here */}
+        <div className="flex flex-col flex-grow h-full">
+          <div className="flex flex-row flex-grow h-full overflow-hidden">
+            {/* Left Sidebar */}
+            <div className="w-72 flex-shrink-0 flex flex-col border-r bg-muted/30 shadow-sm">
+              <Card className="flex flex-col h-1/2 m-2 shadow-md rounded-lg">
+                <CardHeader className="p-3 border-b">
+                  <CardTitle className="text-base font-semibold font-title">主控列表</CardTitle>
+                  <CardDescription className="text-xs text-muted-foreground font-sans">将主控拖到画布上。</CardDescription>
+                </CardHeader>
+                <CardContent className="flex-grow overflow-y-auto p-1">
+                  <MastersPaletteWrapper />
+                </CardContent>
+              </Card>
 
-            <Separator />
+              <Separator />
 
-            <Card className="flex flex-col h-1/2 m-2 shadow-md rounded-lg">
-              <CardHeader className="p-3 border-b">
-                <CardTitle className="text-base font-semibold font-title">节点属性</CardTitle>
-                 <CardDescription className="text-xs text-muted-foreground font-sans">
-                  {selectedNode ? `选中: ${selectedNode.data.label || selectedNode.id}` : '点击节点查看属性。'}
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="flex-grow overflow-y-auto p-1">
-                <PropertiesDisplayPanel selectedNode={selectedNode} />
-              </CardContent>
-            </Card>
-          </div>
+              <Card className="flex flex-col flex-grow m-2 shadow-md rounded-lg min-h-0"> {/* flex-grow and min-h-0 for properties panel */}
+                <CardHeader className="p-3 border-b">
+                  <CardTitle className="text-base font-semibold font-title">节点属性</CardTitle>
+                  <CardDescription className="text-xs text-muted-foreground font-sans">
+                    {selectedNode ? `选中: ${selectedNode.data.label || selectedNode.id}` : '点击节点查看属性。'}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="flex-grow overflow-y-auto p-1">
+                  <PropertiesDisplayPanel selectedNode={selectedNode} />
+                </CardContent>
+              </Card>
+            </div>
 
-          {/* Right Area (Toolbar + Canvas) */}
-          <div className="flex-grow flex flex-col overflow-hidden">
-            <ReactFlowProvider>
-              {/* Top Toolbar Area */}
-              <div className="flex-shrink-0 p-2 border-b bg-background shadow-sm">
-                <ToolbarWrapper />
-              </div>
-
-              {/* Canvas Area with Bottom Margin */}
-              <div className="flex-grow relative pb-5">
-                <div className="absolute inset-0">
-                   <ActualTopologyFlowWithState />
+            {/* Right Area (Toolbar + Canvas) */}
+            <div className="flex-grow flex flex-col overflow-hidden">
+                {/* Top Toolbar Area */}
+                <div className="flex-shrink-0 p-2 border-b bg-background shadow-sm">
+                  <ToolbarWrapper />
                 </div>
-              </div>
-            </ReactFlowProvider>
+
+                {/* Canvas Area with Bottom Margin */}
+                <div className="flex-grow relative pb-5"> {/* pb-5 for 20px bottom margin */}
+                  <div className="absolute inset-0">
+                    <ActualTopologyFlowWithState />
+                  </div>
+                </div>
+            </div>
           </div>
         </div>
-      </div>
+      </ReactFlowProvider>
     </AppLayout>
   );
 }
