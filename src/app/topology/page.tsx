@@ -19,7 +19,7 @@ import ReactFlow, {
   type Node,
   type OnNodesChange,
   type OnEdgesChange,
-  PanOnScrollMode,
+  PanOnScrollMode, // Keep for panOnScroll if needed later, but not for panOnDrag
   Panel,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
@@ -85,7 +85,10 @@ const ActualTopologyFlowWithState: React.FC<ActualTopologyFlowWithStateProps> = 
   const memoizedBackground = useMemo(() => <Background variant="dots" gap={16} size={1} />, []);
 
   return (
-    <div ref={reactFlowWrapperRef} className="h-full w-full bg-background rounded-lg shadow-md border">
+    <div
+      ref={reactFlowWrapperRef}
+      className="h-full w-full bg-background rounded-lg shadow-md border"
+    >
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -100,7 +103,7 @@ const ActualTopologyFlowWithState: React.FC<ActualTopologyFlowWithStateProps> = 
         deleteKeyCode={['Backspace', 'Delete']}
         panOnScroll={false}
         zoomOnScroll={true}
-        panOnDrag={[PanOnScrollMode.Free, PanOnScrollMode.Right, PanOnScrollMode.Left]}
+        panOnDrag={true} // Corrected: enables panning with left, middle, and right mouse buttons
         selectionOnDrag
         className="h-full w-full"
         nodeOrigin={[0.5, 0.5]}
@@ -292,7 +295,7 @@ export default function TopologyPage() {
       <ReactFlowProvider>
         <div className="flex flex-col flex-grow h-full">
           <div className="flex flex-row flex-grow h-full overflow-hidden">
-
+            {/* Left Sidebar - Unified Panel */}
             <div className="w-60 flex-shrink-0 p-2">
               <div className="flex flex-col h-full bg-background rounded-lg shadow-md border">
                 {/* Masters Palette Section */}
@@ -304,7 +307,7 @@ export default function TopologyPage() {
                   </div>
                 </div>
 
-                <Separator className="my-0" />
+                <Separator className="my-0" /> 
 
                 {/* Node Properties Section */}
                 <div className="flex flex-col flex-grow min-h-0 p-3">
@@ -312,13 +315,14 @@ export default function TopologyPage() {
                   <p className="text-xs text-muted-foreground font-sans mb-2">
                     {selectedNode ? `选中: ${selectedNode.data.label || selectedNode.id}` : '点击节点查看属性。'}
                   </p>
-                  <div className="flex-grow overflow-y-hidden"> {/* Changed from overflow-y-auto */}
+                  <div className="flex-grow overflow-y-hidden">
                     <PropertiesDisplayPanel selectedNode={selectedNode} />
                   </div>
                 </div>
               </div>
             </div>
 
+            {/* Right Canvas Area */}
             <div className="flex-grow flex flex-col overflow-hidden p-2">
               <div className="flex-grow relative">
                 <div className="absolute inset-0">
