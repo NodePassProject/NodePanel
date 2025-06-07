@@ -205,28 +205,23 @@ export default function TopologyPage() {
     setNodeIdCounter(newCounter);
     const newNodeId = `${newNodeData.type || 'node'}-${newCounter}`;
 
-    let position = { x: 100, y: 100 }; // Default fallback
+    let position = { x: 100, y: 100 }; 
 
     if (reactFlowWrapperRef.current) {
         const bounds = reactFlowWrapperRef.current.getBoundingClientRect();
-        // Check if bounds are valid (width and height are not 0)
         if (bounds.width > 0 && bounds.height > 0) {
             const screenCenter = { x: bounds.width / 2, y: bounds.height / 2 };
             position = reactFlowInstance.screenToFlowPosition(screenCenter);
-            // Add slight random offset to prevent perfect overlap if multiple nodes are added quickly
             position.x += (Math.random() * 50 - 25);
             position.y += (Math.random() * 50 - 25);
         } else {
-            // Fallback if bounds are not ready (e.g., initial render before layout)
-            // Use viewport center as a rough guide
             const currentViewport = reactFlowInstance.getViewport();
             position = {
-                x: -currentViewport.x / currentViewport.zoom + 150 + (Math.random() * 50 - 25), // 150 is an arbitrary offset
+                x: -currentViewport.x / currentViewport.zoom + 150 + (Math.random() * 50 - 25), 
                 y: -currentViewport.y / currentViewport.zoom + 150 + (Math.random() * 50 - 25),
             };
         }
     } else {
-        // Fallback if wrapper ref is not yet available
         const currentViewport = reactFlowInstance.getViewport();
         position = {
             x: -currentViewport.x / currentViewport.zoom + 150 + (Math.random() * 50 - 25),
@@ -248,23 +243,23 @@ export default function TopologyPage() {
 
   const handleAddMasterNodeFromPalette = useCallback((masterConfig: NamedApiConfig, rfInstance: ReturnType<typeof useReactFlow>) => {
     const masterNodeData: Omit<Node, 'id' | 'position'> = {
-      type: 'default', // Or a custom type if defined
+      type: 'default', 
       data: {
         label: `主控: ${masterConfig.name}`,
-        nodeType: 'masterRepresentation', // Custom type identifier
+        nodeType: 'masterRepresentation', 
         masterId: masterConfig.id,
         masterName: masterConfig.name,
         apiUrl: masterConfig.apiUrl,
         defaultLogLevel: masterConfig.masterDefaultLogLevel,
         defaultTlsMode: masterConfig.masterDefaultTlsMode,
       },
-      style: { // Example styling
+      style: { 
         borderColor: 'hsl(var(--primary))',
         borderWidth: 2,
         background: 'hsl(var(--primary)/10)',
         borderRadius: '0.375rem',
-        padding: '8px 12px', // Adjusted padding
-        fontSize: '0.75rem', // Adjusted font size
+        padding: '8px 12px',
+        fontSize: '0.75rem', 
       },
       sourcePosition: Position.Right,
       targetPosition: Position.Left,
@@ -292,27 +287,21 @@ export default function TopologyPage() {
 
   const handleFormatLayoutCallback = useCallback(() => {
     toast({ title: "格式化布局", description: "此功能待实现。" });
-    // Placeholder for actual layout logic (e.g., using Dagre or ELK)
   }, [toast]);
 
   const handleSubmitTopologyCallback = useCallback(() => {
     toast({ title: "提交拓扑", description: "此功能待实现。" });
-    // Placeholder for actual submission logic
   }, [toast]);
 
 
   return (
     <AppLayout>
-      <ReactFlowProvider> {/* Provider should wrap all components that use useReactFlow */}
-        <div className="flex flex-col flex-grow h-full"> {/* Main page flex container */}
-          {/* Top Toolbar Area - This is now inside the canvas panel */}
-          
-          {/* Content Row: Left Sidebar and Right Canvas Area */}
-          <div className="flex flex-row flex-grow overflow-hidden"> {/* Horizontal layout for sidebar and canvas */}
+      <ReactFlowProvider> 
+        <div className="flex flex-col flex-grow h-full">          
+          <div className="flex flex-row flex-grow overflow-hidden"> 
             
-            {/* Left Sidebar */}
             <div className="w-60 flex-shrink-0 flex flex-col bg-muted/30 border-r p-2 space-y-2">
-              <Card className="flex flex-col h-1/2 rounded-lg border"> {/* No shadow-md */}
+              <Card className="flex flex-col h-1/2 rounded-lg border shadow-none">
                 <CardHeader className="p-3 border-b">
                   <CardTitle className="text-base font-semibold font-title">主控列表</CardTitle>
                   <CardDescription className="text-xs text-muted-foreground font-sans">点击主控添加到画布。</CardDescription>
@@ -322,8 +311,7 @@ export default function TopologyPage() {
                 </CardContent>
               </Card>
 
-              {/* Node Properties Panel */}
-              <Card className="flex flex-col flex-grow min-h-0 rounded-lg border"> {/* No shadow-md */}
+              <Card className="flex flex-col flex-grow min-h-0 rounded-lg border shadow-none"> 
                 <CardHeader className="p-3 border-b">
                   <CardTitle className="text-base font-semibold font-title">节点属性</CardTitle>
                   <CardDescription className="text-xs text-muted-foreground font-sans">
@@ -336,9 +324,7 @@ export default function TopologyPage() {
               </Card>
             </div>
 
-            {/* Right Area (Canvas) */}
             <div className="flex-grow flex flex-col overflow-hidden p-2">
-              {/* Canvas Area - Toolbar is now inside ActualTopologyFlowWithState */}
               <div className="flex-grow relative">
                 <div className="absolute inset-0">
                   <ActualTopologyFlowWithState
@@ -364,3 +350,4 @@ export default function TopologyPage() {
     </AppLayout>
   );
 }
+
