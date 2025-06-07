@@ -465,28 +465,30 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
       icon: <Network className="h-4 w-4 text-muted-foreground" />,
       fullWidth: true
     },
-    {
-      label: "TCP 流量 (接收/发送)",
-      value: (
-        <span className="font-mono text-xs">
-          <ArrowDownCircle className="inline-block h-3.5 w-3.5 mr-1 text-blue-500" />{formatBytes(instance.tcprx)}
-          <span className="mx-1">/</span>
-          <ArrowUpCircle className="inline-block h-3.5 w-3.5 mr-1 text-green-500" />{formatBytes(instance.tcptx)}
-        </span>
-      ),
-      icon: <Cable className="h-4 w-4 text-muted-foreground" />
-    },
-    {
-      label: "UDP 流量 (接收/发送)",
-      value: (
-        <span className="font-mono text-xs">
-          <ArrowDownCircle className="inline-block h-3.5 w-3.5 mr-1 text-blue-500" />{formatBytes(instance.udprx)}
-          <span className="mx-1">/</span>
-          <ArrowUpCircle className="inline-block h-3.5 w-3.5 mr-1 text-green-500" />{formatBytes(instance.udptx)}
-        </span>
-      ),
-      icon: <Cable className="h-4 w-4 text-muted-foreground" />
-    },
+    ...(!isApiKeyInstance ? [
+      {
+        label: "TCP 流量 (接收/发送)",
+        value: (
+          <span className="font-mono text-xs">
+            <ArrowDownCircle className="inline-block h-3.5 w-3.5 mr-1 text-blue-500" />{formatBytes(instance.tcprx)}
+            <span className="mx-1">/</span>
+            <ArrowUpCircle className="inline-block h-3.5 w-3.5 mr-1 text-green-500" />{formatBytes(instance.tcptx)}
+          </span>
+        ),
+        icon: <Cable className="h-4 w-4 text-muted-foreground" />
+      },
+      {
+        label: "UDP 流量 (接收/发送)",
+        value: (
+          <span className="font-mono text-xs">
+            <ArrowDownCircle className="inline-block h-3.5 w-3.5 mr-1 text-blue-500" />{formatBytes(instance.udprx)}
+            <span className="mx-1">/</span>
+            <ArrowUpCircle className="inline-block h-3.5 w-3.5 mr-1 text-green-500" />{formatBytes(instance.udptx)}
+          </span>
+        ),
+        icon: <Cable className="h-4 w-4 text-muted-foreground" />
+      },
+    ] : [])
   ];
 
   const getLogLevelClass = (level: ParsedLogEntry['level']): string => {
