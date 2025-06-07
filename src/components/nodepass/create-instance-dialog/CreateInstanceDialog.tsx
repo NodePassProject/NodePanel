@@ -266,16 +266,17 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
     let clientInstanceUrl = '';
     let serverInstanceUrlForAutoCreate: string | null = null;
 
-    const formTunnelInput = values.tunnelAddress; // For client+auto, this is server's port. For client direct, this is server's full addr. For server, this is server's full listen addr.
-    const formTargetAddress = values.targetAddress; // For client+auto, this is server's target. For client direct, this is client's local target. For server, this is server's target.
+    const formTunnelInput = values.tunnelAddress; 
+    const formTargetAddress = values.targetAddress;
 
     const portFromTunnelInput = extractPort(formTunnelInput);
-    if (!portFromTunnelInput && values.instanceType === "入口(c)" && values.autoCreateServer) { // Only mandatory if it's just a port for auto-server
+    
+    if (values.instanceType === "入口(c)" && values.autoCreateServer && !portFromTunnelInput) {
         toast({ title: "错误", description: "为自动创建的出口(s)指定隧道监听端口是必需的。", variant: "destructive" });
         onLog?.('创建实例失败: 未能从出口(s)隧道监听端口输入中提取有效端口。', 'ERROR');
         return;
     }
-     if (!portFromTunnelInput && values.instanceType === "出口(s)") {
+     if (values.instanceType === "出口(s)" && !portFromTunnelInput) {
         toast({ title: "错误", description: "无法从出口(s)隧道监听地址中提取有效端口。", variant: "destructive" });
         onLog?.('创建实例失败: 无法从出口(s)隧道监听地址中提取有效端口。', 'ERROR');
         return;
@@ -286,9 +287,9 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
         if (values.autoCreateServer) {
             // --- 1. 准备【出口(s)】参数 ---
             const serverListenHost_ForDefinition = '[::]'; 
-            const serverListenPort_ForDefinition = portFromTunnelInput!; // Already validated above
+            const serverListenPort_ForDefinition = portFromTunnelInput!; 
 
-            const serverActualTargetAddress = formTargetAddress; // This is the server's target address from the form
+            const serverActualTargetAddress = formTargetAddress; 
             if (!serverActualTargetAddress) {
                 toast({ title: "错误", description: "自动创建出口(s)时，其转发目标地址是必需的。", variant: "destructive" }); return;
             }
@@ -323,14 +324,16 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
             const clientConnectToServerPort = serverListenPort_ForDefinition; 
 
             const clientConnectToFullTunnelAddr = `${formatHostForUrl(clientConnectToServerHost)}:${clientConnectToServerPort}`;
-            // Client's local forward target uses [::]:port+1 if form field is empty
-            const clientLocalForwardTargetAddress = values.targetAddress || `[::]:${(parseInt(clientConnectToServerPort, 10) + 1).toString()}`;
+            
+            // Client's local forward target address defaults to [::]:(server_port+1)
+            // The form's `values.targetAddress` is for the SERVER's target in this auto-create mode.
+            const clientActualLocalForwardTargetAddress = `${formatHostForUrl('[::]')}:${(parseInt(serverListenPort_ForDefinition, 10) + 1).toString()}`;
 
 
             clientInstanceUrl = buildUrlFromFormValues({
                 instanceType: '入口(c)',
-                tunnelAddress: clientConnectToFullTunnelAddr,
-                targetAddress: clientLocalForwardTargetAddress,
+                tunnelAddress: clientConnectToFullTunnelAddr, 
+                targetAddress: clientActualLocalForwardTargetAddress, 
                 logLevel: values.logLevel,
             }, activeApiConfig); 
             onLog?.(`准备创建入口(c)实例于 "${activeApiConfig.name}": ${clientInstanceUrl}`, 'INFO');
@@ -342,8 +345,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
                 toast({ title: "错误", description: "无法从连接的出口(s)隧道地址提取端口。", variant: "destructive" }); return;
             }
             const clientLocalForwardPortCalculated = (parseInt(clientRemotePort, 10) + 1).toString();
-            // Client's local forward target uses [::]:port+1 if form field is empty
-            const clientLocalForwardTargetAddress = values.targetAddress || `[::]:${clientLocalForwardPortCalculated}`;
+            const clientLocalForwardTargetAddress = values.targetAddress || `${formatHostForUrl('[::]')}:${clientLocalForwardPortCalculated}`;
 
             clientInstanceUrl = buildUrlFromFormValues({
                 instanceType: '入口(c)',
@@ -356,7 +358,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
 
     } else { // 出口(s) instance
         const serverListenHost_ForDefinition = extractHostname(formTunnelInput) || '0.0.0.0'; 
-        const serverListenPort_ForDefinition = portFromTunnelInput!; // Already validated
+        const serverListenPort_ForDefinition = portFromTunnelInput!; 
 
         const serverActualTargetAddress = formTargetAddress;
         if (!serverActualTargetAddress) {
@@ -468,3 +470,4 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
     </Dialog>
   );
 }
+
