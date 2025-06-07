@@ -144,11 +144,16 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
   const renderSkeletons = () => {
     return Array.from({ length: 3 }).map((_, i) => (
       <TableRow key={`skeleton-${i}`}>
-        {[...Array(8)].map((_, cellIndex) => (
-          <TableCell key={`skeleton-cell-${i}-${cellIndex}`}>
-            <Skeleton className={`h-4 ${cellIndex === 3 || cellIndex === 4 ? 'w-40' : cellIndex === 0 ? 'w-24' : 'w-16'}`} />
-          </TableCell>
-        ))}
+        <TableCell><Skeleton className="h-4 w-24" /></TableCell> {/* ID */}
+        <TableCell><Skeleton className="h-4 w-16" /></TableCell> {/* 类型 */}
+        <TableCell><Skeleton className="h-4 w-16" /></TableCell> {/* 状态 */}
+        <TableCell><Skeleton className="h-4 w-40" /></TableCell> {/* 目标/隧道地址 */}
+        <TableCell><Skeleton className="h-4 w-40" /></TableCell> {/* URL / 密钥 */}
+        <TableCell> {/* 流量 */}
+          <Skeleton className="h-4 w-24 mb-1" />
+          <Skeleton className="h-4 w-24" />
+        </TableCell>
+        <TableCell><Skeleton className="h-4 w-16" /></TableCell> {/* 操作 */}
       </TableRow>
     ));
   };
@@ -196,6 +201,22 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
             <InstanceStatusBadge status={instance.status} />
           )}
         </TableCell>
+        <TableCell 
+          className="truncate max-w-[200px] text-xs font-mono" 
+          title={displayTargetTunnel !== "N/A" ? displayTargetTunnel : ""}
+        >
+          <span
+            className="cursor-pointer hover:text-primary transition-colors duration-150"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (displayTargetTunnel !== "N/A") {
+                handleCopyToClipboard(displayTargetTunnel, "目标/隧道地址");
+              }
+            }}
+          >
+            {displayTargetTunnel}
+          </span>
+        </TableCell>
         <TableCell
           className="truncate max-w-[200px] text-xs font-mono"
         >
@@ -210,17 +231,15 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
               {instance.id === '********' ? (apiName ? `${apiName} (API 密钥)`: '主控 API 密钥') : instance.url}
             </span>
         </TableCell>
-        <TableCell 
-          className="truncate max-w-[200px] text-xs font-mono" 
-          title={displayTargetTunnel !== "N/A" ? displayTargetTunnel : ""}
-        >
-          {displayTargetTunnel}
-        </TableCell>
         <TableCell className="text-center text-xs whitespace-nowrap font-mono">
-          {formatBytes(instance.tcprx)} / {formatBytes(instance.tcptx)}
-        </TableCell>
-        <TableCell className="text-center text-xs whitespace-nowrap font-mono">
-          {formatBytes(instance.udprx)} / {formatBytes(instance.udptx)}
+          {instance.id === '********' ? (
+            "N/A"
+          ) : (
+            <div>
+              <div>TCP: {formatBytes(instance.tcprx)} / {formatBytes(instance.tcptx)}</div>
+              <div>UDP: {formatBytes(instance.udprx)} / {formatBytes(instance.udptx)}</div>
+            </div>
+          )}
         </TableCell>
         <TableCell className="text-right">
           <div className="flex justify-end items-center space-x-1">
@@ -293,10 +312,9 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
                 <TableHead className="font-sans">ID</TableHead>
                 <TableHead className="font-sans">类型</TableHead>
                 <TableHead className="font-sans">状态</TableHead>
-                <TableHead className="font-sans">URL / 密钥</TableHead>
                 <TableHead className="font-sans">目标/隧道地址</TableHead>
-                <TableHead className="text-center whitespace-nowrap font-sans">TCP Rx/Tx</TableHead>
-                <TableHead className="text-center whitespace-nowrap font-sans">UDP Rx/Tx</TableHead>
+                <TableHead className="font-sans">URL / 密钥</TableHead>
+                <TableHead className="text-center whitespace-nowrap font-sans">流量 (TCP | UDP)</TableHead>
                 <TableHead className="text-right font-sans">操作</TableHead>
               </TableRow>
             </TableHeader>
@@ -309,7 +327,7 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
                   </>
               ) : (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center h-24 font-sans">
+                  <TableCell colSpan={7} className="text-center h-24 font-sans">
                     {isLoadingInstances
                       ? "加载中..."
                       : !activeApiConfig
@@ -346,4 +364,3 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
     </Card>
   );
 }
-
