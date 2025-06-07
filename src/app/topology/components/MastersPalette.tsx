@@ -5,15 +5,19 @@ import React from 'react';
 import { useApiConfig, type NamedApiConfig } from '@/hooks/use-api-key';
 import { Cog } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
-import type { ReactFlowInstance } from 'reactflow';
+// ReactFlowInstance is no longer needed here as interaction is drag-drop
 
 interface MastersPaletteProps {
-  onAddMasterNode: (masterConfig: NamedApiConfig, reactFlowInstance: ReactFlowInstance) => void;
+  // onAddMasterNode is removed as nodes are added via drag-drop
 }
 
-export function MastersPalette({ onAddMasterNode }: MastersPaletteProps) {
+export function MastersPalette({}: MastersPaletteProps) {
   const { apiConfigsList, isLoading } = useApiConfig();
-  // reactFlowInstance will be passed to onAddMasterNode by the wrapper component.
+
+  const handleDragStart = (event: React.DragEvent<HTMLDivElement>, config: NamedApiConfig) => {
+    event.dataTransfer.setData('application/nodepass-master-config', JSON.stringify(config));
+    event.dataTransfer.effectAllowed = 'move';
+  };
 
   return (
     <div className="h-full">
@@ -30,15 +34,10 @@ export function MastersPalette({ onAddMasterNode }: MastersPaletteProps) {
           {apiConfigsList.map((config) => (
             <div
               key={config.id}
-              onClick={(event) => {
-                  // The actual ReactFlowInstance will be injected by the wrapper.
-                  // For type safety, we cast to a partial and then to full if really needed,
-                  // but here the wrapper handles the actual instance.
-                  const mockReactFlowInstance = {} as ReactFlowInstance; 
-                  onAddMasterNode(config, mockReactFlowInstance);
-              }}
-              className="flex items-center p-2 border rounded-md bg-card text-card-foreground hover:bg-muted/50 cursor-pointer transition-colors text-xs font-sans"
-              title={`将主控 "${config.name}" 添加到画布`}
+              draggable={true}
+              onDragStart={(event) => handleDragStart(event, config)}
+              className="flex items-center p-2 border rounded-md bg-card text-card-foreground hover:bg-muted/50 cursor-grab active:cursor-grabbing transition-colors text-xs font-sans"
+              title={`拖拽主控 "${config.name}" 到画布`}
             >
               <Cog className="mr-2 h-4 w-4 text-primary flex-shrink-0" />
               <span className="truncate">{config.name}</span>

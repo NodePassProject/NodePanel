@@ -19,7 +19,7 @@ import ReactFlow, {
   type Node,
   type OnNodesChange,
   type OnEdgesChange,
-  PanOnScrollMode, // Keep for panOnScroll if needed later, but not for panOnDrag
+  PanOnScrollMode,
   Panel,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
@@ -50,6 +50,7 @@ interface ActualTopologyFlowWithStateProps {
   onClearCanvas: () => void;
   onSubmitTopology: () => void;
   canSubmit: boolean;
+  onMasterNodeDropOnCanvas: (config: NamedApiConfig, position: { x: number; y: number }) => void;
 }
 
 const ActualTopologyFlowWithState: React.FC<ActualTopologyFlowWithStateProps> = ({
@@ -59,15 +60,18 @@ const ActualTopologyFlowWithState: React.FC<ActualTopologyFlowWithStateProps> = 
   onEdgesChange,
   onConnect,
   onSelectionChange,
-  reactFlowWrapperRef,
+  reactFlowWrapperRef, // This ref is for the div *containing* ReactFlow
   onCenterView,
   onFormatLayout,
   onClearCanvas,
   onSubmitTopology,
   canSubmit,
+  onMasterNodeDropOnCanvas,
 }) => {
   const { resolvedTheme } = useTheme();
   const [isClient, setIsClient] = useState(false);
+  const reactFlowInstance = useReactFlow();
+
 
   useEffect(() => {
     setIsClient(true);
@@ -84,10 +88,35 @@ const ActualTopologyFlowWithState: React.FC<ActualTopologyFlowWithStateProps> = 
   ), [miniMapStyle, isClient]);
   const memoizedBackground = useMemo(() => <Background variant="dots" gap={16} size={1} />, []);
 
+  const handleDragOver = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleDrop = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    const configString = event.dataTransfer.getData('application/nodepass-master-config');
+    if (configString && reactFlowInstance) {
+      try {
+        const config = JSON.parse(configString) as NamedApiConfig;
+        const position = reactFlowInstance.screenToFlowPosition({
+          x: event.clientX,
+          y: event.clientY,
+        });
+        onMasterNodeDropOnCanvas(config, position);
+      } catch (e) {
+        console.error("Failed to parse dragged master config:", e);
+        // Optionally show a toast error to the user
+      }
+    }
+  };
+
   return (
     <div
       ref={reactFlowWrapperRef}
       className="h-full w-full bg-background rounded-lg shadow-md border"
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
     >
       <ReactFlow
         nodes={nodes}
@@ -103,7 +132,7 @@ const ActualTopologyFlowWithState: React.FC<ActualTopologyFlowWithStateProps> = 
         deleteKeyCode={['Backspace', 'Delete']}
         panOnScroll={false}
         zoomOnScroll={true}
-        panOnDrag={true} // Corrected: enables panning with left, middle, and right mouse buttons
+        panOnDrag={true}
         selectionOnDrag
         className="h-full w-full"
         nodeOrigin={[0.5, 0.5]}
@@ -151,17 +180,6 @@ const ToolbarWrapperComponent: React.FC<ToolbarWrapperComponentProps> = ({
   );
 };
 
-interface MastersPaletteWrapperComponentProps {
-  onAddMasterNodeFromPalette: (config: NamedApiConfig, instance: ReturnType<typeof useReactFlow>) => void;
-}
-
-const MastersPaletteWrapperComponent: React.FC<MastersPaletteWrapperComponentProps> = ({
-  onAddMasterNodeFromPalette,
-}) => {
-  const reactFlowInstance = useReactFlow();
-  return <MastersPalette onAddMasterNode={(config) => onAddMasterNodeFromPalette(config, reactFlowInstance)} />;
-};
-
 
 export default function TopologyPage() {
   const [nodesInternal, setNodesInternal, onNodesChangeInternalWrapped] = useNodesState(initialNodes);
@@ -169,7 +187,7 @@ export default function TopologyPage() {
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
   const [nodeIdCounter, setNodeIdCounter] = useState(0);
   const { toast } = useToast();
-  const reactFlowWrapperRef = useRef<HTMLDivElement>(null);
+  const reactFlowWrapperRef = useRef<HTMLDivElement>(null); // This ref is for the div *containing* ReactFlow
 
   const onNodesChange: OnNodesChange = useCallback(
     (changes) => setNodesInternal((nds) => applyNodeChanges(changes, nds)),
@@ -191,55 +209,10 @@ export default function TopologyPage() {
     setSelectedNode(selectedNodesList.length === 1 ? selectedNodesList[0] : null);
   }, []);
 
-  const addNodeToCanvas = useCallback((newNodeData: Omit<Node, 'id' | 'position'>, reactFlowInstance: ReturnType<typeof useReactFlow> | null) => {
-    if (!reactFlowInstance) {
-      toast({ title: "错误", description: "ReactFlow 实例未准备好。", variant: "destructive" });
-      return;
-    }
 
-    const newCounter = nodeIdCounter + 1;
-    setNodeIdCounter(newCounter);
-    const newNodeId = `${newNodeData.type || 'node'}-${newCounter}`;
-
-    let position = { x: 100, y: 100 };
-
-    if (reactFlowWrapperRef.current) {
-        const bounds = reactFlowWrapperRef.current.getBoundingClientRect();
-        if (bounds.width > 0 && bounds.height > 0) {
-            const screenCenter = { x: bounds.width / 2, y: bounds.height / 2 };
-            position = reactFlowInstance.screenToFlowPosition(screenCenter);
-            position.x += (Math.random() * 50 - 25);
-            position.y += (Math.random() * 50 - 25);
-        } else {
-            const currentViewport = reactFlowInstance.getViewport();
-            position = {
-                x: -currentViewport.x / currentViewport.zoom + 150 + (Math.random() * 50 - 25),
-                y: -currentViewport.y / currentViewport.zoom + 150 + (Math.random() * 50 - 25),
-            };
-        }
-    } else {
-        const currentViewport = reactFlowInstance.getViewport();
-        position = {
-            x: -currentViewport.x / currentViewport.zoom + 150 + (Math.random() * 50 - 25),
-            y: -currentViewport.y / currentViewport.zoom + 150 + (Math.random() * 50 - 25),
-        };
-    }
-
-
-    const finalNewNode: Node = {
-      id: newNodeId,
-      position,
-      ...newNodeData,
-    };
-
-    setNodesInternal((nds) => nds.concat(finalNewNode));
-    toast({ title: "节点已添加", description: `已添加节点 "${finalNewNode.data.label || newNodeId}"。` });
-  }, [nodeIdCounter, setNodesInternal, toast]);
-
-
-  const handleAddMasterNodeFromPalette = useCallback((masterConfig: NamedApiConfig, rfInstance: ReturnType<typeof useReactFlow>) => {
+  const handleMasterNodeDroppedOnCanvas = useCallback((masterConfig: NamedApiConfig, position: { x: number; y: number }) => {
     const masterNodeData: Omit<Node, 'id' | 'position'> = {
-      type: 'default',
+      type: 'default', // Or a custom type if you have one for masters
       data: {
         label: `主控: ${masterConfig.name}`,
         nodeType: 'masterRepresentation',
@@ -260,8 +233,20 @@ export default function TopologyPage() {
       sourcePosition: Position.Right,
       targetPosition: Position.Left,
     };
-    addNodeToCanvas(masterNodeData, rfInstance);
-  }, [addNodeToCanvas]);
+    
+    const newCounter = nodeIdCounter + 1;
+    setNodeIdCounter(newCounter);
+    const newNodeId = `${masterNodeData.type || 'node'}-master-${newCounter}`;
+
+    const finalNewNode: Node = {
+      id: newNodeId,
+      position,
+      ...masterNodeData,
+    };
+
+    setNodesInternal((nds) => nds.concat(finalNewNode));
+    toast({ title: "主控节点已添加", description: `已添加主控 "${masterConfig.name}" 到画布。` });
+  }, [nodeIdCounter, setNodesInternal, toast]);
 
 
   const handleClearCanvasCallback = useCallback(() => {
@@ -301,9 +286,9 @@ export default function TopologyPage() {
                 {/* Masters Palette Section */}
                 <div className="flex flex-col h-1/2 p-3">
                   <h2 className="text-base font-semibold font-title mb-1">主控列表</h2>
-                  <p className="text-xs text-muted-foreground font-sans mb-2">点击主控添加到画布。</p>
+                  <p className="text-xs text-muted-foreground font-sans mb-2">拖拽主控到画布。</p>
                   <div className="flex-grow overflow-y-auto">
-                    <MastersPaletteWrapperComponent onAddMasterNodeFromPalette={handleAddMasterNodeFromPalette} />
+                    <MastersPalette />
                   </div>
                 </div>
 
@@ -324,8 +309,8 @@ export default function TopologyPage() {
 
             {/* Right Canvas Area */}
             <div className="flex-grow flex flex-col overflow-hidden p-2">
-              <div className="flex-grow relative">
-                <div className="absolute inset-0">
+              <div className="flex-grow relative"> {/* Ensure this parent is relative for absolute positioning */}
+                <div className="absolute inset-0"> {/* This div now takes the full space of its relative parent */}
                   <ActualTopologyFlowWithState
                     nodes={nodesInternal}
                     edges={edgesInternal}
@@ -339,6 +324,7 @@ export default function TopologyPage() {
                     onClearCanvas={handleClearCanvasCallback}
                     onSubmitTopology={handleSubmitTopologyCallback}
                     canSubmit={nodesInternal.length > 0 || edgesInternal.length > 0}
+                    onMasterNodeDropOnCanvas={handleMasterNodeDroppedOnCanvas}
                   />
                 </div>
               </div>
@@ -349,4 +335,3 @@ export default function TopologyPage() {
     </AppLayout>
   );
 }
-
