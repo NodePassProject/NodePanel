@@ -60,7 +60,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
     defaultValues: {
       instanceType: '入口(c)',
       autoCreateServer: false,
-      serverApiId: undefined, 
+      serverApiId: undefined,
       tunnelAddress: '',
       targetAddress: '',
       logLevel: 'master',
@@ -72,7 +72,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
 
   const instanceType = form.watch("instanceType");
   const tlsModeWatch = form.watch("tlsMode");
-  const autoCreateServerWatched = form.watch("autoCreateServer"); 
+  const autoCreateServerWatched = form.watch("autoCreateServer");
   const tunnelAddressValue = form.watch("tunnelAddress");
 
   useEffect(() => {
@@ -264,20 +264,20 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
 
     let clientInstanceUrl = '';
     let serverInstanceUrlForAutoCreate: string | null = null;
-    
-    const formTunnelInput = values.tunnelAddress; 
-    const formTargetAddress = values.targetAddress; 
+
+    const formTunnelInput = values.tunnelAddress;
+    const formTargetAddress = values.targetAddress;
 
     if (values.instanceType === '入口(c)') {
         if (values.autoCreateServer) {
-            const serverListenPort_ForDefinition = formTunnelInput; 
+            const serverListenPort_ForDefinition = formTunnelInput;
 
             if (!/^[0-9]+$/.test(serverListenPort_ForDefinition)) {
                 toast({ title: "错误", description: "出口(s)隧道端口格式无效。", variant: "destructive" }); return;
             }
-            const serverListenHost_ForDefinition = '[::]'; 
-            
-            const serverActualTargetAddress = formTargetAddress; 
+            const serverListenHost_ForDefinition = '[::]';
+
+            const serverActualTargetAddress = formTargetAddress;
             if (!serverActualTargetAddress) {
                 toast({ title: "错误", description: "自动创建出口(s)时，其转发目标地址是必需的。", variant: "destructive" }); return;
             }
@@ -295,7 +295,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
 
             serverInstanceUrlForAutoCreate = buildUrlFromFormValues({
                 instanceType: '出口(s)',
-                tunnelAddress: `${serverListenHost_ForDefinition}:${serverListenPort_ForDefinition}`, 
+                tunnelAddress: `${serverListenHost_ForDefinition}:${serverListenPort_ForDefinition}`,
                 targetAddress: serverActualTargetAddress,
                 logLevel: values.logLevel,
                 tlsMode: values.tlsMode,
@@ -304,30 +304,31 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
             }, serverMasterConfig);
             onLog?.(`准备自动创建出口(s)于 "${serverMasterConfig.name}": ${serverInstanceUrlForAutoCreate}`, 'INFO');
 
-            const clientConnectToServerHost = extractHostname(serverMasterConfig.apiUrl); 
+            const clientConnectToServerHost = extractHostname(serverMasterConfig.apiUrl);
             if (!clientConnectToServerHost) {
                  toast({ title: "错误", description: `无法从出口(s)主控 "${serverMasterConfig.name}" API URL提取主机名。`, variant: "destructive" }); return;
             }
-            const clientConnectToServerPort = serverListenPort_ForDefinition; 
+            const clientConnectToServerPort = serverListenPort_ForDefinition;
             const clientConnectToFullTunnelAddr = `${formatHostForUrl(clientConnectToServerHost)}:${clientConnectToServerPort}`;
-            
+
             const clientActualLocalForwardTargetAddress = `${formatHostForUrl('[::]')}:${(parseInt(serverListenPort_ForDefinition, 10) + 1).toString()}`;
+
 
             clientInstanceUrl = buildUrlFromFormValues({
                 instanceType: '入口(c)',
-                tunnelAddress: clientConnectToFullTunnelAddr, 
-                targetAddress: clientActualLocalForwardTargetAddress, 
+                tunnelAddress: clientConnectToFullTunnelAddr,
+                targetAddress: clientActualLocalForwardTargetAddress, // Corrected: always use calculated default
                 logLevel: values.logLevel,
-            }, activeApiConfig); 
+            }, activeApiConfig);
             onLog?.(`准备创建入口(c)实例于 "${activeApiConfig.name}": ${clientInstanceUrl}`, 'INFO');
 
-        } else { 
-            const clientRemoteFullAddress = formTunnelInput; 
+        } else {
+            const clientRemoteFullAddress = formTunnelInput;
             const clientRemotePort = extractPort(clientRemoteFullAddress);
             if (!clientRemotePort) {
                 toast({ title: "错误", description: "无法从连接的出口(s)隧道地址提取端口。", variant: "destructive" }); return;
             }
-            
+
             const clientLocalForwardTargetAddress = values.targetAddress || `${formatHostForUrl('[::]')}:${(parseInt(clientRemotePort, 10) + 1).toString()}`;
 
             clientInstanceUrl = buildUrlFromFormValues({
@@ -339,13 +340,13 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
             onLog?.(`准备创建入口(c)实例于 "${activeApiConfig.name}": ${clientInstanceUrl}`, 'INFO');
         }
 
-    } else { 
-        const serverListenFullAddress = formTunnelInput; 
+    } else {
+        const serverListenFullAddress = formTunnelInput;
         const serverListenPort = extractPort(serverListenFullAddress);
          if (!serverListenPort) {
             toast({ title: "错误", description: "无法从出口(s)隧道监听地址中提取有效端口。", variant: "destructive" }); return;
         }
-        
+
         const serverActualTargetAddress = formTargetAddress;
         if (!serverActualTargetAddress) {
              toast({ title: "错误", description: "创建出口(s)时，目标地址 (业务数据) 是必需的。", variant: "destructive" }); return;
@@ -353,7 +354,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
 
         clientInstanceUrl = buildUrlFromFormValues({
             instanceType: '出口(s)',
-            tunnelAddress: serverListenFullAddress, 
+            tunnelAddress: serverListenFullAddress,
             targetAddress: serverActualTargetAddress,
             logLevel: values.logLevel,
             tlsMode: values.tlsMode,
@@ -362,11 +363,11 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
         }, activeApiConfig);
         onLog?.(`准备创建出口(s)实例于 "${activeApiConfig.name}": ${clientInstanceUrl}`, 'INFO');
     }
-    
+
     try {
       let serverCreationOk = true;
       if (serverInstanceUrlForAutoCreate) {
-        const serverTargetMasterId = values.serverApiId; 
+        const serverTargetMasterId = values.serverApiId;
         const serverTargetMasterConfig = getApiConfigById(serverTargetMasterId!);
         const serverTargetApiRoot = serverTargetMasterConfig ? getApiRootUrl(serverTargetMasterConfig.id) : null;
         const serverTargetApiToken = serverTargetMasterConfig ? getToken(serverTargetMasterConfig.id) : null;
@@ -382,15 +383,15 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
               useApiToken: serverTargetApiToken,
             });
           } catch (e) {
-            serverCreationOk = false; 
+            serverCreationOk = false;
           }
         }
       }
 
-      if (clientInstanceUrl && serverCreationOk) { 
+      if (clientInstanceUrl && serverCreationOk) {
         await createInstanceMutation.mutateAsync({
             data: { url: clientInstanceUrl },
-            useApiRoot: clientMasterApiRoot, 
+            useApiRoot: clientMasterApiRoot,
             useApiToken: clientMasterApiToken,
          });
       } else if (!clientInstanceUrl) {
@@ -398,7 +399,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
         toast({ title: "内部错误", description: "主实例URL未能构建。", variant: "destructive" });
         return;
       }
-      
+
       if (!createInstanceMutation.isError && serverCreationOk) {
          form.reset();
          onOpenChange(false);
@@ -408,30 +409,32 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
        onLog?.(`创建实例序列中发生意外错误: ${error.message}`, 'ERROR');
     }
   }
-  
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg p-4">
-        <DialogHeader className="pb-3">
+        <DialogHeader className="pb-2">
           <DialogTitle className="flex items-center font-title">
             <PlusCircle className="mr-2 h-5 w-5 text-primary" />
             创建新实例
           </DialogTitle>
-          <DialogDescription className="font-sans text-xs">
-            为当前主控 “{apiName || 'N/A'}” 配置新实例。
-          </DialogDescription>
+          <div className="flex justify-between items-center mt-1">
+            <DialogDescription className="font-sans text-xs mr-4">
+              为当前主控 “{apiName || 'N/A'}” 配置新实例。
+            </DialogDescription>
+            <div className="flex items-center space-x-2 flex-shrink-0">
+              <Switch
+                id="toggle-descriptions"
+                checked={showDetailedDescriptions}
+                onCheckedChange={setShowDetailedDescriptions}
+                aria-label="切换详细参数说明"
+                className="h-4 w-7 data-[state=checked]:bg-primary data-[state=unchecked]:bg-input [&_span]:h-3 [&_span]:w-3 [&_span]:data-[state=checked]:translate-x-3.5 [&_span]:data-[state=unchecked]:translate-x-0.5"
+              />
+              <Label htmlFor="toggle-descriptions" className="font-sans text-xs cursor-pointer">参数说明</Label>
+            </div>
+          </div>
         </DialogHeader>
 
-        <div className="flex items-center space-x-2 my-2">
-          <Switch
-            id="toggle-descriptions"
-            checked={showDetailedDescriptions}
-            onCheckedChange={setShowDetailedDescriptions}
-            aria-label="切换详细参数说明"
-          />
-          <Label htmlFor="toggle-descriptions" className="font-sans text-xs cursor-pointer">显示参数说明</Label>
-        </div>
-        
         <CreateInstanceFormFields
             form={form}
             instanceType={instanceType as "入口(c)" | "出口(s)"}
