@@ -25,9 +25,9 @@ import ReactFlow, {
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { useTheme } from 'next-themes';
-import { useMutation, useQueryClient } from '@tanstack/react-query'; // Added for mutations
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 
-import { Server, DatabaseZap, Cable, User, Loader2 } from 'lucide-react'; // Added Loader2
+import { Server, DatabaseZap, Cable, User, Loader2 } from 'lucide-react';
 
 import { AppLayout } from '@/components/layout/AppLayout';
 import { TopologyToolbar } from './components/TopologyToolbar';
@@ -35,13 +35,15 @@ import { MastersPalette } from './components/MastersPalette';
 import { ComponentsPalette, type DraggableNodeType } from './components/ComponentsPalette';
 import { PropertiesDisplayPanel } from './components/PropertiesDisplayPanel';
 import type { NamedApiConfig } from '@/hooks/use-api-key';
-import { useApiConfig } from '@/hooks/use-api-key'; // Added useApiConfig
+import { useApiConfig } from '@/hooks/use-api-key';
 import { useToast } from '@/hooks/use-toast';
 import { Separator } from '@/components/ui/separator';
 import { Button } from '@/components/ui/button';
-import { nodePassApi } from '@/lib/api'; // Added nodePassApi
-import { buildUrlFromFormValues, type BuildUrlParams } from '@/components/nodepass/create-instance-dialog/utils'; // Added for URL building
-import { extractPort, extractHostname } from '@/lib/url-utils'; // Added for URL parsing
+import { nodePassApi } from '@/lib/api';
+import { buildUrlFromFormValues, type BuildUrlParams, formatHostForUrl } from '@/components/nodepass/create-instance-dialog/utils';
+import { extractPort, extractHostname } from '@/lib/url-utils';
+import { SubmitTopologyConfirmationDialog, type InstanceUrlConfigWithName } from './components/SubmitTopologyConfirmationDialog';
+import { EditTopologyNodeDialog } from './components/EditTopologyNodeDialog';
 
 
 // --- Type Definitions ---
@@ -54,22 +56,26 @@ export interface CustomNodeData {
   icon?: React.ElementType;
   masterSubRole?: MasterSubRole;
   nodeType?: string;
-  masterId?: string; // For M nodes, the actual config ID
-  masterName?: string; // For M nodes, the actual config name
-  representedMasterId?: string; // For S/C nodes dragged from master palette
-  representedMasterName?: string; // For S/C nodes dragged from master palette
+  masterId?: string; 
+  masterName?: string; 
+  representedMasterId?: string; 
+  representedMasterName?: string; 
   isContainer?: boolean;
-  parentNode?: string; // ID of parent M-container node
+  parentNode?: string; 
   isDefaultClient?: boolean;
-  apiUrl?: string; // Stored from master config on M nodes
+  apiUrl?: string; 
   defaultLogLevel?: string;
   defaultTlsMode?: string;
-  tunnelAddress?: string; // For S: listen addr; For C: server's listen addr
-  targetAddress?: string; // For S: forward addr; For C: local listen addr
-  ipAddress?: string; // For T nodes
-  port?: string; // For T nodes
-  submissionStatus?: 'pending' | 'success' | 'error'; // For visual feedback on submit
-  submissionMessage?: string; // e.g., instance ID or error message
+  tunnelAddress?: string; 
+  targetAddress?: string; 
+  ipAddress?: string; 
+  port?: string; 
+  submissionStatus?: 'pending' | 'success' | 'error'; 
+  submissionMessage?: string; 
+  logLevel?: string; // Added for S/C edit
+  tlsMode?: string; // Added for S edit
+  certPath?: string; // Added for S edit (TLS 2)
+  keyPath?: string; // Added for S edit (TLS 2)
 }
 
 export interface Node extends ReactFlowNode<CustomNodeData> {
@@ -108,7 +114,7 @@ const MasterNode: React.FC<NodeProps<CustomNodeData>> = memo(({ data, selected }
       <Handle type="source" position={Position.Right} id="m-right" className="!bg-cyan-500 w-2.5 h-2.5" />
       <div className="font-semibold">{data.label}</div>
       {data.submissionStatus && (
-        <div className={`text-xs mt-1 p-0.5 rounded ${data.submissionStatus === 'success' ? 'bg-green-100 text-green-700' : data.submissionStatus === 'error' ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'}`}>
+        <div className={`text-xs mt-1 p-0.5 rounded ${data.submissionStatus === 'success' ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300' : data.submissionStatus === 'error' ? 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300' : 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300'}`}>
           {data.submissionStatus === 'pending' && <Loader2 className="inline h-3 w-3 mr-1 animate-spin" />}
           {data.submissionMessage || data.submissionStatus}
         </div>
@@ -121,10 +127,10 @@ const CardNode: React.FC<NodeProps<CustomNodeData>> = memo(({ data, selected }) 
   const IconComponent = data.icon;
   const roleStyle = nodeStyles[data.role.toLowerCase() as keyof typeof nodeStyles];
   
-  const baseCardClasses = `flex items-center rounded-lg border-2 shadow-sm transition-all duration-200 ease-in-out p-1.5 flex-col`; // Added flex-col
+  const baseCardClasses = `flex items-center rounded-lg border-2 shadow-sm transition-all duration-200 ease-in-out p-1.5 flex-col`;
   
   const width = CARD_NODE_WIDTH;
-  const height = data.submissionStatus ? CARD_NODE_HEIGHT + 20 : CARD_NODE_HEIGHT; // Adjust height if submission status exists
+  const height = data.submissionStatus ? CARD_NODE_HEIGHT + 20 : CARD_NODE_HEIGHT; 
   
   const dynamicStyle = {
     borderColor: roleStyle.base.borderColor,
@@ -144,7 +150,7 @@ const CardNode: React.FC<NodeProps<CustomNodeData>> = memo(({ data, selected }) 
         className={baseCardClasses}
         style={dynamicStyle}
       >
-        <div className="flex items-center w-full"> {/* Inner div for icon and text */}
+        <div className="flex items-center w-full">
             {IconComponent && (
             <div 
                 className="flex-shrink-0 flex items-center justify-center w-7 h-7 rounded-md mr-2"
@@ -158,7 +164,7 @@ const CardNode: React.FC<NodeProps<CustomNodeData>> = memo(({ data, selected }) 
             </div>
         </div>
         {data.submissionStatus && (
-           <div className={`text-xs mt-1 p-0.5 rounded w-full text-center ${data.submissionStatus === 'success' ? 'bg-green-100 text-green-700' : data.submissionStatus === 'error' ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'}`}>
+           <div className={`text-xs mt-1 p-0.5 rounded w-full text-center ${data.submissionStatus === 'success' ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300' : data.submissionStatus === 'error' ? 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300' : 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300'}`}>
             {data.submissionStatus === 'pending' && <Loader2 className="inline h-3 w-3 mr-1 animate-spin" />}
             {data.submissionMessage || data.submissionStatus}
           </div>
@@ -181,7 +187,7 @@ const nodeTypes = {
   masterNode: MasterNode,
 };
 
-const nodeStyles = {
+const nodeStyles = { // Updated S and T colors
     m: {
         base: {
             color: 'hsl(var(--foreground))', 
@@ -196,10 +202,10 @@ const nodeStyles = {
             textAlign: 'center'
         }
     },
-    s: { base: { background: 'hsl(210, 100%, 97%)', borderColor: 'hsl(210, 80%, 60%)', color: 'hsl(210, 90%, 30%)' } },
-    c: { base: { background: 'hsl(145, 63%, 96%)', borderColor: 'hsl(145, 60%, 45%)', color: 'hsl(145, 80%, 20%)' } },
-    t: { base: { background: 'hsl(35, 100%, 96%)', borderColor: 'hsl(35, 90%, 60%)', color: 'hsl(35, 90%, 35%)' } },
-    u: { base: { background: 'hsl(265, 80%, 97%)', borderColor: 'hsl(265, 70%, 60%)', color: 'hsl(265, 70%, 40%)' } }
+    s: { base: { background: 'hsl(210, 100%, 97%)', borderColor: 'hsl(210, 80%, 60%)', color: 'hsl(210, 90%, 30%)' } }, // Server - Blueish
+    c: { base: { background: 'hsl(145, 63%, 96%)', borderColor: 'hsl(145, 60%, 45%)', color: 'hsl(145, 80%, 20%)' } }, // Client - Greenish
+    t: { base: { background: 'hsl(35, 100%, 96%)', borderColor: 'hsl(35, 90%, 60%)', color: 'hsl(35, 90%, 35%)' } },   // Landing - Orangeish
+    u: { base: { background: 'hsl(265, 80%, 97%)', borderColor: 'hsl(265, 70%, 60%)', color: 'hsl(265, 70%, 40%)' } }  // User - Purpleish
 }
 
 interface ActualTopologyFlowWithStateProps {
@@ -212,7 +218,7 @@ interface ActualTopologyFlowWithStateProps {
   reactFlowWrapperRef: React.RefObject<HTMLDivElement>;
   onCenterView: (instance: ReturnType<typeof useReactFlow>) => void;
   onClearCanvas: () => void;
-  onSubmitTopology: () => void;
+  onTriggerSubmitTopology: () => void; // Renamed from onSubmitTopology
   canSubmit: boolean;
   isSubmitting: boolean;
   onNodeDropOnCanvas: (
@@ -226,7 +232,7 @@ interface ActualTopologyFlowWithStateProps {
 }
 
 const ActualTopologyFlowWithState: React.FC<ActualTopologyFlowWithStateProps> = ({
-  nodes, edges, onNodesChange, onEdgesChange, onConnect, onSelectionChange, reactFlowWrapperRef, onCenterView, onClearCanvas, onSubmitTopology, canSubmit, isSubmitting, onNodeDropOnCanvas, onNodeContextMenu, onEdgeContextMenu, onPaneClick,
+  nodes, edges, onNodesChange, onEdgesChange, onConnect, onSelectionChange, reactFlowWrapperRef, onCenterView, onClearCanvas, onTriggerSubmitTopology, canSubmit, isSubmitting, onNodeDropOnCanvas, onNodeContextMenu, onEdgeContextMenu, onPaneClick,
 }) => {
   const { resolvedTheme } = useTheme();
   const [isClient, setIsClient] = useState(false);
@@ -274,12 +280,12 @@ const ActualTopologyFlowWithState: React.FC<ActualTopologyFlowWithStateProps> = 
         nodes={nodes} edges={edges} onNodesChange={onNodesChange} onEdgesChange={onEdgesChange} onConnect={onConnect} onSelectionChange={onSelectionChange}
         onNodeContextMenu={onNodeContextMenu} onEdgeContextMenu={onEdgeContextMenu} onPaneClick={onPaneClick} 
         defaultViewport={{ x: 0, y: 0, zoom: initialZoom }}
-        nodesDraggable={!isSubmitting} nodesConnectable={!isSubmitting} // Disable dragging/connecting during submit
+        nodesDraggable={!isSubmitting} nodesConnectable={!isSubmitting}
         elementsSelectable={!isSubmitting} deleteKeyCode={isSubmitting ? [] : ['Backspace', 'Delete']} panOnScroll={false} zoomOnScroll={true} panOnDrag={true} selectionOnDrag
         className="h-full w-full" nodeOrigin={[0, 0]} nodeTypes={nodeTypes}
       >
         <Panel position="top-right" className="!m-0 !p-2 bg-transparent">
-          <ToolbarWrapperComponent {...{ onCenterView, onClearCanvas, onSubmitTopology, canSubmit, isSubmitting }} />
+          <ToolbarWrapperComponent {...{ onCenterView, onClearCanvas, onSubmitTopology: onTriggerSubmitTopology, canSubmit, isSubmitting }} />
         </Panel>
         {memoizedMiniMap}
         {memoizedBackground}
@@ -316,6 +322,10 @@ function TopologyEditorCore() {
   const { getApiConfigById, getApiRootUrl, getToken } = useApiConfig();
   const queryClient = useQueryClient();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSubmitConfirmOpen, setIsSubmitConfirmOpen] = useState(false);
+  const [instancesForConfirmation, setInstancesForConfirmation] = useState<InstanceUrlConfigWithName[]>([]);
+  const [isEditNodeDialogOpen, setIsEditNodeDialogOpen] = useState(false);
+  const [nodeToEdit, setNodeToEdit] = useState<Node | null>(null);
   
   const getNodeById = useCallback((id: string): Node | undefined => nodesInternal.find((n) => n.id === id), [nodesInternal]);
   const getEdgeById = useCallback((id: string): Edge | undefined => edgesInternal.find((e) => e.id === id), [edgesInternal]);
@@ -330,8 +340,8 @@ function TopologyEditorCore() {
     onSuccess: (createdInstance, variables) => {
       toast({ title: `实例创建成功`, description: `节点 ${variables.originalNodeId.substring(0,8)}... -> ID: ${createdInstance.id.substring(0,8)}...` });
       setNodesInternal(nds => nds.map(n => n.id === variables.originalNodeId ? { ...n, data: { ...n.data, submissionStatus: 'success', submissionMessage: `ID: ${createdInstance.id.substring(0,8)}...` } } : n));
-      queryClient.invalidateQueries({ queryKey: ['instances', getApiConfigById(variables.useApiRoot)?.id]}); // Assuming useApiRoot can map back to a masterId for query key
-      queryClient.invalidateQueries({ queryKey: ['allInstancesForTopologyPage']}); // Might be relevant if this page loads instances
+      queryClient.invalidateQueries({ queryKey: ['instances', getApiConfigById(variables.useApiRoot)?.id]});
+      queryClient.invalidateQueries({ queryKey: ['allInstancesForTopologyPage']});
       queryClient.invalidateQueries({ queryKey: ['allInstancesForTraffic']});
     },
     onError: (error: any, variables) => {
@@ -373,7 +383,7 @@ function TopologyEditorCore() {
       }
       if (targetNode.data.role === 'T') {
         const sourceIsMaster = sourceNode.data.role === 'M';
-        const sourceIsInMaster = !!sourceNode.data.parentNode; // S or C node inside an M container
+        const sourceIsInMaster = !!sourceNode.data.parentNode;
         if (!sourceIsMaster && !sourceIsInMaster) {
             toast({ title: '连接无效', description: '落地端 (T) 节点只能被主控 (M) 或其内部节点 (S/C) 链接。', variant: 'destructive' });
             return;
@@ -386,7 +396,7 @@ function TopologyEditorCore() {
       const isInternalConnection = sourceParentId && targetParentId && sourceParentId === targetParentId;
       
       if (isInternalConnection && !(sourceNode.data.role === 'C' && targetNode.data.role === 'S')) {
-         toast({ title: '连接无效', description: '在主控容器内，只允许从 客户端(C) 连接到 服务端(S)。', variant: 'destructive' });
+         toast({ title: '连接无效', description: '在主控容器内，只允许从 入口(c) 连接到 出口(s)。', variant: 'destructive' });
          return;
       }
       
@@ -400,7 +410,6 @@ function TopologyEditorCore() {
       
       setEdgesInternal((eds) => addEdge(newEdge, eds));
 
-      // Auto-populate addresses for C-S connection inside M container
       if (isInternalConnection && sourceNode.data.role === 'C' && targetNode.data.role === 'S') {
         const clientNode = sourceNode;
         const serverNode = targetNode;
@@ -408,19 +417,22 @@ function TopologyEditorCore() {
         setNodesInternal(nds => nds.map(n => {
           if (n.id === clientNode.id) {
             const serverTunnelAddr = serverNode.data.tunnelAddress || "";
-            const clientTargetPort = serverTunnelAddr ? (parseInt(extractPort(serverTunnelAddr) || "0", 10) + 1).toString() : "0";
+            let clientTargetPort = "0";
+            const serverPortNum = parseInt(extractPort(serverTunnelAddr) || "0", 10);
+            if (serverPortNum > 0) clientTargetPort = (serverPortNum + 1).toString();
+            
             return {
               ...n,
               data: {
                 ...n.data,
-                tunnelAddress: serverTunnelAddr, // Client connects to server's listen address
-                targetAddress: `[::]:${clientTargetPort}` // Client listens locally
+                tunnelAddress: serverTunnelAddr, 
+                targetAddress: `[::]:${clientTargetPort}` 
               }
             };
           }
           return n;
         }));
-        toast({ title: "客户端地址已更新", description: `客户端 ${clientNode.data.label} 已配置连接到服务端 ${serverNode.data.label}。`});
+        toast({ title: "入口(c)地址已更新", description: `入口(c) ${clientNode.data.label} 已配置连接到出口(s) ${serverNode.data.label}。`});
       }
 
 
@@ -481,16 +493,16 @@ function TopologyEditorCore() {
       });
 
       if (type === 'master' && draggedData) {
-          if (parentMContainer) { // Dropping a master onto an existing master container (adds S node)
+          if (parentMContainer) {
               const sNodeId = `s-from-master-${draggedData.id.substring(0, 8)}-${++currentCounter}`;
               const relativePosition = { x: position.x - parentMContainer.position.x - (CARD_NODE_WIDTH / 2), y: position.y - parentMContainer.position.y - (CARD_NODE_HEIGHT / 2) };
               const sNode: Node = {
                   id: sNodeId, type: 'cardNode', position: relativePosition, parentNode: parentMContainer.id, extent: 'parent', 
                   data: {
-                      label: `服务端: ${draggedData.name}`, role: 'S', icon: Server, parentNode: parentMContainer.id, 
+                      label: `出口(s): ${draggedData.name}`, role: 'S', icon: Server, parentNode: parentMContainer.id, 
                       representedMasterId: draggedData.id, representedMasterName: draggedData.name,
-                      tunnelAddress: `[::]:${10000 + currentCounter}`, // Default listen
-                      targetAddress: `127.0.0.1:${3000 + currentCounter}`, // Default forward
+                      tunnelAddress: `[::]:${10000 + currentCounter}`, 
+                      targetAddress: `127.0.0.1:${3000 + currentCounter}`, 
                       logLevel: draggedData.masterDefaultLogLevel || 'master',
                       tlsMode: draggedData.masterDefaultTlsMode || 'master',
                   },
@@ -505,8 +517,8 @@ function TopologyEditorCore() {
                       type: 'step', markerEnd: { type: MarkerType.ArrowClosed }, animated: true, style: { strokeDasharray: '5 5' },
                   });
               }
-              toast({ title: "服务端节点已添加至主控容器" });
-          } else { // Dropping a master onto empty canvas (creates M container with U, default C, T)
+              toast({ title: "出口(s)节点已添加至主控容器" });
+          } else { 
               const mId = `master-${draggedData.id.substring(0, 8)}-${++currentCounter}`;
               const uId = `user-for-${mId}`;
               const cId = `default-client-for-${mId}`;
@@ -517,20 +529,20 @@ function TopologyEditorCore() {
                   data: { 
                     label: `主控: ${draggedData.name || '未命名'}`, role: 'M', isContainer: true, 
                     masterId: draggedData.id, masterName: draggedData.name,
-                    apiUrl: draggedData.apiUrl, // Store API URL from master config
+                    apiUrl: draggedData.apiUrl, 
                     defaultLogLevel: draggedData.masterDefaultLogLevel,
                     defaultTlsMode: draggedData.masterDefaultTlsMode,
                   },
                   style: { ...nodeStyles.m.base, width: mNodeWidth, height: mNodeHeight },
                   width: mNodeWidth, height: mNodeHeight,
               });
-              newNodes.push({ // Default client inside M
+              newNodes.push({ 
                   id: cId, type: 'cardNode', parentNode: mId, extent: 'parent',
                   position: { x: (mNodeWidth / 2) - (CARD_NODE_WIDTH / 2), y: 50 }, 
                   data: { 
-                    label: 'Local (C)', role: 'C', icon: DatabaseZap, parentNode: mId, isDefaultClient: true,
+                    label: '本地 (C)', role: 'C', icon: DatabaseZap, parentNode: mId, isDefaultClient: true,
                     logLevel: draggedData.masterDefaultLogLevel || 'master',
-                    // tunnelAddress and targetAddress for this client will be set upon connection to an S node
+                    targetAddress: `[::]:${10001 + currentCounter}` // Default local listen for C
                   },
                   width: CARD_NODE_WIDTH, height: CARD_NODE_HEIGHT,
               });
@@ -545,7 +557,7 @@ function TopologyEditorCore() {
               newNodes.push({
                   id: tId, type: 'cardNode',
                   position: { x: position.x + mNodeWidth + 60, y: position.y + (mNodeHeight / 2) - (CARD_NODE_HEIGHT / 2) },
-                  data: { label: '落地端', role: 'T', icon: Cable, ipAddress: '192.168.1.10', port: '80' }, // Default T
+                  data: { label: '落地端', role: 'T', icon: Cable, ipAddress: '192.168.1.10', port: '80' },
                   width: CARD_NODE_WIDTH, height: CARD_NODE_HEIGHT,
               });
 
@@ -560,11 +572,11 @@ function TopologyEditorCore() {
               toast({ title: "主控容器已创建" });
               nodesToFit = [{ id: uId }, { id: mId }, { id: tId }];
           }
-      } else if (type !== 'master') { // Dropping S, C, T, U component
+      } else if (type !== 'master') { 
           const nodeRole = type.toUpperCase() as NodeRole;
           const { labelPrefix, icon, width, height } = {
-              'S': { labelPrefix: '服务端', icon: Server, width: CARD_NODE_WIDTH, height: CARD_NODE_HEIGHT },
-              'C': { labelPrefix: '客户端', icon: DatabaseZap, width: CARD_NODE_WIDTH, height: CARD_NODE_HEIGHT },
+              'S': { labelPrefix: '出口(s)', icon: Server, width: CARD_NODE_WIDTH, height: CARD_NODE_HEIGHT },
+              'C': { labelPrefix: '入口(c)', icon: DatabaseZap, width: CARD_NODE_WIDTH, height: CARD_NODE_HEIGHT },
               'T': { labelPrefix: '落地端', icon: Cable, width: CARD_NODE_WIDTH, height: CARD_NODE_HEIGHT },
               'U': { labelPrefix: '用户端', icon: User, width: CARD_NODE_WIDTH, height: CARD_NODE_HEIGHT },
           }[nodeRole]!;
@@ -577,7 +589,7 @@ function TopologyEditorCore() {
           const newNodeId = `${nodeRole.toLowerCase()}-${++currentCounter}`;
           const newNodeData: CustomNodeData = {
              label: labelPrefix, role: nodeRole, icon,
-             logLevel: 'master', // Default, inherit from parent M if applicable
+             logLevel: 'master',
           };
 
           if (nodeRole === 'S') {
@@ -585,7 +597,7 @@ function TopologyEditorCore() {
             newNodeData.targetAddress = `127.0.0.1:${3000 + currentCounter}`;
             newNodeData.tlsMode = 'master';
           } else if (nodeRole === 'C') {
-            // Client tunnel/target usually set upon connection
+            newNodeData.targetAddress = `[::]:${10001 + currentCounter + Math.floor(Math.random()*50)}`;
           } else if (nodeRole === 'T') {
             newNodeData.ipAddress = '192.168.1.20'; newNodeData.port = '8080';
           }
@@ -599,16 +611,18 @@ function TopologyEditorCore() {
               newNode.data.logLevel = parentMContainer.data.defaultLogLevel || 'master';
               if (nodeRole === 'S') newNode.data.tlsMode = parentMContainer.data.defaultTlsMode || 'master';
 
-              if (nodeRole === 'S') { // Auto-connect default client if it exists in same container
+              if (nodeRole === 'S') { 
                   const defaultClient = nodesInternal.find(n => n.data.parentNode === parentMContainer.id && n.data.isDefaultClient);
                   if (defaultClient) {
                       newEdges.push({
                           id: `edge-${defaultClient.id}-${newNodeId}`, source: defaultClient.id, target: newNodeId, 
                           type: 'step', markerEnd: { type: MarkerType.ArrowClosed }, animated: true, style: { strokeDasharray: '5 5' },
                       });
-                      // Also update defaultClient's addresses based on this new S node
                       const serverTunnelAddr = newNode.data.tunnelAddress || "";
-                      const clientTargetPort = serverTunnelAddr ? (parseInt(extractPort(serverTunnelAddr) || "0", 10) + 1).toString() : "0";
+                      let clientTargetPort = "0";
+                      const serverPortNum = parseInt(extractPort(serverTunnelAddr) || "0", 10);
+                      if (serverPortNum > 0) clientTargetPort = (serverPortNum + 1).toString();
+
                       setNodesInternal(nds => nds.map(n => n.id === defaultClient.id ? { ...n, data: { ...n.data, tunnelAddress: serverTunnelAddr, targetAddress: `[::]:${clientTargetPort}` } } : n));
                   }
               }
@@ -631,18 +645,18 @@ function TopologyEditorCore() {
     const handleChangeNodeRole = useCallback((nodeId: string, newRole: 'S' | 'C') => {
         setNodesInternal(nds => nds.map(node => {
             if (node.id === nodeId) {
-                const newLabel = newRole === 'S' ? '服务端' : '客户端';
+                const newLabel = newRole === 'S' ? '出口(s)' : '入口(c)';
                 const newIcon = newRole === 'S' ? Server : DatabaseZap;
                 const newData: CustomNodeData = { ...node.data, role: newRole, icon: newIcon, label: newLabel };
-                if (newRole === 'S' && !node.data.tlsMode) newData.tlsMode = 'master'; // Add default TLS for new Server
-                else if (newRole === 'C') delete newData.tlsMode; // Remove TLS if changing to Client
+                if (newRole === 'S' && !node.data.tlsMode) newData.tlsMode = node.data.parentNode ? (getNodeById(node.data.parentNode)?.data.defaultTlsMode || 'master') : 'master';
+                else if (newRole === 'C') delete newData.tlsMode;
                 return { ...node, data: newData };
             }
             return node;
         }));
         toast({ title: "角色已更改" });
         setContextMenu(null);
-    }, [setNodesInternal, toast]);
+    }, [setNodesInternal, toast, getNodeById]);
 
   const handleClearCanvasCallback = useCallback(() => {
     setNodesInternal([]); setEdgesInternal([]); setNodeIdCounter(0); setSelectedNode(null); setContextMenu(null);
@@ -655,37 +669,23 @@ function TopologyEditorCore() {
       instance.fitView({ duration: 300, padding: 0.2 });
   }, []);
   
-  const handleSubmitTopologyCallback = useCallback(async () => {
-    setContextMenu(null);
-    setIsSubmitting(true);
-
-    // Clear previous submission statuses
-    setNodesInternal(nds => nds.map(n => ({ ...n, data: { ...n.data, submissionStatus: undefined, submissionMessage: undefined } })));
-
-    const instancesToCreate: Array<{
-      nodeId: string;
-      masterId: string;
-      urlParams: BuildUrlParams;
-      masterConfig: NamedApiConfig;
-    }> = [];
-
+  const prepareInstancesForSubmission = useCallback((): InstanceUrlConfigWithName[] => {
+    const instancesToCreate: InstanceUrlConfigWithName[] = [];
     for (const node of nodesInternal) {
       if (node.data.role === 'S' || node.data.role === 'C') {
         let masterId: string | undefined = node.data.representedMasterId;
-        if (node.parentNode) { // Node is inside an M container
+        if (node.parentNode) {
           const parentMNode = getNodeById(node.parentNode);
           masterId = parentMNode?.data.masterId;
         }
 
         if (!masterId) {
-          toast({ title: `跳过节点 ${node.data.label}`, description: "无法确定管理主控。", variant: "destructive" });
           setNodesInternal(nds => nds.map(n => n.id === node.id ? { ...n, data: { ...n.data, submissionStatus: 'error', submissionMessage: '无主控' } } : n));
           continue;
         }
 
         const masterConfig = getApiConfigById(masterId);
         if (!masterConfig) {
-          toast({ title: `跳过节点 ${node.data.label}`, description: `主控配置 ${masterId} 未找到。`, variant: "destructive" });
           setNodesInternal(nds => nds.map(n => n.id === node.id ? { ...n, data: { ...n.data, submissionStatus: 'error', submissionMessage: '主控配置丢失' } } : n));
           continue;
         }
@@ -695,82 +695,100 @@ function TopologyEditorCore() {
         const targetNodeForServerOrClient = connectedEdges.map(e => getNodeById(e.target)).find(n => n?.data.role === 'T');
 
         let urlParams: BuildUrlParams | null = null;
+        const instanceTypeForBuild: "入口(c)" | "出口(s)" = node.data.role === 'S' ? "出口(s)" : "入口(c)";
 
-        if (node.data.role === 'S') {
+        if (node.data.role === 'S') { // 出口(s)
           let sTargetAddress = node.data.targetAddress || "";
           if (targetNodeForServerOrClient && targetNodeForServerOrClient.data.role === 'T') {
             sTargetAddress = `${targetNodeForServerOrClient.data.ipAddress}:${targetNodeForServerOrClient.data.port}`;
           }
           if (!sTargetAddress) {
-            toast({ title: `跳过服务端 ${node.data.label}`, description: "目标地址 (业务数据) 未配置。", variant: "destructive" });
             setNodesInternal(nds => nds.map(n => n.id === node.id ? { ...n, data: { ...n.data, submissionStatus: 'error', submissionMessage: '无目标地址' } } : n));
             continue;
           }
           if (!node.data.tunnelAddress) {
-            toast({ title: `跳过服务端 ${node.data.label}`, description: "隧道监听地址未配置。", variant: "destructive" });
             setNodesInternal(nds => nds.map(n => n.id === node.id ? { ...n, data: { ...n.data, submissionStatus: 'error', submissionMessage: '无监听地址' } } : n));
             continue;
           }
           urlParams = {
-            instanceType: "出口(s)",
+            instanceType: instanceTypeForBuild,
             tunnelAddress: node.data.tunnelAddress,
             targetAddress: sTargetAddress,
-            logLevel: node.data.logLevel || 'master',
-            tlsMode: node.data.tlsMode || 'master',
+            logLevel: (node.data.logLevel as any) || 'master',
+            tlsMode: (node.data.tlsMode as any) || 'master',
             certPath: node.data.certPath,
             keyPath: node.data.keyPath,
           };
-        } else if (node.data.role === 'C') {
-          let cTunnelAddress = node.data.tunnelAddress || ""; // This should be the server's address
+        } else if (node.data.role === 'C') { // 入口(c)
+          let cTunnelAddress = node.data.tunnelAddress || ""; 
           if (sourceNodeForClient) {
              cTunnelAddress = sourceNodeForClient.data.tunnelAddress || "";
           }
           if (!cTunnelAddress) {
-            toast({ title: `跳过客户端 ${node.data.label}`, description: "连接的出口(s)隧道地址未配置。", variant: "destructive" });
             setNodesInternal(nds => nds.map(n => n.id === node.id ? { ...n, data: { ...n.data, submissionStatus: 'error', submissionMessage: '无服务端地址' } } : n));
             continue;
           }
           
-          let cTargetAddress = node.data.targetAddress || ""; // This is client's local listen
-          if (!cTargetAddress) { // Auto-generate if not set
+          let cTargetAddress = node.data.targetAddress || ""; 
+          if (!cTargetAddress) {
             const serverPort = extractPort(cTunnelAddress);
             cTargetAddress = `[::]:${serverPort ? (parseInt(serverPort, 10) + 1) : (10000 + nodeIdCounter + Math.floor(Math.random()*100)) }`;
           }
 
           urlParams = {
-            instanceType: "入口(c)",
+            instanceType: instanceTypeForBuild,
             tunnelAddress: cTunnelAddress,
             targetAddress: cTargetAddress,
-            logLevel: node.data.logLevel || 'master',
-            tlsMode: node.data.tlsMode, // Client TLS for mTLS, needs explicit UI setup for C nodes
-            certPath: node.data.certPath,
-            keyPath: node.data.keyPath,
+            logLevel: (node.data.logLevel as any) || 'master',
+            // tlsMode for client usually not set via URL, determined by server or client's direct config
           };
         }
 
         if (urlParams) {
-          instancesToCreate.push({ nodeId: node.id, masterId, urlParams, masterConfig });
+          const finalUrl = buildUrlFromFormValues(urlParams, masterConfig);
+          instancesToCreate.push({ 
+            nodeId: node.id, 
+            nodeLabel: node.data.label,
+            masterId: masterConfig.id, 
+            masterName: masterConfig.name, 
+            url: finalUrl, 
+            instanceType: instanceTypeForBuild 
+          });
         }
       }
     }
+    return instancesToCreate;
+  }, [nodesInternal, edgesInternal, getNodeById, getApiConfigById, nodeIdCounter]);
+
+  const handleTriggerSubmitTopology = useCallback(() => {
+    setContextMenu(null);
+    // Clear previous submission statuses
+    setNodesInternal(nds => nds.map(n => ({ ...n, data: { ...n.data, submissionStatus: undefined, submissionMessage: undefined } })));
+
+    const instancesToCreate = prepareInstancesForSubmission();
 
     if (instancesToCreate.length === 0) {
-      toast({ title: '无实例可提交', description: '请配置有效的服务端或客户端节点。' });
-      setIsSubmitting(false);
+      toast({ title: '无实例可提交', description: '请配置有效的出口(s)或入口(c)节点。' });
       return;
     }
+    setInstancesForConfirmation(instancesToCreate);
+    setIsSubmitConfirmOpen(true);
+  }, [prepareInstancesForSubmission, toast, setNodesInternal]);
 
-    toast({ title: '开始提交拓扑...', description: `准备创建 ${instancesToCreate.length} 个实例。` });
+  const executeActualSubmission = useCallback(async () => {
+    setIsSubmitting(true);
+    setIsSubmitConfirmOpen(false);
 
-    const submissionPromises = instancesToCreate.map(inst => {
-      const finalUrl = buildUrlFromFormValues(inst.urlParams, inst.masterConfig);
+    toast({ title: '开始提交拓扑...', description: `准备创建 ${instancesForConfirmation.length} 个实例。` });
+
+    const submissionPromises = instancesForConfirmation.map(inst => {
       const apiR = getApiRootUrl(inst.masterId);
       const apiT = getToken(inst.masterId);
       if (!apiR || !apiT) {
         setNodesInternal(nds => nds.map(n => n.id === inst.nodeId ? { ...n, data: { ...n.data, submissionStatus: 'error', submissionMessage: '主控API无效' } } : n));
-        return Promise.reject(new Error(`主控 ${inst.masterConfig.name} API配置无效。`));
+        return Promise.reject(new Error(`主控 ${inst.masterName} API配置无效。`));
       }
-      return createInstanceMutation.mutateAsync({ data: { url: finalUrl }, useApiRoot: apiR, useApiToken: apiT, originalNodeId: inst.nodeId });
+      return createInstanceMutation.mutateAsync({ data: { url: inst.url }, useApiRoot: apiR, useApiToken: apiT, originalNodeId: inst.nodeId });
     });
 
     try {
@@ -781,11 +799,51 @@ function TopologyEditorCore() {
         toast({ title: '拓扑提交过程中发生意外错误', variant: 'destructive' });
     } finally {
         setIsSubmitting(false);
+        setInstancesForConfirmation([]);
     }
+  }, [instancesForConfirmation, getApiRootUrl, getToken, toast, createInstanceMutation, setNodesInternal]);
 
-  }, [nodesInternal, edgesInternal, getNodeById, getApiConfigById, getApiRootUrl, getToken, toast, createInstanceMutation, setNodesInternal, nodeIdCounter]);
 
-  const handleModifyNodeProperties = (node: Node) => { toast({ title: `修改 ${node.data.label || node.id} 属性 (待实现)` }); setContextMenu(null); };
+  const handleOpenEditNodeDialog = (node: Node) => {
+    setNodeToEdit(node);
+    setIsEditNodeDialogOpen(true);
+    setContextMenu(null);
+  };
+
+  const handleSaveNodeProperties = useCallback((nodeId: string, updatedData: Partial<CustomNodeData>) => {
+    setNodesInternal(nds =>
+      nds.map(n => {
+        if (n.id === nodeId) {
+          const mergedData = { ...n.data, ...updatedData };
+          // If server's tunnelAddress changed, update connected clients
+          if (n.data.role === 'S' && updatedData.tunnelAddress && updatedData.tunnelAddress !== n.data.tunnelAddress) {
+            edgesInternal.forEach(edge => {
+              if (edge.source === n.id) {
+                const clientNode = getNodeById(edge.target);
+                if (clientNode && clientNode.data.role === 'C') {
+                  const serverPort = parseInt(extractPort(updatedData.tunnelAddress!) || "0", 10);
+                  const clientTargetPort = serverPort > 0 ? (serverPort + 1).toString() : "0";
+                  
+                  setNodesInternal(prevNds => prevNds.map(cn => 
+                    cn.id === clientNode.id ? {
+                      ...cn, data: { ...cn.data, tunnelAddress: updatedData.tunnelAddress, targetAddress: `[::]:${clientTargetPort}` }
+                    } : cn
+                  ));
+                }
+              }
+            });
+          }
+          return { ...n, data: mergedData };
+        }
+        return n;
+      })
+    );
+    toast({ title: `节点 "${updatedData.label || nodeId.substring(0,8)}" 属性已更新`});
+    setIsEditNodeDialogOpen(false);
+    setNodeToEdit(null);
+  }, [setNodesInternal, toast, edgesInternal, getNodeById]);
+
+
   const handleDeleteNode = (nodeToDelete: Node) => { deleteElements({ nodes: [nodeToDelete] }); toast({ title: `节点 "${nodeToDelete.data.label || nodeToDelete.id}" 已删除` }); if (selectedNode?.id === nodeToDelete.id) setSelectedNode(null); setContextMenu(null); };
   const handleDeleteEdge = (edgeToDelete: Edge) => { deleteElements({ edges: [edgeToDelete] }); toast({ title: '链路已删除' }); setContextMenu(null); };
 
@@ -819,7 +877,7 @@ function TopologyEditorCore() {
               <ActualTopologyFlowWithState
                 nodes={nodesInternal} edges={edgesInternal} onNodesChange={onNodesChange} onEdgesChange={onEdgesChange} onConnect={onConnect}
                 onSelectionChange={onSelectionChange} reactFlowWrapperRef={reactFlowWrapperRef} onCenterView={handleCenterViewCallback}
-                onClearCanvas={handleClearCanvasCallback} onSubmitTopology={handleSubmitTopologyCallback} 
+                onClearCanvas={handleClearCanvasCallback} onTriggerSubmitTopology={handleTriggerSubmitTopology} 
                 canSubmit={(nodesInternal.length > 0 || edgesInternal.length > 0) && !isSubmitting}
                 isSubmitting={isSubmitting}
                 onNodeDropOnCanvas={handleNodeDroppedOnCanvas} onNodeContextMenu={onNodeContextMenu} onEdgeContextMenu={onEdgeContextMenu} onPaneClick={onPaneClick}
@@ -830,24 +888,37 @@ function TopologyEditorCore() {
       </div>
       {contextMenu && (
         <div ref={menuRef} style={{ top: contextMenu.top, left: contextMenu.left }} className="absolute z-[100] bg-popover border border-border rounded-md shadow-xl p-1.5 text-popover-foreground text-xs min-w-[150px]">
+          {contextMenu.type === 'node' && (contextMenu.data as Node).data.role !== 'M' && (contextMenu.data as Node).data.role !== 'U' && (
+            <Button variant="ghost" size="sm" className="w-full justify-start px-2 py-1 h-auto text-xs font-sans" onClick={() => handleOpenEditNodeDialog(contextMenu.data as Node)}>修改属性</Button>
+          )}
+          {(contextMenu.data as Node).type === 'node' && (contextMenu.data as Node).data.role === 'S' && (contextMenu.data as Node).data.parentNode && (
+            <Button variant="ghost" size="sm" className="w-full justify-start px-2 py-1 h-auto text-xs font-sans" onClick={() => handleChangeNodeRole((contextMenu.data as Node).id, 'C')}>更改为入口(c)</Button>
+          )}
+          {(contextMenu.data as Node).type === 'node' && (contextMenu.data as Node).data.role === 'C' && (contextMenu.data as Node).data.parentNode && !(contextMenu.data as Node).data.isDefaultClient && (
+            <Button variant="ghost" size="sm" className="w-full justify-start px-2 py-1 h-auto text-xs font-sans" onClick={() => handleChangeNodeRole((contextMenu.data as Node).id, 'S')}>更改为出口(s)</Button>
+          )}
+          {contextMenu.type === 'node' && <Separator className="my-1"/>}
           {contextMenu.type === 'node' && (
-            <>
-              <Button variant="ghost" size="sm" className="w-full justify-start px-2 py-1 h-auto text-xs font-sans" onClick={() => handleModifyNodeProperties(contextMenu.data as Node)}>修改属性</Button>
-              {(contextMenu.data as Node).data.role === 'S' && (contextMenu.data as Node).data.parentNode && (
-                <Button variant="ghost" size="sm" className="w-full justify-start px-2 py-1 h-auto text-xs font-sans" onClick={() => handleChangeNodeRole((contextMenu.data as Node).id, 'C')}>更改为客户端 (C)</Button>
-              )}
-              {(contextMenu.data as Node).data.role === 'C' && (contextMenu.data as Node).data.parentNode && !(contextMenu.data as Node).data.isDefaultClient && (
-                <Button variant="ghost" size="sm" className="w-full justify-start px-2 py-1 h-auto text-xs font-sans" onClick={() => handleChangeNodeRole((contextMenu.data as Node).id, 'S')}>更改为服务端 (S)</Button>
-              )}
-              <Separator className="my-1"/>
               <Button variant="ghost" size="sm" className="w-full justify-start px-2 py-1 h-auto text-xs font-sans text-destructive hover:text-destructive" onClick={() => handleDeleteNode(contextMenu.data as Node)}>删除角色</Button>
-            </>
           )}
           {contextMenu.type === 'edge' && (
             <Button variant="ghost" size="sm" className="w-full justify-start px-2 py-1 h-auto text-xs font-sans text-destructive hover:text-destructive" onClick={() => handleDeleteEdge(contextMenu.data as Edge)}>删除链路</Button>
           )}
         </div>
       )}
+       <SubmitTopologyConfirmationDialog
+        open={isSubmitConfirmOpen}
+        onOpenChange={setIsSubmitConfirmOpen}
+        instancesToCreate={instancesForConfirmation}
+        onConfirm={executeActualSubmission}
+        isSubmitting={isSubmitting}
+      />
+      <EditTopologyNodeDialog
+        open={isEditNodeDialogOpen}
+        onOpenChange={setIsEditNodeDialogOpen}
+        node={nodeToEdit}
+        onSave={handleSaveNodeProperties}
+      />
     </div>
   );
 }
