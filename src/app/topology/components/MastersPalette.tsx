@@ -30,7 +30,7 @@ export function MastersPalette({ onAddMasterNode }: MastersPaletteProps) {
   }
 
   return (
-    <ScrollArea className="h-full max-h-[calc(100%-40px)]"> {/* Adjust max-height as needed */}
+    <ScrollArea className="h-full max-h-[calc(100%-40px)]"> 
       <div className="space-y-1 pr-1">
         {apiConfigsList.map((config) => (
           <Button
@@ -49,3 +49,4 @@ export function MastersPalette({ onAddMasterNode }: MastersPaletteProps) {
     </ScrollArea>
   );
 }
+
