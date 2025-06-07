@@ -159,7 +159,7 @@ export function CreateInstanceFormFields({
                     instanceType === "出口(s)"
                       ? "例: 0.0.0.0:10101"
                       : (autoCreateServer
-                          ? "例: 10101 (主机默认为 [::])"
+                          ? "例: 10101 (主机默认为 [::])" 
                           : "例: your.server.com:10101")
                   }
                   {...field}
@@ -224,6 +224,7 @@ export function CreateInstanceFormFields({
           </FormItem>
         )}
 
+        {/* Target Address Field: Label and Description vary based on context */}
         {(instanceType === '出口(s)' || (instanceType === '入口(c)' && autoCreateServer)) && (
           <FormField
             control={form.control}
@@ -231,12 +232,16 @@ export function CreateInstanceFormFields({
             render={({ field }) => (
               <FormItem>
                 <FormLabel className="font-sans">
-                  {instanceType === '出口(s)' ? '出口(s)目标地址 (业务数据)' : '出口(s)转发目标地址 (业务数据)'}
+                  {instanceType === '出口(s)' ? '出口(s)目标地址 (业务数据)' : 
+                   (instanceType === '入口(c)' && autoCreateServer ? '出口(s)转发目标地址 (业务数据)' : '入口(c)本地转发地址 (可选)')}
                 </FormLabel>
                 <FormControl>
                   <Input
                     className="text-sm font-mono"
-                    placeholder="例: 10.0.0.5:3000"
+                    placeholder={
+                        instanceType === '出口(s)' ? "例: 10.0.0.5:3000" :
+                        (instanceType === '入口(c)' && autoCreateServer ? "例: 10.0.0.5:3000" : "例: [::]:8000 (默认为[::]:隧道端口+1)")
+                    }
                     {...field}
                   />
                 </FormControl>
@@ -245,7 +250,7 @@ export function CreateInstanceFormFields({
                     ? "出口(s)业务数据的目标地址。"
                     : (autoCreateServer
                         ? "自动创建的出口(s)将业务流量转发到此目标。"
-                        : "")}
+                        : "入口(c)将流量转发到的本地服务地址。若留空，将使用 `[::]:(连接的出口(s)隧道端口+1)` 自动生成。")}
                 </FormDescription>
                 <FormMessage />
               </FormItem>
@@ -256,19 +261,19 @@ export function CreateInstanceFormFields({
         {instanceType === '入口(c)' && !autoCreateServer && (
            <FormField
             control={form.control}
-            name="targetAddress"
+            name="targetAddress" 
             render={({ field }) => (
               <FormItem>
                 <FormLabel className="font-sans">入口(c)本地转发地址 (可选)</FormLabel>
                 <FormControl>
                   <Input
                     className="text-sm font-mono"
-                    placeholder={"例: 127.0.0.1:8000 (默认为隧道端口+1)"}
+                    placeholder={"例: [::]:8000 (默认为[::]:隧道端口+1)"}
                     {...field}
                   />
                 </FormControl>
                 <FormDescription className="font-sans text-xs">
-                  入口(c)将流量转发到的本地服务地址。若留空，将使用连接的出口(s)隧道端口+1自动生成。
+                  入口(c)将流量转发到的本地服务地址。若留空，将使用 `[::]:(连接的出口(s)隧道端口+1)` 自动生成。
                 </FormDescription>
                 <FormMessage />
               </FormItem>
