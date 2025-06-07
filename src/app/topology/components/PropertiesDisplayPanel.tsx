@@ -2,7 +2,7 @@
 "use client";
 
 import React from 'react';
-import type { Node } from 'reactflow';
+import type { Node, CustomNodeData } from '../page'; // Adjusted import for our Node type
 
 interface PropertiesDisplayPanelProps {
   selectedNode: Node | null;
@@ -17,31 +17,78 @@ export function PropertiesDisplayPanel({ selectedNode }: PropertiesDisplayPanelP
     );
   }
 
+  const data = selectedNode.data as CustomNodeData; // Type assertion
+
   return (
-    <div className="space-y-2 text-xs font-sans p-1"> {/* Padding for internal content */}
+    <div className="space-y-2 text-xs font-sans p-1">
       <div>
-        <strong className="text-muted-foreground">类型 (Type):</strong>
-        <span className="ml-1">{selectedNode.type || 'N/A'}</span>
+        <strong className="text-muted-foreground">ID:</strong>
+        <span className="ml-1 font-mono break-all">{selectedNode.id}</span>
       </div>
-      {selectedNode.data.label && (
+      <div>
+        <strong className="text-muted-foreground">角色 (Role):</strong>
+        <span className="ml-1 font-semibold">{data.role}</span>
+      </div>
+      {data.label && (
         <div>
           <strong className="text-muted-foreground">标签 (Label):</strong>
-          <span className="ml-1">{selectedNode.data.label}</span>
+          <span className="ml-1">{data.label}</span>
         </div>
       )}
-      {selectedNode.data.nodeType && (
+      {data.nodeType && (
          <div>
           <strong className="text-muted-foreground">节点类型 (NodeType):</strong>
-          <span className="ml-1">{selectedNode.data.nodeType}</span>
+          <span className="ml-1">{data.nodeType}</span>
         </div>
       )}
-      {selectedNode.data.masterId && (
+      {data.masterId && (
          <div>
           <strong className="text-muted-foreground">主控ID (MasterID):</strong>
-          <span className="ml-1 font-mono break-all">{selectedNode.data.masterId}</span>
+          <span className="ml-1 font-mono break-all">{data.masterId}</span>
         </div>
       )}
-      {/* Removed ID, Position, Size, and Other Data sections */}
+       {data.parentNode && (
+         <div>
+          <strong className="text-muted-foreground">父节点ID (ParentNodeID):</strong>
+          <span className="ml-1 font-mono break-all">{data.parentNode}</span>
+        </div>
+      )}
+      {data.isContainer !== undefined && (
+         <div>
+          <strong className="text-muted-foreground">是容器 (IsContainer):</strong>
+          <span className="ml-1">{data.isContainer ? '是' : '否'}</span>
+        </div>
+      )}
+       {/* Display other relevant properties based on role */}
+      {data.role === 'M' && data.masterName && (
+        <div>
+          <strong className="text-muted-foreground">主控名称:</strong>
+          <span className="ml-1">{data.masterName}</span>
+        </div>
+      )}
+      {(data.role === 'S' || data.role === 'C') && data.tunnelAddress && (
+        <div>
+          <strong className="text-muted-foreground">隧道地址:</strong>
+          <span className="ml-1 font-mono break-all">{data.tunnelAddress}</span>
+        </div>
+      )}
+      {(data.role === 'S' || data.role === 'C') && data.targetAddress && (
+        <div>
+          <strong className="text-muted-foreground">目标地址:</strong>
+          <span className="ml-1 font-mono break-all">{data.targetAddress}</span>
+        </div>
+      )}
+      {data.role === 'T' && (
+        <>
+          {data.ipAddress && (
+            <div><strong className="text-muted-foreground">IP 地址:</strong> <span className="ml-1 font-mono">{data.ipAddress}</span></div>
+          )}
+          {data.port && (
+            <div><strong className="text-muted-foreground">端口:</strong> <span className="ml-1 font-mono">{data.port}</span></div>
+          )}
+        </>
+      )}
     </div>
   );
 }
+    

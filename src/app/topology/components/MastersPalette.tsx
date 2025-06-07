@@ -5,13 +5,8 @@ import React from 'react';
 import { useApiConfig, type NamedApiConfig } from '@/hooks/use-api-key';
 import { Cog } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
-// ReactFlowInstance is no longer needed here as interaction is drag-drop
 
-interface MastersPaletteProps {
-  // onAddMasterNode is removed as nodes are added via drag-drop
-}
-
-export function MastersPalette({}: MastersPaletteProps) {
+export function MastersPalette() {
   const { apiConfigsList, isLoading } = useApiConfig();
 
   const handleDragStart = (event: React.DragEvent<HTMLDivElement>, config: NamedApiConfig) => {
@@ -36,7 +31,7 @@ export function MastersPalette({}: MastersPaletteProps) {
               key={config.id}
               draggable={true}
               onDragStart={(event) => handleDragStart(event, config)}
-              className="flex items-center p-2 border rounded-md bg-card text-card-foreground hover:bg-muted/50 cursor-grab active:cursor-grabbing transition-colors text-xs font-sans"
+              className="flex items-center p-2 border rounded-md bg-card text-card-foreground hover:bg-muted/50 cursor-grab active:cursor-grabbing transition-colors text-xs font-sans shadow-sm"
               title={`拖拽主控 "${config.name}" 到画布`}
             >
               <Cog className="mr-2 h-4 w-4 text-primary flex-shrink-0" />
@@ -48,3 +43,5 @@ export function MastersPalette({}: MastersPaletteProps) {
     </div>
   );
 }
+
+    
