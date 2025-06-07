@@ -288,6 +288,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
             if (!remoteTarget || remoteTarget.trim() === "") {
                 toast({ title: "错误", description: "单端转发模式下，目标地址 (业务数据) 是必需的。", variant: "destructive"}); return;
             }
+            // For single-ended, client listens on [::]:PORT
             clientInstanceUrl = buildUrlFromFormValues({
                 instanceType: '入口(c)',
                 isSingleEndedForward: true,
@@ -337,9 +338,6 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
             
             let clientActualLocalForwardPort: string;
             const clientLocalForwardPortFromForm = values.targetAddress?.trim();
-             // When auto-creating server, client's targetAddress (local forward port) should use server's master API host
-            const clientLocalForwardHostForDisplay = clientConnectToServerHost;
-
 
             if (clientLocalForwardPortFromForm && /^[0-9]+$/.test(clientLocalForwardPortFromForm)) {
                 clientActualLocalForwardPort = clientLocalForwardPortFromForm;
@@ -349,7 +347,8 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
                     onLog?.(`入口(c)本地转发端口 "${clientLocalForwardPortFromForm}" 无效，已自动设为 ${clientActualLocalForwardPort}。`, 'WARN');
                 }
             }
-            const clientFullLocalForwardTargetAddress = `${formatHostForUrl(clientLocalForwardHostForDisplay)}:${clientActualLocalForwardPort}`;
+            // For auto-created server, client's local forward target host should be [::]
+            const clientFullLocalForwardTargetAddress = `[::]:${clientActualLocalForwardPort}`;
 
 
             clientInstanceUrl = buildUrlFromFormValues({
