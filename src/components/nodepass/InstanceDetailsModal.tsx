@@ -329,8 +329,8 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
       if (signal.aborted && error.name === 'AbortError') {
         // This is an expected abort
       } else {
-        let displayError = error.message;
-        if (error.message.toLowerCase().includes('failed to fetch') || error.message.toLowerCase().includes('networkerror')) {
+        let displayError = typeof error.message === 'string' ? error.message : '未知连接错误。';
+        if (typeof error.message === 'string' && (error.message.toLowerCase().includes('failed to fetch') || error.message.toLowerCase().includes('networkerror'))) {
             displayError = '网络错误。请检查连接或服务器CORS设置。';
         }
         if (instance.id !== '********') {
