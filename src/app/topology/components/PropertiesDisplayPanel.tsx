@@ -3,7 +3,6 @@
 
 import React from 'react';
 import type { Node } from 'reactflow';
-// ScrollArea is no longer needed here as parent CardContent handles scrolling
 
 interface PropertiesDisplayPanelProps {
   selectedNode: Node | null;
@@ -18,9 +17,8 @@ export function PropertiesDisplayPanel({ selectedNode }: PropertiesDisplayPanelP
     );
   }
 
-  // Parent CardContent in page.tsx has p-1, this div gets that padding implicitly.
   return (
-    <div className="space-y-2 text-xs font-sans">
+    <div className="space-y-2 text-xs font-sans p-1"> {/* Added p-1 for consistency with MasterPalette */}
       <div>
         <strong className="text-muted-foreground">ID:</strong>
         <span className="ml-1 font-mono break-all">{selectedNode.id}</span>
@@ -35,13 +33,13 @@ export function PropertiesDisplayPanel({ selectedNode }: PropertiesDisplayPanelP
           <span className="ml-1">{selectedNode.data.label}</span>
         </div>
       )}
-      {selectedNode.data.nodeType && (
+      {selectedNode.data.nodeType && ( // Ensure this key matches what's set in addNodeToCanvas
          <div>
           <strong className="text-muted-foreground">节点类型 (NodeType):</strong>
           <span className="ml-1">{selectedNode.data.nodeType}</span>
         </div>
       )}
-      {selectedNode.data.masterId && (
+      {selectedNode.data.masterId && ( // Ensure this key matches
          <div>
           <strong className="text-muted-foreground">主控ID (MasterID):</strong>
           <span className="ml-1 font-mono break-all">{selectedNode.data.masterId}</span>

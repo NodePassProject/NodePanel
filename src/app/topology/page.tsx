@@ -20,7 +20,7 @@ import ReactFlow, {
   type Node,
   type OnNodesChange,
   type OnEdgesChange,
-  PanOnScrollMode,
+  PanOnScrollMode, // Keep if panOnDrag uses it
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { useTheme } from 'next-themes';
@@ -67,7 +67,7 @@ const ActualTopologyFlowWithState: React.FC<ActualTopologyFlowWithStateProps> = 
   const miniMapStyle = useMemo(() => ({
     backgroundColor: resolvedTheme === 'dark' ? 'hsl(var(--popover))' : 'hsl(var(--card))',
     border: `1px solid hsl(var(--border))`,
-    borderRadius: '0.375rem',
+    borderRadius: '0.375rem', // equivalent to rounded-md
   }), [resolvedTheme]);
 
   const memoizedControls = useMemo(() => <Controls style={{ bottom: 10, right: 10 }} />, []);
@@ -90,9 +90,10 @@ const ActualTopologyFlowWithState: React.FC<ActualTopologyFlowWithStateProps> = 
         nodesConnectable={true}
         elementsSelectable={true}
         deleteKeyCode={['Backspace', 'Delete']}
-        panOnScroll
+        panOnScroll={false} // Changed from true to false
+        zoomOnScroll={true}  // Explicitly true
         selectionOnDrag
-        panOnDrag={[PanOnScrollMode.Free, PanOnScrollMode.Right, PanOnScrollMode.Left]}
+        panOnDrag={[PanOnScrollMode.Free, PanOnScrollMode.Right, PanOnScrollMode.Left]} // Kept as is
         className="h-full w-full"
         nodeOrigin={[0.5, 0.5]}
       >
@@ -145,6 +146,7 @@ const MastersPaletteWrapperComponent: React.FC<MastersPaletteWrapperComponentPro
   return <MastersPalette onAddMasterNode={(config) => onAddMasterNodeFromPalette(config, reactFlowInstance)} />;
 };
 
+
 export default function TopologyPage() {
   const [nodes, setNodesInternal, onNodesChangeInternalWrapped] = useNodesState(initialNodes);
   const [edges, setEdgesInternal, onEdgesChangeInternalWrapped] = useEdgesState(initialEdges);
@@ -183,21 +185,17 @@ export default function TopologyPage() {
     setNodeIdCounter(newCounter);
     const newNodeId = `${newNodeData.type || 'node'}-${newCounter}`;
 
-    let position = { x: 100, y: 100 }; // Default fallback position
+    let position = { x: 100, y: 100 }; 
 
     if (reactFlowWrapperRef.current) {
       const bounds = reactFlowWrapperRef.current.getBoundingClientRect();
-      // Attempt to place in the center of the visible canvas part, relative to the flow pane
-      const screenCenter = { x: bounds.left + bounds.width / 2, y: bounds.top + bounds.height / 2 };
-      position = reactFlowInstance.screenToFlowPosition({
-        x: screenCenter.x - bounds.left, 
-        y: screenCenter.y - bounds.top  
-      });
-       // Add some random offset to prevent stacking if multiple nodes are added quickly
+      // Position in the center of the visible canvas part, relative to the flow pane
+      const screenCenter = { x: bounds.width / 2, y: bounds.height / 2 };
+      position = reactFlowInstance.screenToFlowPosition(screenCenter);
       position.x += (Math.random() * 100 - 50);
       position.y += (Math.random() * 100 - 50);
     } else {
-      // Fallback if wrapperRef is not available yet, use viewport center
+      // Fallback using viewport center if wrapperRef is not available
       const currentViewport = reactFlowInstance.getViewport();
       position = {
           x: -currentViewport.x / currentViewport.zoom + 100 + (Math.random() * 100 - 50),
@@ -227,29 +225,30 @@ export default function TopologyPage() {
 
   const handleAddMasterNodeFromPalette = useCallback((masterConfig: NamedApiConfig, rfInstance: ReturnType<typeof useReactFlow>) => {
     const masterNodeData: Omit<Node, 'id' | 'position'> = {
-      type: 'default',
+      type: 'default', // Or a custom 'masterNode' type if defined
       data: {
         label: `主控: ${masterConfig.name}`,
-        nodeType: 'masterRepresentation',
+        nodeType: 'masterRepresentation', // Custom property
         masterId: masterConfig.id,
         masterName: masterConfig.name,
         apiUrl: masterConfig.apiUrl,
         defaultLogLevel: masterConfig.masterDefaultLogLevel,
         defaultTlsMode: masterConfig.masterDefaultTlsMode,
       },
-      style: {
+      style: { // Example styling for master nodes
         borderColor: 'hsl(var(--primary))',
         borderWidth: 2,
         background: 'hsl(var(--primary)/10)',
         borderRadius: '0.375rem',
         padding: '8px 12px',
-        fontSize: '0.75rem',
+        fontSize: '0.75rem', // 12px
       },
       sourcePosition: Position.Right,
       targetPosition: Position.Left,
     };
     addNodeToCanvas(masterNodeData, rfInstance);
   }, [addNodeToCanvas]);
+
 
   const handleClearCanvasCallback = useCallback(() => {
     setNodesInternal([]);
@@ -275,55 +274,58 @@ export default function TopologyPage() {
 
   return (
     <AppLayout>
-      <ReactFlowProvider>
-        <div className="flex flex-col flex-grow h-full">
-          <div className="flex flex-row flex-grow overflow-hidden">
-            <div className="w-72 flex-shrink-0 flex flex-col border-r bg-muted/30 shadow-sm">
-              <Card className="flex flex-col h-1/2 m-2 shadow-md rounded-lg">
-                <CardHeader className="p-3 border-b">
-                  <CardTitle className="text-base font-semibold font-title">主控列表</CardTitle>
-                  <CardDescription className="text-xs text-muted-foreground font-sans">点击主控添加到画布。</CardDescription>
-                </CardHeader>
-                <CardContent className="flex-grow overflow-y-auto p-1">
-                  <MastersPaletteWrapperComponent onAddMasterNodeFromPalette={handleAddMasterNodeFromPalette} />
-                </CardContent>
-              </Card>
-              <Separator />
-              <Card className="flex flex-col flex-grow m-2 shadow-md rounded-lg min-h-0">
-                <CardHeader className="p-3 border-b">
-                  <CardTitle className="text-base font-semibold font-title">节点属性</CardTitle>
-                  <CardDescription className="text-xs text-muted-foreground font-sans">
-                    {selectedNode ? `选中: ${selectedNode.data.label || selectedNode.id}` : '点击节点查看属性。'}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="flex-grow overflow-y-auto p-1">
-                  <PropertiesDisplayPanel selectedNode={selectedNode} />
-                </CardContent>
-              </Card>
+      <ReactFlowProvider> {/* Provider wraps the entire layout using ReactFlow */}
+        <div className="flex flex-row flex-grow h-full overflow-hidden"> {/* Main horizontal layout */}
+          {/* Left Sidebar */}
+          <div className="w-72 flex-shrink-0 flex flex-col border-r bg-muted/30 shadow-sm">
+            <Card className="flex flex-col h-1/2 m-2 shadow-md rounded-lg">
+              <CardHeader className="p-3 border-b">
+                <CardTitle className="text-base font-semibold font-title">主控列表</CardTitle>
+                <CardDescription className="text-xs text-muted-foreground font-sans">点击主控添加到画布。</CardDescription>
+              </CardHeader>
+              <CardContent className="flex-grow overflow-y-auto p-1"> {/* p-1 for scrollbar spacing */}
+                <MastersPaletteWrapperComponent onAddMasterNodeFromPalette={handleAddMasterNodeFromPalette} />
+              </CardContent>
+            </Card>
+            <Separator />
+            <Card className="flex flex-col flex-grow m-2 shadow-md rounded-lg min-h-0"> {/* min-h-0 crucial for flex-grow in flex-col */}
+              <CardHeader className="p-3 border-b">
+                <CardTitle className="text-base font-semibold font-title">节点属性</CardTitle>
+                 <CardDescription className="text-xs text-muted-foreground font-sans">
+                  {selectedNode ? `选中: ${selectedNode.data.label || selectedNode.id}` : '点击节点查看属性。'}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="flex-grow overflow-y-auto p-1"> {/* p-1 for scrollbar spacing */}
+                <PropertiesDisplayPanel selectedNode={selectedNode} />
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Right Area (Toolbar + Canvas) */}
+          <div className="flex-grow flex flex-col overflow-hidden">
+            {/* Top Toolbar Area */}
+            <div className="flex-shrink-0 p-2 border-b bg-background shadow-sm">
+              <ToolbarWrapperComponent
+                onAddGenericNode={handleAddGenericNode}
+                onCenterView={handleCenterViewCallback}
+                onFormatLayout={handleFormatLayoutCallback}
+                onClearCanvas={handleClearCanvasCallback}
+                onSubmitTopology={handleSubmitTopologyCallback}
+                canSubmit={nodes.length > 0}
+              />
             </div>
-            <div className="flex-grow flex flex-col overflow-hidden">
-              <div className="flex-shrink-0 p-2 border-b bg-background shadow-sm">
-                <ToolbarWrapperComponent
-                  onAddGenericNode={handleAddGenericNode}
-                  onCenterView={handleCenterViewCallback}
-                  onFormatLayout={handleFormatLayoutCallback}
-                  onClearCanvas={handleClearCanvasCallback}
-                  onSubmitTopology={handleSubmitTopologyCallback}
-                  canSubmit={nodes.length > 0}
+            {/* Canvas Area */}
+            <div className="flex-grow relative pb-5"> {/* pb-5 for 20px bottom margin */}
+              <div className="absolute inset-0">
+                <ActualTopologyFlowWithState
+                  nodes={nodes}
+                  edges={edges}
+                  onNodesChange={onNodesChange}
+                  onEdgesChange={onEdgesChange}
+                  onConnect={onConnect}
+                  onSelectionChange={onSelectionChange}
+                  reactFlowWrapperRef={reactFlowWrapperRef}
                 />
-              </div>
-              <div className="flex-grow relative pb-5">
-                <div className="absolute inset-0">
-                  <ActualTopologyFlowWithState
-                    nodes={nodes}
-                    edges={edges}
-                    onNodesChange={onNodesChange}
-                    onEdgesChange={onEdgesChange}
-                    onConnect={onConnect}
-                    onSelectionChange={onSelectionChange}
-                    reactFlowWrapperRef={reactFlowWrapperRef}
-                  />
-                </div>
               </div>
             </div>
           </div>
