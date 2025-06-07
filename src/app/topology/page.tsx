@@ -20,7 +20,7 @@ import ReactFlow, {
   type Node,
   type OnNodesChange,
   type OnEdgesChange,
-  PanOnScrollMode, // Import PanOnScrollMode
+  PanOnScrollMode,
   Panel,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
@@ -33,10 +33,12 @@ import { PropertiesDisplayPanel } from './components/PropertiesDisplayPanel';
 import type { NamedApiConfig } from '@/hooks/use-api-key';
 import { useToast } from '@/hooks/use-toast';
 import { Separator } from '@/components/ui/separator';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'; // Import Card components
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 
 const initialNodes: Node[] = [];
 const initialEdges: Edge[] = [];
+
+// Moved component definitions outside TopologyPage
 
 interface ActualTopologyFlowWithStateProps {
   nodes: Node[];
@@ -78,7 +80,7 @@ const ActualTopologyFlowWithState: React.FC<ActualTopologyFlowWithStateProps> = 
   const miniMapStyle = useMemo(() => ({
     backgroundColor: resolvedTheme === 'dark' ? 'hsl(var(--popover))' : 'hsl(var(--card))',
     border: `1px solid hsl(var(--border))`,
-    borderRadius: '0.375rem', // Ensure rounded corners
+    borderRadius: '0.375rem',
   }), [resolvedTheme]);
 
   const memoizedControls = useMemo(() => <Controls style={{ bottom: 10, right: 10 }} />, []);
@@ -103,13 +105,12 @@ const ActualTopologyFlowWithState: React.FC<ActualTopologyFlowWithStateProps> = 
         deleteKeyCode={['Backspace', 'Delete']}
         panOnScroll={false}
         zoomOnScroll={true}
-        panOnDrag={[PanOnScrollMode.Free, PanOnScrollMode.Right, PanOnScrollMode.Left]} // Enable panning
-        selectionOnDrag // Allow selection by dragging a box
+        panOnDrag={[PanOnScrollMode.Free, PanOnScrollMode.Right, PanOnScrollMode.Left]}
+        selectionOnDrag
         className="h-full w-full"
         nodeOrigin={[0.5, 0.5]}
       >
         <Panel position="top-right" className="!m-0 !p-2 bg-transparent">
-          {/* Toolbar is now a direct child of ReactFlow using Panel */}
           <ToolbarWrapperComponent
             onCenterView={onCenterView}
             onFormatLayout={onFormatLayout}
@@ -213,7 +214,6 @@ export default function TopologyPage() {
         position.x += (Math.random() * 50 - 25);
         position.y += (Math.random() * 50 - 25);
       } else {
-        // Fallback if bounds are not available (e.g., during initial render or if hidden)
         const currentViewport = reactFlowInstance.getViewport();
         position = {
             x: -currentViewport.x / currentViewport.zoom + 150 + (Math.random() * 50 - 25),
@@ -221,14 +221,12 @@ export default function TopologyPage() {
         };
       }
     } else {
-         // Fallback if ref is not available
         const currentViewport = reactFlowInstance.getViewport();
         position = {
             x: -currentViewport.x / currentViewport.zoom + 150 + (Math.random() * 50 - 25),
             y: -currentViewport.y / currentViewport.zoom + 150 + (Math.random() * 50 - 25),
         };
     }
-
 
     const finalNewNode: Node = {
       id: newNodeId,
@@ -243,10 +241,10 @@ export default function TopologyPage() {
 
   const handleAddMasterNodeFromPalette = useCallback((masterConfig: NamedApiConfig, rfInstance: ReturnType<typeof useReactFlow>) => {
     const masterNodeData: Omit<Node, 'id' | 'position'> = {
-      type: 'default', // Or a custom type if you have one for master nodes
+      type: 'default',
       data: {
         label: `主控: ${masterConfig.name}`,
-        nodeType: 'masterRepresentation', // Custom property to identify node type
+        nodeType: 'masterRepresentation',
         masterId: masterConfig.id,
         masterName: masterConfig.name,
         apiUrl: masterConfig.apiUrl,
@@ -258,10 +256,10 @@ export default function TopologyPage() {
         borderWidth: 2,
         background: 'hsl(var(--primary)/10)',
         borderRadius: '0.375rem',
-        padding: '8px 12px', // Adjusted padding for visual
-        fontSize: '0.75rem', // Smaller font size for node
+        padding: '8px 12px',
+        fontSize: '0.75rem',
       },
-      sourcePosition: Position.Right, // Example positions
+      sourcePosition: Position.Right,
       targetPosition: Position.Left,
     };
     addNodeToCanvas(masterNodeData, rfInstance);
@@ -293,11 +291,10 @@ export default function TopologyPage() {
 
   return (
     <AppLayout>
-      <ReactFlowProvider> {/* Provider wraps the entire flex layout */}
-        <div className="flex flex-row flex-grow h-full overflow-hidden"> {/* Main horizontal layout */}
+      <ReactFlowProvider>
+        <div className="flex flex-row flex-grow h-full overflow-hidden">
           {/* Left Sidebar */}
           <div className="w-60 flex-shrink-0 flex flex-col border-r bg-muted/30 shadow-sm">
-            {/* Masters Palette Section - Card 1 (Top half) */}
             <Card className="flex flex-col h-1/2 m-2 shadow-md rounded-lg">
               <CardHeader className="p-3 border-b">
                 <CardTitle className="text-base font-semibold font-title">主控列表</CardTitle>
@@ -310,7 +307,6 @@ export default function TopologyPage() {
 
             <Separator className="my-0" />
 
-            {/* Properties Panel Section - Card 2 (Bottom half, grows) */}
             <Card className="flex flex-col flex-grow m-2 shadow-md rounded-lg min-h-0">
               <CardHeader className="p-3 border-b">
                 <CardTitle className="text-base font-semibold font-title">节点属性</CardTitle>
