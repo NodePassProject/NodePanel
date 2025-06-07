@@ -321,32 +321,35 @@ function TopologyEditorCore() {
       const sourceMasterSubRole = sourceNode.data.masterSubRole;
       const targetMasterSubRole = targetNode.data.masterSubRole;
 
+      // S/C nodes within an M-container
       if ((sourceRole === 'S' || sourceRole === 'C') && sourceParentId) {
         if (targetRole === 'S' || targetRole === 'C') { 
-          if (targetParentId !== sourceParentId) {
+          if (targetParentId !== sourceParentId) { // Must be in the same M-container
             toast({ title: '连接无效', description: `容器内的 ${sourceRole} 节点只能连接到同一主控容器内的 S 或 C 节点。`, variant: 'destructive' });
             return;
           }
         } else if (targetRole === 'T') { 
-          if (targetParentId) { 
+          if (targetParentId) { // Target T must be external (no parent)
             toast({ title: '连接无效', description: `容器内的 ${sourceRole} 节点只能连接到外部的 T 节点。此 T 节点位于容器内。`, variant: 'destructive' });
             return;
           }
-        } else { 
+        } else { // S/C in M cannot connect to M or U
           toast({ title: '连接无效', description: `容器内的 ${sourceRole} 节点只能连接到同一容器内的 S/C 节点或外部的 T 节点。`, variant: 'destructive' });
           return;
         }
       }
       
+      // U Node connections
       if (sourceRole === 'U' && targetRole !== 'M') {
         toast({ title: '连接无效', description: '用户 (U) 只能连接到主控 (M)。', variant: 'destructive' });
         return;
       }
-      if (targetRole === 'U' && sourceRole !== 'M') {
+      if (targetRole === 'U' && sourceRole !== 'M') { // And only M can connect TO U
          toast({ title: '连接无效', description: '用户 (U) 只能被主控 (M) 连接。', variant: 'destructive' });
         return;
       }
       
+      // M to M connections
       if (sourceRole === 'M' && targetRole === 'M') {
         if (sourceMasterSubRole === 'client-role' && targetMasterSubRole !== 'server-role') {
             toast({ title: '连接无效', description: '客户端角色的主控 (M) 只能连接到服务端角色的主控 (M)。', variant: 'destructive' });
@@ -357,8 +360,11 @@ function TopologyEditorCore() {
             return;
         }
          if (sourceMasterSubRole === 'generic' || targetMasterSubRole === 'generic') {
-           toast({ title: '连接无效', description: '通用角色的主控 (M) 之间不允许直接连接，请先定义其角色 (客户端/服务端)。', variant: 'destructive'});
-           return;
+           // Allow generic to connect to server-role (generic M implies it's taking a client role in this specific connection)
+           if (!(sourceMasterSubRole === 'generic' && targetMasterSubRole === 'server-role')) {
+             toast({ title: '连接无效', description: '通用角色的主控 (M) 之间不允许直接连接，或角色不匹配。请先定义其角色 (客户端/服务端) 或确保目标是服务端角色。', variant: 'destructive'});
+             return;
+           }
          }
       }
 
@@ -446,13 +452,13 @@ function TopologyEditorCore() {
     const mNodeWidth = 220;
     const mNodeHeight = 180;
 
-    if (type === 'master' && draggedData) {
-      const masterConfig = draggedData;
-      const existingMContainer = nodesInternal.find(n => n.data.role === 'M' && n.data.isContainer);
+    const existingMContainer = nodesInternal.find(n => n.data.role === 'M' && n.data.isContainer);
 
+    if (type === 'master' && draggedData) {
       if (existingMContainer) {
+        // Subsequent master drag - create an 'S' node inside the existing 'M' container
         newNode = {
-          id: `s-from-master-${masterConfig.id.substring(0,8)}-${newCounter}`,
+          id: `s-from-master-${draggedData.id.substring(0,8)}-${newCounter}`,
           type: 'default',
           position: {
             x: position.x - existingMContainer.position.x, 
@@ -461,18 +467,18 @@ function TopologyEditorCore() {
           parentNode: existingMContainer.id,
           extent: 'parent',
           data: {
-            label: `${masterConfig.name || `S-${newCounter}`} (服务端)`,
+            label: `${draggedData.name} (服务端)`,
             role: 'S',
             parentNode: existingMContainer.id,
-            representedMasterId: masterConfig.id,
-            representedMasterName: masterConfig.name,
-            defaultLogLevel: masterConfig.masterDefaultLogLevel, 
-            defaultTlsMode: masterConfig.masterDefaultTlsMode,
+            representedMasterId: draggedData.id,
+            representedMasterName: draggedData.name,
+            defaultLogLevel: draggedData.masterDefaultLogLevel, 
+            defaultTlsMode: draggedData.masterDefaultTlsMode,
           },
           style: { 
             borderWidth: 1.5,
             borderRadius: '0.375rem',
-            background: 'hsl(205 90% 92% / 0.8)', 
+            background: 'hsl(205 90% 92% / 0.8)', // Light blue for Server
             borderColor: 'hsl(205 90% 40%)', 
             color: 'hsl(205 90% 20%)',
             width: 90, 
@@ -485,29 +491,29 @@ function TopologyEditorCore() {
           sourcePosition: Position.Right,
           targetPosition: Position.Left,
         };
-        toast({ title: "服务端节点已添加", description: `“${masterConfig.name}” 已作为服务端节点添加到主控容器 “${existingMContainer.data.label}”。` });
-
+        toast({ title: "服务端节点已添加", description: `“${draggedData.name}” 已作为服务端节点添加到主控容器 “${existingMContainer.data.label}”。` });
       } else {
+        // First master drag - create the 'M' container
         newNode = {
-          id: `master-${masterConfig.id.substring(0,8)}-${newCounter}`,
+          id: `master-${draggedData.id.substring(0,8)}-${newCounter}`,
           type: 'default', 
           position,
           data: {
-            label: `主控: ${masterConfig.name || `M-${newCounter}`}`,
+            label: `主控: ${draggedData.name || `M-${newCounter}`}`,
             role: 'M',
-            masterSubRole: 'primary', 
+            masterSubRole: 'primary', // Since it's the only M-container
             isContainer: true,
-            nodeType: 'masterRepresentation',
-            masterId: masterConfig.id,
-            masterName: masterConfig.name,
-            apiUrl: masterConfig.apiUrl,
-            defaultLogLevel: masterConfig.masterDefaultLogLevel,
-            defaultTlsMode: masterConfig.masterDefaultTlsMode,
+            nodeType: 'masterContainer',
+            masterId: draggedData.id,
+            masterName: draggedData.name,
+            apiUrl: draggedData.apiUrl,
+            defaultLogLevel: draggedData.masterDefaultLogLevel,
+            defaultTlsMode: draggedData.masterDefaultTlsMode,
           },
           style: { 
-            borderColor: 'hsl(var(--border))',
+            borderColor: 'hsl(var(--border))', // Neutral border
             borderWidth: 1.5,
-            background: 'hsl(var(--muted) / 0.3)',
+            background: 'hsl(var(--muted) / 0.3)', // Slightly muted background for container
             borderRadius: '0.5rem',
             padding: '10px 15px',
             fontSize: '0.8rem',
@@ -519,9 +525,10 @@ function TopologyEditorCore() {
           sourcePosition: Position.Right,
           targetPosition: Position.Left,
         };
-        toast({ title: "主控容器已添加", description: `已添加主控 “${masterConfig.name || `M-${newCounter}`}" 为容器。` });
+        toast({ title: "主控容器已添加", description: `已添加主控 “${draggedData.name || `M-${newCounter}`}" 为容器。` });
       }
     } else if (type !== 'master') { 
+      // Dropping S, C, T, U component
       const nodeRole = type.toUpperCase() as NodeRole; 
       let labelPrefix = '';
       let nodeStyle: React.CSSProperties = {
@@ -530,6 +537,7 @@ function TopologyEditorCore() {
         padding: '6px 10px',
         fontSize: '0.7rem',
       };
+      let parentNodeFound: Node | undefined = undefined; // Used for S/C
 
       switch(nodeRole) {
         case 'S':
@@ -550,31 +558,16 @@ function TopologyEditorCore() {
           break;
       }
 
-      let parentNodeFound: Node | undefined = undefined;
       if (nodeRole === 'S' || nodeRole === 'C') {
-        for (const mNode of nodesInternal) {
-          if (mNode.data.isContainer && mNode.width && mNode.height) {
-            const isInsideParent =
-              position.x >= mNode.position.x &&
-              position.x < mNode.position.x + mNode.width &&
-              position.y >= mNode.position.y &&
-              position.y < mNode.position.y + mNode.height;
-
-            if (isInsideParent) {
-              parentNodeFound = mNode;
-              break; 
-            }
-          }
-        }
-
-        if (!parentNodeFound) {
+        if (!existingMContainer) {
           toast({
-            title: "放置无效",
-            description: `服务端 (S) / 客户端 (C) 节点必须放置在主控 (M) 容器内。`,
+            title: "操作无效",
+            description: `请先将一个主控拖拽到画布上以创建主控 (M) 容器，然后才能添加 ${labelPrefix} (${nodeRole}) 节点。`,
             variant: "destructive",
           });
           return; 
         }
+        parentNodeFound = existingMContainer; // S/C must go into the existing M container
       }
       
       const finalStyle = parentNodeFound 
@@ -674,7 +667,7 @@ function TopologyEditorCore() {
 
             <div className="flex flex-col h-1/2 p-3"> 
               <h2 className="text-base font-semibold font-title mb-1">组件 (S, C, T, U)</h2>
-              <p className="text-xs text-muted-foreground font-sans mb-2">拖拽组件到画布或主控容器。</p>
+              <p className="text-xs text-muted-foreground font-sans mb-2">拖拽组件到主控容器。</p>
               <div className="flex-grow overflow-y-auto pr-1">
                 <ComponentsPalette />
               </div>
