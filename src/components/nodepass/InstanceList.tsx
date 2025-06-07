@@ -150,9 +150,8 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
         <TableCell><Skeleton className="h-4 w-16" /></TableCell>
         <TableCell><Skeleton className="h-4 w-16" /></TableCell>
         <TableCell><Skeleton className="h-4 w-40" /></TableCell>
-        <TableCell><Skeleton className="h-4 w-40" /></TableCell>
         <TableCell>
-          <div className="text-left">
+          <div className="text-left"> {/* Ensure skeleton traffic is also left-aligned */}
             <Skeleton className="h-4 w-20 mb-1" />
             <Skeleton className="h-4 w-20" />
           </div>
@@ -165,34 +164,63 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
   const renderInstanceRow = (instance: Instance) => {
     const parsedUrl = instance.id !== '********' ? parseNodePassUrlForTopology(instance.url) : null;
     
-    let displayTargetTunnel = "N/A";
-    if (parsedUrl) {
+    let displayTargetTunnelContent: React.ReactNode = "N/A";
+
+    if (instance.id === '********') {
+      displayTargetTunnelContent = (
+        <span
+          className="cursor-pointer hover:text-primary transition-colors duration-150"
+          title={`点击复制主控 "${apiName}" 的 API 密钥`}
+          onClick={(e) => {
+            e.stopPropagation();
+            handleCopyToClipboard(instance.url, "API 密钥");
+          }}
+        >
+          {apiName ? `${apiName} (API 密钥)` : '主控 API 密钥'}
+        </span>
+      );
+    } else if (parsedUrl) {
+      let textToShow = "N/A";
       if (instance.type === 'server') {
-        displayTargetTunnel = parsedUrl.targetAddress || "N/A";
+        textToShow = parsedUrl.targetAddress || "N/A";
       } else if (instance.type === 'client') {
         let clientLocalForwardPort: string | null = null;
-        if (parsedUrl.targetAddress) {
-            clientLocalForwardPort = extractPort(parsedUrl.targetAddress);
+        if (parsedUrl.targetAddress) { // Target for client is local forward
+          clientLocalForwardPort = extractPort(parsedUrl.targetAddress);
         }
-        // Fallback if no port in targetAddress, or targetAddress is missing/malformed for port extraction
-        if (!clientLocalForwardPort && parsedUrl.tunnelAddress) {
-            const serverTunnelPort = extractPort(parsedUrl.tunnelAddress);
-            if (serverTunnelPort && /^\d+$/.test(serverTunnelPort)) {
-                clientLocalForwardPort = (parseInt(serverTunnelPort, 10) + 1).toString();
-            }
+
+        if (!clientLocalForwardPort && parsedUrl.tunnelAddress) { // Fallback for local port
+          const serverTunnelPort = extractPort(parsedUrl.tunnelAddress);
+          if (serverTunnelPort && /^\d+$/.test(serverTunnelPort)) {
+            clientLocalForwardPort = (parseInt(serverTunnelPort, 10) + 1).toString();
+          }
         }
 
         let managingMasterHost: string | null = null;
         if (activeApiConfig?.apiUrl) {
-            managingMasterHost = extractHostname(activeApiConfig.apiUrl);
+          managingMasterHost = extractHostname(activeApiConfig.apiUrl);
         }
 
         if (managingMasterHost && clientLocalForwardPort) {
-            displayTargetTunnel = `${formatHostForUrl(managingMasterHost)}:${clientLocalForwardPort}`;
+          textToShow = `${formatHostForUrl(managingMasterHost)}:${clientLocalForwardPort}`;
         } else {
-            displayTargetTunnel = "N/A (信息不完整)";
+          textToShow = "N/A (信息不完整)";
         }
       }
+      displayTargetTunnelContent = (
+        <span
+          className="cursor-pointer hover:text-primary transition-colors duration-150"
+          title={textToShow !== "N/A" && textToShow !== "N/A (信息不完整)" ? `点击复制: ${textToShow}` : ""}
+          onClick={(e) => {
+            e.stopPropagation();
+            if (textToShow !== "N/A" && textToShow !== "N/A (信息不完整)") {
+              handleCopyToClipboard(textToShow, "目标/隧道地址");
+            }
+          }}
+        >
+          {textToShow}
+        </span>
+      );
     }
 
 
@@ -229,36 +257,11 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
           )}
         </TableCell>
         <TableCell 
-          className="truncate max-w-[200px] text-xs font-mono" 
-        >
-          <span
-            className="cursor-pointer hover:text-primary transition-colors duration-150"
-             title={displayTargetTunnel !== "N/A" && displayTargetTunnel !== "N/A (信息不完整)" ? `点击复制: ${displayTargetTunnel}` : ""}
-            onClick={(e) => {
-              e.stopPropagation();
-              if (displayTargetTunnel !== "N/A" && displayTargetTunnel !== "N/A (信息不完整)") {
-                handleCopyToClipboard(displayTargetTunnel, "目标/隧道地址");
-              }
-            }}
-          >
-            {displayTargetTunnel}
-          </span>
-        </TableCell>
-        <TableCell
           className="truncate max-w-[200px] text-xs font-mono"
         >
-          <span
-            className="cursor-pointer hover:text-primary transition-colors duration-150"
-            title={instance.id === '********' && apiName ? `点击复制主控 "${apiName}" 的 API 密钥` : `点击复制: ${instance.url}`}
-            onClick={(e) => {
-              e.stopPropagation();
-              handleCopyToClipboard(instance.url, instance.id === '********' ? 'API 密钥' : 'URL');
-            }}
-          >
-            {instance.id === '********' ? (apiName ? `${apiName} (API 密钥)`: '主控 API 密钥') : instance.url}
-          </span>
+          {displayTargetTunnelContent}
         </TableCell>
-        <TableCell className="text-left">
+        <TableCell className="text-left"> {/* Ensure traffic is left-aligned */}
           <div className="text-xs whitespace-nowrap font-mono">
             {instance.id === '********' ? (
               "N/A"
@@ -332,7 +335,7 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
     }
     return (
       <TableRow>
-        <TableCell colSpan={7} className="text-center h-24 font-sans">
+        <TableCell colSpan={6} className="text-center h-24 font-sans"> {/* Adjusted colSpan */}
           {message}
         </TableCell>
       </TableRow>
@@ -379,7 +382,6 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
                 <TableHead className="font-sans">类型</TableHead>
                 <TableHead className="font-sans">状态</TableHead>
                 <TableHead className="font-sans">目标/隧道地址</TableHead>
-                <TableHead className="font-sans">URL / 密钥</TableHead>
                 <TableHead className="text-left whitespace-nowrap font-sans">流量 (TCP | UDP)</TableHead>
                 <TableHead className="text-right font-sans">操作</TableHead>
               </TableRow>
@@ -409,5 +411,4 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
     </Card>
   );
 }
-
     
