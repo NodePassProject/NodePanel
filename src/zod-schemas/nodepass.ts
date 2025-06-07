@@ -9,7 +9,7 @@ export const createInstanceFormSchema = z.object({
   autoCreateServer: z.optional(z.boolean()),
   serverApiId: z.optional(z.string()),
   tunnelAddress: z.string().min(1, "隧道地址/端口是必需的。"), // Base validation, refined in superRefine
-  targetAddress: z.string().optional(),
+  targetAddress: z.string().optional(), // For "入口(c)" this is local forward port (optional), for "出口(s)" this is required host:port
   logLevel: z.enum(["master", "debug", "info", "warn", "error", "event"], {
     required_error: "日志级别是必需的。",
   }),
@@ -37,32 +37,26 @@ export const createInstanceFormSchema = z.object({
   }
 
   // TargetAddress validation
-  if (data.instanceType === "出口(s)" && (!data.targetAddress || data.targetAddress.trim() === "")) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: "目标地址 (业务数据) 是必需的。",
-      path: ["targetAddress"],
-    });
-  } else if (data.instanceType === "出口(s)" && data.targetAddress && !/^(?:\[[0-9a-fA-F:]+\]|[0-9a-zA-Z.-]+):[0-9]+$/.test(data.targetAddress)) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: "目标地址 (业务数据) 格式无效 (例: host:port)",
-      path: ["targetAddress"],
-    });
-  }
-
-
-  if (data.instanceType === "入口(c)" && data.autoCreateServer) {
+  if (data.instanceType === "出口(s)") {
     if (!data.targetAddress || data.targetAddress.trim() === "") {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "自动创建出口(s)时，其转发目标地址是必需的。",
+        message: "目标地址 (业务数据) 是必需的。",
         path: ["targetAddress"],
       });
-    } else if (data.targetAddress && !/^(?:\[[0-9a-fA-F:]+\]|[0-9a-zA-Z.-]+):[0-9]+$/.test(data.targetAddress)) {
-       ctx.addIssue({
+    } else if (!/^(?:\[[0-9a-fA-F:]+\]|[0-9a-zA-Z.-]+):[0-9]+$/.test(data.targetAddress)) {
+      ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "出口(s)转发目标地址格式无效 (例: host:port)",
+        message: "目标地址 (业务数据) 格式无效 (例: host:port)",
+        path: ["targetAddress"],
+      });
+    }
+  } else if (data.instanceType === "入口(c)") {
+    // For "入口(c)", targetAddress is the local forward PORT (optional).
+    if (data.targetAddress && data.targetAddress.trim() !== "" && !/^[0-9]+$/.test(data.targetAddress.trim())) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "入口(c)本地转发端口格式无效 (应为数字)。",
         path: ["targetAddress"],
       });
     }
@@ -88,11 +82,11 @@ export const createInstanceFormSchema = z.object({
         ctx.addIssue({ code: z.ZodIssueCode.custom, message: "TLS模式 '2' 需要密钥路径。", path: ["keyPath"] });
       }
     }
-  } else if (effectiveTlsUserType === "入口(c)") {
+  } else if (effectiveTlsUserType === "入口(c)") { // This case now only applies if !autoCreateServer
     if (!["master", "0", "1", "2"].includes(data.tlsMode)) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "入口(c) TLS模式无效。",
+        message: "入口(c) TLS模式无效。", // This might be redundant if autoCreateServer handles its own server TLS separately
         path: ["tlsMode"],
       });
     }

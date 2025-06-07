@@ -62,7 +62,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
       autoCreateServer: false,
       serverApiId: undefined,
       tunnelAddress: '',
-      targetAddress: '',
+      targetAddress: '', // This field's meaning changes: for 入口(c) it's local forward port
       logLevel: 'master',
       tlsMode: 'master',
       certPath: '',
@@ -73,7 +73,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
   const instanceType = form.watch("instanceType");
   const tlsModeWatch = form.watch("tlsMode");
   const autoCreateServerWatched = form.watch("autoCreateServer");
-  const tunnelAddressValue = form.watch("tunnelAddress");
+  const tunnelAddressValue = form.watch("tunnelAddress"); // For 入口(c) with auto-create, this is server's port string. Otherwise, full host:port.
 
   useEffect(() => {
     if (open) {
@@ -94,8 +94,9 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
   }, [open, form]);
 
  useEffect(() => {
+    // Reset relevant fields when instanceType changes
     if (instanceType === "入口(c)") {
-        if (!form.formState.dirtyFields.tlsMode) form.setValue("tlsMode", "master");
+        if (!form.formState.dirtyFields.tlsMode) form.setValue("tlsMode", "master"); // TLS for client usually means connection behavior, master is fine
         if (!form.formState.dirtyFields.certPath) form.setValue("certPath", '');
         if (!form.formState.dirtyFields.keyPath) form.setValue("keyPath", '');
     } else if (instanceType === "出口(s)") {
@@ -103,7 +104,9 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
             if (!form.formState.dirtyFields.certPath) form.setValue("certPath", '');
             if (!form.formState.dirtyFields.keyPath) form.setValue("keyPath", '');
         }
+        // When switching to 出口(s), autoCreateServer is irrelevant and should be false
         if (!form.formState.dirtyFields.autoCreateServer) form.setValue("autoCreateServer", false);
+        if (!form.formState.dirtyFields.serverApiId) form.setValue("serverApiId", undefined);
     }
   }, [instanceType, form]);
 
@@ -123,7 +126,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
 
 
   useEffect(() => {
-    if (instanceType === '入口(c)' && tunnelAddressValue && !autoCreateServerWatched) {
+    if (instanceType === '入口(c)' && tunnelAddressValue && !autoCreateServerWatched) { // tunnelAddressValue is full host:port here
       const clientTunnelHost = extractHostname(tunnelAddressValue);
       if (!clientTunnelHost) {
         setExternalApiSuggestion(null);
@@ -265,38 +268,43 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
     let clientInstanceUrl = '';
     let serverInstanceUrlForAutoCreate: string | null = null;
 
-    const formTunnelInput = values.tunnelAddress;
-    const formTargetAddress = values.targetAddress;
-
     if (values.instanceType === '入口(c)') {
+        const clientLocalForwardHost = '[::]';
+        let clientLocalForwardPortString: string;
+
         if (values.autoCreateServer) {
-            const serverListenPort_ForDefinition = formTunnelInput;
-
-            if (!/^[0-9]+$/.test(serverListenPort_ForDefinition)) {
-                toast({ title: "错误", description: "出口(s)隧道端口格式无效。", variant: "destructive" }); return;
-            }
-            const serverListenHost_ForDefinition = '[::]';
-
-            const serverActualTargetAddress = formTargetAddress;
-            if (!serverActualTargetAddress) {
-                toast({ title: "错误", description: "自动创建出口(s)时，其转发目标地址是必需的。", variant: "destructive" }); return;
+            const serverListenPortFromForm = values.tunnelAddress; // This is just the port string e.g., "10101"
+            if (!/^[0-9]+$/.test(serverListenPortFromForm)) {
+                toast({ title: "错误", description: "自动创建出口(s)时，其隧道端口格式无效。", variant: "destructive" }); return;
             }
 
+            // Determine client's local forward port
+            if (values.targetAddress && values.targetAddress.trim() !== "") { // User specified a port for client's local forward
+                if (!/^[0-9]+$/.test(values.targetAddress.trim())) {
+                  toast({ title: "错误", description: "入口(c)本地转发端口格式无效。", variant: "destructive" }); return;
+                }
+                clientLocalForwardPortString = values.targetAddress.trim();
+            } else { // Default client's local forward port
+                clientLocalForwardPortString = (parseInt(serverListenPortFromForm, 10) + 1).toString();
+            }
+            const clientFullLocalForwardTargetAddress = `${formatHostForUrl(clientLocalForwardHost)}:${clientLocalForwardPortString}`;
+
+            // Prepare server instance
             const serverTargetMasterId = values.serverApiId;
             if (!serverTargetMasterId) {
-                toast({ title: "错误", description: "自动创建出口(s)时，必须选择一个目标主控。", variant: "destructive" });
-                onLog?.('尝试创建实例失败: 自动创建出口(s)但未选择目标主控。', 'ERROR');
-                return;
+                toast({ title: "错误", description: "自动创建出口(s)时，必须选择一个目标主控。", variant: "destructive" }); return;
             }
             const serverMasterConfig = getApiConfigById(serverTargetMasterId);
             if (!serverMasterConfig) {
                 toast({ title: "错误", description: `选择的出口(s)主控 (ID: ${serverTargetMasterId}) 未找到。`, variant: "destructive" }); return;
             }
+            // For auto-created server, its actual target is now a default
+            const serverActualTargetAddress_ForAutoCreatedServer = "0.0.0.0:8080"; // Default target
 
             serverInstanceUrlForAutoCreate = buildUrlFromFormValues({
                 instanceType: '出口(s)',
-                tunnelAddress: `${serverListenHost_ForDefinition}:${serverListenPort_ForDefinition}`,
-                targetAddress: serverActualTargetAddress,
+                tunnelAddress: `[::]:${serverListenPortFromForm}`, // Server listens on [::]:port
+                targetAddress: serverActualTargetAddress_ForAutoCreatedServer,
                 logLevel: values.logLevel,
                 tlsMode: values.tlsMode,
                 certPath: values.tlsMode === '2' ? values.certPath : '',
@@ -304,55 +312,64 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
             }, serverMasterConfig);
             onLog?.(`准备自动创建出口(s)于 "${serverMasterConfig.name}": ${serverInstanceUrlForAutoCreate}`, 'INFO');
 
+            // Prepare client instance to connect to the auto-created server
             const clientConnectToServerHost = extractHostname(serverMasterConfig.apiUrl);
             if (!clientConnectToServerHost) {
                  toast({ title: "错误", description: `无法从出口(s)主控 "${serverMasterConfig.name}" API URL提取主机名。`, variant: "destructive" }); return;
             }
-            const clientConnectToServerPort = serverListenPort_ForDefinition;
+            const clientConnectToServerPort = serverListenPortFromForm;
             const clientConnectToFullTunnelAddr = `${formatHostForUrl(clientConnectToServerHost)}:${clientConnectToServerPort}`;
-
-            const clientActualLocalForwardTargetAddress = `${formatHostForUrl('[::]')}:${(parseInt(serverListenPort_ForDefinition, 10) + 1).toString()}`;
-
 
             clientInstanceUrl = buildUrlFromFormValues({
                 instanceType: '入口(c)',
                 tunnelAddress: clientConnectToFullTunnelAddr,
-                targetAddress: clientActualLocalForwardTargetAddress, // Corrected: always use calculated default
+                targetAddress: clientFullLocalForwardTargetAddress,
                 logLevel: values.logLevel,
             }, activeApiConfig);
             onLog?.(`准备创建入口(c)实例于 "${activeApiConfig.name}": ${clientInstanceUrl}`, 'INFO');
 
-        } else {
-            const clientRemoteFullAddress = formTunnelInput;
+        } else { // Not auto-creating server
+            const clientRemoteFullAddress = values.tunnelAddress; // This is full host:port from form
             const clientRemotePort = extractPort(clientRemoteFullAddress);
             if (!clientRemotePort) {
                 toast({ title: "错误", description: "无法从连接的出口(s)隧道地址提取端口。", variant: "destructive" }); return;
             }
 
-            const clientLocalForwardTargetAddress = values.targetAddress || `${formatHostForUrl('[::]')}:${(parseInt(clientRemotePort, 10) + 1).toString()}`;
-
+            // Determine client's local forward port
+            if (values.targetAddress && values.targetAddress.trim() !== "") { // User specified a port
+                 if (!/^[0-9]+$/.test(values.targetAddress.trim())) {
+                    toast({ title: "错误", description: "入口(c)本地转发端口格式无效。", variant: "destructive" }); return;
+                }
+                clientLocalForwardPortString = values.targetAddress.trim();
+            } else { // Default
+                clientLocalForwardPortString = (parseInt(clientRemotePort, 10) + 1).toString();
+            }
+            const clientFullLocalForwardTargetAddress = `${formatHostForUrl(clientLocalForwardHost)}:${clientLocalForwardPortString}`;
+            
             clientInstanceUrl = buildUrlFromFormValues({
                 instanceType: '入口(c)',
                 tunnelAddress: clientRemoteFullAddress,
-                targetAddress: clientLocalForwardTargetAddress,
+                targetAddress: clientFullLocalForwardTargetAddress,
                 logLevel: values.logLevel,
             }, activeApiConfig);
             onLog?.(`准备创建入口(c)实例于 "${activeApiConfig.name}": ${clientInstanceUrl}`, 'INFO');
         }
 
-    } else {
-        const serverListenFullAddress = formTunnelInput;
-        const serverListenPort = extractPort(serverListenFullAddress);
-         if (!serverListenPort) {
-            toast({ title: "错误", description: "无法从出口(s)隧道监听地址中提取有效端口。", variant: "destructive" }); return;
-        }
+    } else { // instanceType === '出口(s)'
+        const serverListenFullAddress = values.tunnelAddress; // This is full host:port from form
+        const serverActualTargetAddress = values.targetAddress; // This is full host:port from form for server's data target
 
-        const serverActualTargetAddress = formTargetAddress;
-        if (!serverActualTargetAddress) {
+        if (!serverActualTargetAddress || serverActualTargetAddress.trim() === "") {
              toast({ title: "错误", description: "创建出口(s)时，目标地址 (业务数据) 是必需的。", variant: "destructive" }); return;
         }
+        if (!/^(?:\[[0-9a-fA-F:]+\]|[0-9a-zA-Z.-]+):[0-9]+$/.test(serverListenFullAddress)) {
+             toast({ title: "错误", description: "出口(s)隧道监听地址格式无效。", variant: "destructive" }); return;
+        }
+        if (!/^(?:\[[0-9a-fA-F:]+\]|[0-9a-zA-Z.-]+):[0-9]+$/.test(serverActualTargetAddress)) {
+            toast({ title: "错误", description: "出口(s)的目标地址 (业务数据) 格式无效。", variant: "destructive" }); return;
+        }
 
-        clientInstanceUrl = buildUrlFromFormValues({
+        clientInstanceUrl = buildUrlFromFormValues({ 
             instanceType: '出口(s)',
             tunnelAddress: serverListenFullAddress,
             targetAddress: serverActualTargetAddress,
@@ -363,11 +380,11 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
         }, activeApiConfig);
         onLog?.(`准备创建出口(s)实例于 "${activeApiConfig.name}": ${clientInstanceUrl}`, 'INFO');
     }
-
+    
     try {
       let serverCreationOk = true;
       if (serverInstanceUrlForAutoCreate) {
-        const serverTargetMasterId = values.serverApiId;
+        const serverTargetMasterId = values.serverApiId; // Already validated this exists if autoCreateServer is true
         const serverTargetMasterConfig = getApiConfigById(serverTargetMasterId!);
         const serverTargetApiRoot = serverTargetMasterConfig ? getApiRootUrl(serverTargetMasterConfig.id) : null;
         const serverTargetApiToken = serverTargetMasterConfig ? getToken(serverTargetMasterConfig.id) : null;
@@ -383,15 +400,15 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
               useApiToken: serverTargetApiToken,
             });
           } catch (e) {
-            serverCreationOk = false;
+            serverCreationOk = false; 
           }
         }
       }
 
-      if (clientInstanceUrl && serverCreationOk) {
+      if (clientInstanceUrl && serverCreationOk) { 
         await createInstanceMutation.mutateAsync({
             data: { url: clientInstanceUrl },
-            useApiRoot: clientMasterApiRoot,
+            useApiRoot: clientMasterApiRoot, 
             useApiToken: clientMasterApiToken,
          });
       } else if (!clientInstanceUrl) {
@@ -399,17 +416,17 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
         toast({ title: "内部错误", description: "主实例URL未能构建。", variant: "destructive" });
         return;
       }
-
+      
       if (!createInstanceMutation.isError && serverCreationOk) {
          form.reset();
          onOpenChange(false);
       }
     } catch (error: any) {
-       console.error("创建实例序列中发生意外错误:", error);
-       onLog?.(`创建实例序列中发生意外错误: ${error.message}`, 'ERROR');
+       console.error("创建实例序列中发生错误:", error);
+       onLog?.(`创建实例序列中发生错误: ${error.message}`, 'ERROR');
     }
   }
-
+  
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg p-4">
@@ -470,5 +487,4 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
     </Dialog>
   );
 }
-
     
