@@ -83,27 +83,22 @@ const CARD_NODE_WIDTH = 100;
 const CARD_NODE_HEIGHT = 40;
 const ICON_NODE_SIZE = 40;
 
-// REQ 1: 定义缩放等级参数
 const TOTAL_ZOOM_LEVELS = 10;
-const TARGET_ZOOM_LEVEL = 4; // The user wants the 4th level
+const TARGET_ZOOM_LEVEL = 4;
 const MIN_ZOOM = 0.1;
 const MAX_ZOOM = 1.0;
 const zoomStep = (MAX_ZOOM - MIN_ZOOM) / (TOTAL_ZOOM_LEVELS - 1);
-const initialZoom = MIN_ZOOM + (TARGET_ZOOM_LEVEL - 1) * zoomStep; // Calculate the float value for the 4th level
+const initialZoom = MIN_ZOOM + (TARGET_ZOOM_LEVEL - 1) * zoomStep;
 
 // --- Custom Node Components ---
 
-// REQ 2: 创建专用的 MasterNode 组件以控制连接点
+// MODIFIED: MasterNode to use left/right handles as primary
 const MasterNode: React.FC<NodeProps<CustomNodeData>> = memo(({ data }) => {
   return (
     <>
-      {/* 顶部连接点，用于U->M */}
-      <Handle type="target" position={Position.Top} id="m-top" className="!bg-cyan-500 w-2.5 h-2.5" />
-      {/* 底部连接点，用于M->T */}
-      <Handle type="source" position={Position.Bottom} id="m-bottom" className="!bg-cyan-500 w-2.5 h-2.5" />
-      {/* 备用的左右连接点 */}
-      <Handle type="target" position={Position.Left} id="m-left" className="w-2 h-2 !bg-slate-400 opacity-50 hover:opacity-100" />
-      <Handle type="source" position={Position.Right} id="m-right" className="w-2 h-2 !bg-slate-400 opacity-50 hover:opacity-100" />
+      {/* 主要连接点：左侧用于被链接，右侧用于链接出去 */}
+      <Handle type="target" position={Position.Left} id="m-left" className="!bg-cyan-500 w-2.5 h-2.5" />
+      <Handle type="source" position={Position.Right} id="m-right" className="!bg-cyan-500 w-2.5 h-2.5" />
       
       {/* 节点内容 */}
       <div className="font-semibold">{data.label}</div>
@@ -111,67 +106,56 @@ const MasterNode: React.FC<NodeProps<CustomNodeData>> = memo(({ data }) => {
   );
 });
 
+// MODIFIED: CardNode to conditionally render handles
 const CardNode: React.FC<NodeProps<CustomNodeData>> = memo(({ data, selected }) => {
   const IconComponent = data.icon;
   const roleStyle = nodeStyles[data.role.toLowerCase() as keyof typeof nodeStyles];
   
-  const baseCardClasses = `flex items-center rounded-lg border-2 shadow-sm transition-all duration-200 ease-in-out`;
+  const baseCardClasses = `flex items-center rounded-lg border-2 shadow-sm transition-all duration-200 ease-in-out p-1.5`;
   
-  const getDynamicStyle = (width: number, height: number) => ({
+  const width = CARD_NODE_WIDTH;
+  const height = CARD_NODE_HEIGHT;
+  
+  const dynamicStyle = {
     borderColor: roleStyle.base.borderColor,
     color: roleStyle.base.color,
     background: selected ? roleStyle.base.background : 'transparent',
     width: `${width}px`,
     height: `${height}px`,
-  });
-
-  const renderContent = () => {
-    switch (data.role) {
-      case 'U': // U-node: Icon only
-        return (
-          <div 
-            className={`${baseCardClasses} justify-center`}
-            style={getDynamicStyle(ICON_NODE_SIZE, ICON_NODE_SIZE)}
-          >
-            {IconComponent && <IconComponent size={20} style={{ color: selected ? roleStyle.base.color : roleStyle.base.borderColor }} />}
-          </div>
-        );
-
-      case 'S':
-      case 'C':
-      case 'T':
-      default:
-        const displayText = (data.role === 'S' || data.role === 'C') && data.representedMasterName 
-          ? data.representedMasterName 
-          : data.label;
-          
-        return (
-          <div 
-            className={`${baseCardClasses} p-1.5`}
-            style={getDynamicStyle(CARD_NODE_WIDTH, CARD_NODE_HEIGHT)}
-          >
-            {IconComponent && (
-              <div 
-                className="flex-shrink-0 flex items-center justify-center w-7 h-7 rounded-md mr-2"
-                style={{ backgroundColor: `${(roleStyle.base as any).borderColor}33` }}
-              >
-                 <IconComponent size={16} style={{ color: roleStyle.base.borderColor }} />
-              </div>
-            )}
-            <div className="flex-grow flex items-center justify-center overflow-hidden">
-              <span className="font-medium text-xs truncate" style={{color: selected ? roleStyle.base.color : 'hsl(var(--foreground))' }}>{displayText}</span>
-            </div>
-          </div>
-        );
-    }
   };
 
+  const displayText = (data.role === 'S' || data.role === 'C') && data.representedMasterName 
+    ? data.representedMasterName 
+    : data.label;
+    
   return (
     <>
-      {renderContent()}
-      {/* 保持所有小卡片的连接点为左右，以便在M容器内或外部连接时提供一致性 */}
-      <Handle type="target" position={Position.Left} className="!bg-slate-400 w-2 h-2" />
-      <Handle type="source" position={Position.Right} className="!bg-slate-400 w-2 h-2" />
+      <div 
+        className={baseCardClasses}
+        style={dynamicStyle}
+      >
+        {IconComponent && (
+          <div 
+            className="flex-shrink-0 flex items-center justify-center w-7 h-7 rounded-md mr-2"
+            style={{ backgroundColor: `${(roleStyle.base as any).borderColor}33` }}
+          >
+             <IconComponent size={16} style={{ color: roleStyle.base.borderColor }} />
+          </div>
+        )}
+        <div className="flex-grow flex items-center justify-center overflow-hidden">
+          <span className="font-medium text-xs truncate" style={{color: selected ? roleStyle.base.color : 'hsl(var(--foreground))' }}>{displayText}</span>
+        </div>
+      </div>
+
+      {/* MODIFIED: Conditionally render handles based on role */}
+      {/* REQ 1: U 节点不能被链接，所以移除左侧(target)连接点 */}
+      {data.role !== 'U' && (
+        <Handle type="target" position={Position.Left} className="!bg-slate-400 w-2 h-2" />
+      )}
+      {/* REQ 2: T 节点不能链接出去，所以移除右侧(source)连接点 */}
+      {data.role !== 'T' && (
+        <Handle type="source" position={Position.Right} className="!bg-slate-400 w-2 h-2" />
+      )}
     </>
   );
 });
@@ -179,7 +163,7 @@ const CardNode: React.FC<NodeProps<CustomNodeData>> = memo(({ data, selected }) 
 
 const nodeTypes = {
   cardNode: CardNode,
-  masterNode: MasterNode, // REQ 2: 注册新的 MasterNode 组件
+  masterNode: MasterNode,
 };
 
 const nodeStyles = {
@@ -191,7 +175,7 @@ const nodeStyles = {
             background: 'hsl(var(--card) / 0.6)',
             boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)',
             borderRadius: '0.75rem',
-            padding: '16px', // 增加内边距给Handle留出空间
+            padding: '16px',
             fontSize: '0.8rem',
             fontWeight: 500,
             textAlign: 'center'
@@ -273,7 +257,6 @@ const ActualTopologyFlowWithState: React.FC<ActualTopologyFlowWithStateProps> = 
       <ReactFlow
         nodes={nodes} edges={edges} onNodesChange={onNodesChange} onEdgesChange={onEdgesChange} onConnect={onConnect} onSelectionChange={onSelectionChange}
         onNodeContextMenu={onNodeContextMenu} onEdgeContextMenu={onEdgeContextMenu} onPaneClick={onPaneClick} 
-        // REQ 1: 使用计算出的缩放等级
         defaultViewport={{ x: 0, y: 0, zoom: initialZoom }}
         nodesDraggable={true} nodesConnectable={true}
         elementsSelectable={true} deleteKeyCode={['Backspace', 'Delete']} panOnScroll={false} zoomOnScroll={true} panOnDrag={true} selectionOnDrag
@@ -309,7 +292,6 @@ function TopologyEditorCore() {
   const [nodeIdCounter, setNodeIdCounter] = useState(0);
   const { toast } = useToast();
   const reactFlowWrapperRef = useRef<HTMLDivElement>(null);
-  // MODIFIED: 从 useReactFlow hook 中获取 fitView 函数
   const { deleteElements, fitView } = useReactFlow();
   const [contextMenu, setContextMenu] = useState<TopologyContextMenu | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -335,17 +317,15 @@ function TopologyEditorCore() {
         return;
       }
 
-      // U node connection rules
       if (targetNode.data.role === 'U') {
-        toast({ title: '连接无效', description: '用户 (U) 节点不能被其他节点链接。', variant: 'destructive' });
+        toast({ title: '连接无效', description: '用户端 (U) 节点不能被其他节点链接。', variant: 'destructive' });
         return;
       }
       if (sourceNode.data.role === 'U' && targetNode.data.role !== 'M') {
-        toast({ title: '连接无效', description: '用户 (U) 节点只能链接到主控 (M) 节点。', variant: 'destructive' });
+        toast({ title: '连接无效', description: '用户端 (U) 节点只能链接到主控 (M) 节点。', variant: 'destructive' });
         return;
       }
 
-      // T node connection rules
       if (sourceNode.data.role === 'T') {
         toast({ title: '连接无效', description: '落地端 (T) 节点不能作为连接的起点。', variant: 'destructive' });
         return;
@@ -422,7 +402,6 @@ function TopologyEditorCore() {
       let currentCounter = nodeIdCounter;
       const newNodes: Node[] = [];
       const newEdges: Edge[] = [];
-      // NEW: 用于存储需要聚焦的节点ID
       let nodesToFit: { id: string }[] | null = null;
       
       const mNodeWidth = 300, mNodeHeight = 200;
@@ -476,40 +455,44 @@ function TopologyEditorCore() {
                   width: CARD_NODE_WIDTH, height: CARD_NODE_HEIGHT,
               });
               
+              // MODIFIED: REQ 3 - U 节点位置调整到 M 左侧
               newNodes.push({
                   id: uId, type: 'cardNode',
                   position: { 
-                      x: position.x + (mNodeWidth / 2) - (ICON_NODE_SIZE / 2), 
-                      y: position.y - ICON_NODE_SIZE - 60 
+                      x: position.x - CARD_NODE_WIDTH - 60, // M左侧60px间距
+                      y: position.y + (mNodeHeight / 2) - (CARD_NODE_HEIGHT / 2) // 与M垂直居中
                   },
-                  data: { label: '用户', role: 'U', icon: User },
-                  width: ICON_NODE_SIZE, height: ICON_NODE_SIZE,
+                  data: { label: '用户端', role: 'U', icon: User },
+                  width: CARD_NODE_WIDTH, 
+                  height: CARD_NODE_HEIGHT,
               });
               
+              // MODIFIED: REQ 3 - T 节点位置调整到 M 右侧
               newNodes.push({
                   id: tId, type: 'cardNode',
                   position: { 
-                      x: position.x + (mNodeWidth / 2) - (CARD_NODE_WIDTH / 2), 
-                      y: position.y + mNodeHeight + 60
+                      x: position.x + mNodeWidth + 60, // M右侧60px间距
+                      y: position.y + (mNodeHeight / 2) - (CARD_NODE_HEIGHT / 2) // 与M垂直居中
                   },
                   data: { label: '落地端', role: 'T', icon: Cable },
                   width: CARD_NODE_WIDTH, height: CARD_NODE_HEIGHT,
               });
 
+              // MODIFIED: REQ 3 - 更新边的连接点
+              // U(右侧默认) -> M(左侧)
               newEdges.push({
                   id: `edge-${uId}-${mId}`, source: uId, target: mId, type: 'smoothstep', 
-                  targetHandle: 'm-top',
+                  targetHandle: 'm-left', 
                   markerEnd: { type: MarkerType.ArrowClosed }, animated: true, style: { strokeDasharray: '5 5' },
               });
+              // M(右侧) -> T(左侧默认)
               newEdges.push({
                   id: `edge-${mId}-${tId}`, source: mId, target: tId, type: 'smoothstep',
-                  sourceHandle: 'm-bottom',
+                  sourceHandle: 'm-right',
                   markerEnd: { type: MarkerType.ArrowClosed }, animated: true, style: { strokeDasharray: '5 5' },
               });
               toast({ title: "主控容器已创建" });
               
-              // NEW: 记录下新创建的M卡片组的ID，以便后续聚焦
-              // 我们选择最外围的节点(U, T)和核心的M节点来定义视图的边界框
               nodesToFit = [{ id: uId }, { id: mId }, { id: tId }];
           }
       } else if (type !== 'master') {
@@ -518,7 +501,7 @@ function TopologyEditorCore() {
               'S': { labelPrefix: '服务端', icon: Server, width: CARD_NODE_WIDTH, height: CARD_NODE_HEIGHT },
               'C': { labelPrefix: '客户端', icon: DatabaseZap, width: CARD_NODE_WIDTH, height: CARD_NODE_HEIGHT },
               'T': { labelPrefix: '落地端', icon: Cable, width: CARD_NODE_WIDTH, height: CARD_NODE_HEIGHT },
-              'U': { labelPrefix: '用户', icon: User, width: ICON_NODE_SIZE, height: ICON_NODE_SIZE },
+              'U': { labelPrefix: '用户端', icon: User, width: CARD_NODE_WIDTH, height: CARD_NODE_HEIGHT },
           }[nodeRole]!;
 
           if ((nodeRole === 'S' || nodeRole === 'C') && !parentMContainer) {
@@ -553,21 +536,15 @@ function TopologyEditorCore() {
       if (newEdges.length > 0) setEdgesInternal(eds => eds.concat(newEdges));
       setNodeIdCounter(currentCounter + newNodes.length);
 
-      // NEW: 如果创建了新的M卡片组，则调用 fitView 进行聚焦
       if (nodesToFit) {
-        // 使用 setTimeout 确保 fitView 在节点被渲染到 DOM 后执行
         setTimeout(() => {
           fitView({
             nodes: nodesToFit,
-            duration: 400, // 平滑的动画效果
-            // padding: 0.2 表示在视图边界和节点之间留出20%的边距。
-            // 视口(100%) - 左边距(20%) - 右边距(20%) = 内容区(60%)
-            // 这就实现了 "放大到画布的60%" 的效果。
+            duration: 400,
             padding: 0.2,
           });
-        }, 50); // 50ms 的延迟足以等待下一次渲染
+        }, 50);
       }
-  // MODIFIED: 将 fitView 添加到 useCallback 的依赖项数组中
   }, [nodeIdCounter, nodesInternal, toast, setNodesInternal, setEdgesInternal, fitView]);
 
     const handleChangeNodeRole = useCallback((nodeId: string, newRole: 'S' | 'C') => {
