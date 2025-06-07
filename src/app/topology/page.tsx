@@ -7,7 +7,7 @@ import ReactFlow, {
   useNodesState,
   useEdgesState,
   addEdge,
-  Controls,
+  // Controls, // Removed Controls import
   Background,
   MiniMap,
   Position,
@@ -80,7 +80,7 @@ const ActualTopologyFlowWithState: React.FC<ActualTopologyFlowWithStateProps> = 
     borderRadius: '0.375rem',
   }), [resolvedTheme]);
 
-  const memoizedControls = useMemo(() => <Controls style={{ bottom: 10, right: 10 }} />, []);
+  // const memoizedControls = useMemo(() => <Controls style={{ bottom: 10, right: 10 }} />, []); // Controls removed
   const memoizedMiniMap = useMemo(() => (
     isClient ? <MiniMap style={miniMapStyle} nodeStrokeWidth={3} zoomable pannable /> : null
   ), [miniMapStyle, isClient]);
@@ -116,7 +116,7 @@ const ActualTopologyFlowWithState: React.FC<ActualTopologyFlowWithStateProps> = 
             canSubmit={canSubmit}
           />
         </Panel>
-        {memoizedControls}
+        {/* {memoizedControls} Controls removed */}
         {memoizedMiniMap}
         {memoizedBackground}
       </ReactFlow>
@@ -296,11 +296,8 @@ export default function TopologyPage() {
         <div className="flex flex-col flex-grow h-full">          
           <div className="flex flex-row flex-grow h-full overflow-hidden"> 
             
-            {/* Left Sidebar Column with p-2 for gutter */}
             <div className="w-60 flex-shrink-0 p-2">
-              {/* Single Unified Panel for Left Sidebar */}
               <div className="flex flex-col h-full bg-background rounded-lg shadow-md border">
-                {/* Masters Palette Section */}
                 <div className="flex flex-col h-1/2 p-3">
                   <h2 className="text-base font-semibold font-title mb-1">主控列表</h2>
                   <p className="text-xs text-muted-foreground font-sans mb-2">点击主控添加到画布。</p>
@@ -309,9 +306,8 @@ export default function TopologyPage() {
                   </div>
                 </div>
 
-                <Separator className="my-0" /> {/* Separator uses its default margin if mx/my not specified */}
+                <Separator className="my-0" />
 
-                {/* Node Properties Section */}
                 <div className="flex flex-col flex-grow min-h-0 p-3">
                   <h2 className="text-base font-semibold font-title mb-1">节点属性</h2>
                   <p className="text-xs text-muted-foreground font-sans mb-2">
@@ -324,7 +320,6 @@ export default function TopologyPage() {
               </div>
             </div>
 
-            {/* Right Canvas Area Column with p-2 for gutter */}
             <div className="flex-grow flex flex-col overflow-hidden p-2">
               <div className="flex-grow relative">
                 <div className="absolute inset-0">
@@ -351,4 +346,3 @@ export default function TopologyPage() {
     </AppLayout>
   );
 }
-
