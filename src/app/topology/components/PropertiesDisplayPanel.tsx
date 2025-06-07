@@ -3,7 +3,7 @@
 
 import React from 'react';
 import type { Node } from 'reactflow';
-// ScrollArea import removed
+// ScrollArea is no longer needed here as parent CardContent handles scrolling
 
 interface PropertiesDisplayPanelProps {
   selectedNode: Node | null;
@@ -18,8 +18,7 @@ export function PropertiesDisplayPanel({ selectedNode }: PropertiesDisplayPanelP
     );
   }
 
-  // ScrollArea wrapper removed. Parent CardContent will handle scrolling.
-  // The parent CardContent in page.tsx has p-1, so this div gets that padding.
+  // Parent CardContent in page.tsx has p-1, this div gets that padding implicitly.
   return (
     <div className="space-y-2 text-xs font-sans">
       <div>

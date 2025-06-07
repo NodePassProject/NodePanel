@@ -1,7 +1,7 @@
 
 'use client';
 
-import React, { useCallback, useState, useEffect, useMemo } from 'react';
+import React, { useCallback, useState, useEffect, useMemo, useRef } from 'react';
 import ReactFlow, {
   ReactFlowProvider,
   useNodesState,
@@ -13,9 +13,14 @@ import ReactFlow, {
   Position,
   MarkerType,
   useReactFlow,
+  applyNodeChanges,
+  applyEdgeChanges,
   type Connection,
   type Edge,
   type Node,
+  type OnNodesChange,
+  type OnEdgesChange,
+  type Viewport,
   PanOnScrollMode,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
@@ -36,62 +41,103 @@ const initialEdges: Edge[] = [];
 
 // This component will now contain the ReactFlow instance and related logic
 export default function TopologyPage() {
+  const [nodes, setNodes, onNodesChangeInternal] = useNodesState(initialNodes);
+  const [edges, setEdges, onEdgesChangeInternal] = useEdgesState(initialEdges);
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
   const [nodeIdCounter, setNodeIdCounter] = useState(0);
-  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
-  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
   const { toast } = useToast();
+  const reactFlowWrapperRef = useRef<HTMLDivElement>(null);
 
+
+  const onNodesChange: OnNodesChange = useCallback(
+    (changes) => setNodes((nds) => applyNodeChanges(changes, nds)),
+    [setNodes]
+  );
+
+  const onEdgesChange: OnEdgesChange = useCallback(
+    (changes) => setEdges((eds) => applyEdgeChanges(changes, eds)),
+    [setEdges]
+  );
+
+  const onConnect = useCallback(
+    (params: Connection | Edge) =>
+      setEdges((eds) => addEdge({ ...params, animated: true, type: 'smoothstep', markerEnd: { type: MarkerType.ArrowClosed } }, eds)),
+    [setEdges]
+  );
+  
   const onSelectionChange = useCallback(({ nodes: selectedNodesList }: { nodes: Node[], edges: Edge[] }) => {
     setSelectedNode(selectedNodesList.length === 1 ? selectedNodesList[0] : null);
   }, []);
 
-  const handleAddMasterNodeFromPalette = useCallback((masterConfig: NamedApiConfig, reactFlowInstanceRef: ReturnType<typeof useReactFlow> | null) => {
-    if (!reactFlowInstanceRef) {
+  const addNodeToCanvas = useCallback((newNodeData: Omit<Node, 'id' | 'position'>, reactFlowInstance: ReturnType<typeof useReactFlow> | null) => {
+    if (!reactFlowInstance) {
       toast({ title: "错误", description: "ReactFlow 实例未准备好。", variant: "destructive" });
       return;
     }
+
     const newCounter = nodeIdCounter + 1;
     setNodeIdCounter(newCounter);
-    const newNodeId = `master-node-${masterConfig.id}-${newCounter}`;
+    const newNodeId = `${newNodeData.type || 'node'}-${newCounter}`;
 
-    const { x: viewX, y: viewY, zoom: rawZoom } = reactFlowInstanceRef.getViewport();
-    const zoom = rawZoom === 0 ? 1 : rawZoom; // Safeguard against zoom being 0
+    let position = { x: 0, y: 0 };
+    const { width: canvasWidth, height: canvasHeight } = reactFlowInstance.getViewport();
+
+    if (canvasWidth > 0 && canvasHeight > 0 && reactFlowWrapperRef.current) {
+        const bounds = reactFlowWrapperRef.current.getBoundingClientRect();
+        const screenCenter = { x: bounds.left + bounds.width / 2, y: bounds.top + bounds.height / 2 };
+        position = reactFlowInstance.screenToFlowPosition({ 
+            x: screenCenter.x - bounds.left, // relative to canvas pane
+            y: screenCenter.y - bounds.top   // relative to canvas pane
+        });
+         position.x += (Math.random() * 100 - 50);
+         position.y += (Math.random() * 100 - 50);
+    } else {
+        // Fallback if canvas dimensions are not yet available
+        const currentViewport = reactFlowInstance.getViewport();
+        position = {
+            x: -currentViewport.x / currentViewport.zoom + 100 + (Math.random() * 100 - 50),
+            y: -currentViewport.y / currentViewport.zoom + 100 + (Math.random() * 100 - 50),
+        };
+    }
     
-    const canvasWidth = reactFlowInstanceRef.width || 0;
-    const canvasHeight = reactFlowInstanceRef.height || 0;
-    
-    const positionX = viewX + (canvasWidth / (2 * zoom)) + (Math.random() * 100 - 50); 
-    const positionY = viewY + (canvasHeight / (2 * zoom)) + (Math.random() * 100 - 50);
-
-
-    const newNode: Node = {
+    const finalNewNode: Node = {
       id: newNodeId,
-      type: 'default', 
-      data: {
-        label: `主控: ${masterConfig.name}`,
-        nodeType: 'masterRepresentation', 
-        masterId: masterConfig.id,
-        masterName: masterConfig.name,
-        apiUrl: masterConfig.apiUrl,
-        defaultLogLevel: masterConfig.masterDefaultLogLevel,
-        defaultTlsMode: masterConfig.masterDefaultTlsMode,
-      },
-      position: { x: positionX, y: positionY },
-      style: { 
-        borderColor: 'hsl(var(--primary))',
-        borderWidth: 2,
-        background: 'hsl(var(--primary)/10)',
-        borderRadius: '0.375rem', 
-        padding: '8px 12px',
-        fontSize: '0.75rem', 
-      },
-      sourcePosition: Position.Right,
-      targetPosition: Position.Left,
+      position,
+      ...newNodeData,
     };
-    setNodes((nds) => nds.concat(newNode));
-    toast({ title: "主控节点已添加", description: `已将主控 "${masterConfig.name}" 添加到画布。` });
-  }, [nodeIdCounter, setNodes, setNodeIdCounter, toast]);
+
+    setNodes((nds) => nds.concat(finalNewNode));
+    toast({ title: "节点已添加", description: `已添加节点 "${finalNewNode.data.label || newNodeId}"。` });
+
+  }, [nodeIdCounter, setNodes, toast]);
+
+
+  const handleAddMasterNodeFromPalette = useCallback((masterConfig: NamedApiConfig, rfInstance: ReturnType<typeof useReactFlow> | null) => {
+    const masterNodeData: Omit<Node, 'id' | 'position'> = {
+        type: 'default', 
+        data: {
+            label: `主控: ${masterConfig.name}`,
+            nodeType: 'masterRepresentation', 
+            masterId: masterConfig.id,
+            masterName: masterConfig.name,
+            apiUrl: masterConfig.apiUrl,
+            defaultLogLevel: masterConfig.masterDefaultLogLevel,
+            defaultTlsMode: masterConfig.masterDefaultTlsMode,
+        },
+        style: { 
+            borderColor: 'hsl(var(--primary))',
+            borderWidth: 2,
+            background: 'hsl(var(--primary)/10)',
+            borderRadius: '0.375rem', 
+            padding: '8px 12px',
+            fontSize: '0.75rem', 
+        },
+        sourcePosition: Position.Right,
+        targetPosition: Position.Left,
+    };
+    addNodeToCanvas(masterNodeData, rfInstance);
+  }, [addNodeToCanvas]);
+
 
   const handleClearCanvasCallback = useCallback(() => {
     setNodes([]);
@@ -114,8 +160,8 @@ export default function TopologyPage() {
     toast({ title: "提交拓扑", description: "此功能待实现。" });
   }, [toast]);
 
-   const ActualTopologyFlowWithState = () => {
-    const reactFlowInstance = useReactFlow();
+  // Inner component to safely use useReactFlow() and other hooks needing provider context
+  const ActualTopologyFlow = () => {
     const { resolvedTheme } = useTheme();
     const [isClient, setIsClient] = useState(false);
 
@@ -123,24 +169,20 @@ export default function TopologyPage() {
       setIsClient(true);
     }, []);
 
-    const onConnect = useCallback(
-      (params: Connection | Edge) =>
-        setEdges((eds) => addEdge({ ...params, animated: true, type: 'smoothstep', markerEnd: { type: MarkerType.ArrowClosed } }, eds)),
-      [setEdges]
-    );
-
     const miniMapStyle = useMemo(() => ({
-      backgroundColor: resolvedTheme === 'dark' ? 'hsl(var(--popover))' : 'hsl(var(--card))',
+      backgroundColor: resolvedTheme === 'dark' ? 'hsl(var(--popover))' : 'hsl(var(--card))', // Theme aware
       border: `1px solid hsl(var(--border))`,
       borderRadius: '0.375rem',
     }), [resolvedTheme]);
 
     const memoizedControls = useMemo(() => <Controls style={{ bottom: 10, right: 10 }} />, []);
-    const memoizedMiniMap = useMemo(() => <MiniMap style={miniMapStyle} nodeStrokeWidth={3} zoomable pannable />, [miniMapStyle]);
+    const memoizedMiniMap = useMemo(() => (
+      <MiniMap style={miniMapStyle} nodeStrokeWidth={3} zoomable pannable />
+    ), [miniMapStyle]); // Re-memoize if style changes
     const memoizedBackground = useMemo(() => <Background variant="dots" gap={16} size={1} />, []);
 
     return (
-      <div className="h-full w-full bg-background rounded-lg shadow-inner border border-border/50">
+      <div ref={reactFlowWrapperRef} className="h-full w-full bg-background rounded-lg shadow-inner border border-border/50">
         <ReactFlow
           nodes={nodes}
           edges={edges}
@@ -157,6 +199,7 @@ export default function TopologyPage() {
           selectionOnDrag
           panOnDrag={[PanOnScrollMode.Free, PanOnScrollMode.Right, PanOnScrollMode.Left]}
           className="h-full w-full"
+          nodeOrigin={[0.5, 0.5]}
         >
           {memoizedControls}
           {isClient && memoizedMiniMap}
@@ -165,37 +208,20 @@ export default function TopologyPage() {
       </div>
     );
   };
-
+  
+  // Wrapper for toolbar to ensure useReactFlow is called within provider
   const ToolbarWrapper = () => {
     const reactFlowInstance = useReactFlow();
     return (
       <TopologyToolbar
         onAddNode={() => {
-            const newCounter = nodeIdCounter + 1;
-            setNodeIdCounter(newCounter);
-            const newNodeId = `node-${newCounter}`;
-            const newNodeData = { label: `新节点 ${newCounter}` };
-
-            const { x: viewX, y: viewY, zoom: rawZoom } = reactFlowInstance.getViewport();
-            const zoom = rawZoom === 0 ? 1 : rawZoom; // Safeguard
-            
-            const canvasWidth = reactFlowInstance.width || 0; 
-            const canvasHeight = reactFlowInstance.height || 0;
-            
-            const positionX = viewX + (canvasWidth > 0 ? (canvasWidth / (2 * zoom)) : 100) + (Math.random() * 50 - 25);
-            const positionY = viewY + (canvasHeight > 0 ? (canvasHeight / (2 * zoom)) : 100) + (Math.random() * 50 - 25);
-
-
-            const newNodeToAdd: Node = {
-              id: newNodeId,
-              type: 'default', 
-              data: newNodeData,
-              position: { x: positionX, y: positionY },
-              sourcePosition: Position.Right,
-              targetPosition: Position.Left,
+            const genericNodeData: Omit<Node, 'id' | 'position'> = {
+                type: 'default',
+                data: { label: `新节点 ${nodeIdCounter + 1}` },
+                sourcePosition: Position.Right,
+                targetPosition: Position.Left,
             };
-            setNodes((nds) => nds.concat(newNodeToAdd));
-            toast({ title: "节点已添加", description: `已添加节点 "${newNodeData.label}"。` });
+            addNodeToCanvas(genericNodeData, reactFlowInstance);
         }}
         onCenterView={() => handleCenterViewCallback(reactFlowInstance)}
         onFormatLayout={handleFormatLayoutCallback}
@@ -206,6 +232,7 @@ export default function TopologyPage() {
     );
   };
 
+  // Wrapper for palette
   const MastersPaletteWrapper = () => {
       const reactFlowInstance = useReactFlow();
       return <MastersPalette onAddMasterNode={(config) => handleAddMasterNodeFromPalette(config, reactFlowInstance)} />
@@ -213,17 +240,22 @@ export default function TopologyPage() {
 
   return (
     <AppLayout>
-      {/* Root div for TopologyPage content, flex-grow ensures it takes available space from AppLayout's main */}
-      <div className="flex flex-col flex-grow"> 
-        <ReactFlowProvider>
-           {/* This div establishes the main horizontal layout: Left Sidebar | Right Content Area */}
-          <div className="flex flex-row flex-grow overflow-hidden">
+      <ReactFlowProvider> {/* Provider now wraps the entire layout */}
+        <div className="flex flex-col flex-grow h-full"> {/* Main container for toolbar + content row */}
+          {/* Top Toolbar Area */}
+          <div className="flex-shrink-0 p-2 border-b bg-background shadow-sm">
+            <ToolbarWrapper />
+          </div>
+
+          {/* Content Row: Left Sidebar | Right Canvas Area */}
+          <div className="flex flex-row flex-grow overflow-hidden"> {/* This will take remaining height */}
             {/* Left Sidebar */}
             <div className="w-72 flex-shrink-0 flex flex-col border-r bg-muted/30 shadow-sm">
+              {/* Masters Palette Card */}
               <Card className="flex flex-col h-1/2 m-2 shadow-md rounded-lg">
                 <CardHeader className="p-3 border-b">
                   <CardTitle className="text-base font-semibold font-title">主控列表</CardTitle>
-                  <CardDescription className="text-xs text-muted-foreground font-sans">将主控拖到画布上。</CardDescription>
+                  <CardDescription className="text-xs text-muted-foreground font-sans">点击主控添加到画布。</CardDescription>
                 </CardHeader>
                 <CardContent className="flex-grow overflow-y-auto p-1">
                   <MastersPaletteWrapper />
@@ -232,40 +264,33 @@ export default function TopologyPage() {
 
               <Separator />
 
-              <Card className="flex flex-col flex-grow m-2 shadow-md rounded-lg min-h-0">
+              {/* Properties Panel Card */}
+              <Card className="flex flex-col flex-grow m-2 shadow-md rounded-lg min-h-0"> {/* min-h-0 helps flex-grow */}
                 <CardHeader className="p-3 border-b">
                   <CardTitle className="text-base font-semibold font-title">节点属性</CardTitle>
                   <CardDescription className="text-xs text-muted-foreground font-sans">
                     {selectedNode ? `选中: ${selectedNode.data.label || selectedNode.id}` : '点击节点查看属性。'}
                   </CardDescription>
                 </CardHeader>
-                <CardContent className="flex-grow overflow-y-auto p-1">
+                <CardContent className="flex-grow overflow-y-auto p-1"> {/* Ensure this is scrollable */}
                   <PropertiesDisplayPanel selectedNode={selectedNode} />
                 </CardContent>
               </Card>
             </div>
 
-            {/* Right Area (Toolbar + Canvas) */}
-            <div className="flex-grow flex flex-col overflow-hidden">
-                {/* Top Toolbar Area */}
-                <div className="flex-shrink-0 p-2 border-b bg-background shadow-sm">
-                  <ToolbarWrapper />
-                </div>
-
-                {/* Canvas Area with Bottom Margin */}
-                {/* flex-grow allows this area to take up remaining vertical space */}
-                {/* relative is for absolute positioning of the canvas itself */}
-                {/* pb-5 provides the 20px bottom margin */}
-                <div className="flex-grow relative pb-5"> 
-                  {/* This div will be filled by ReactFlow */}
-                  <div className="absolute inset-0">
-                    <ActualTopologyFlowWithState />
-                  </div>
-                </div>
+            {/* Right Canvas Area */}
+            {/* flex-grow allows this area to take up remaining width */}
+            {/* relative is for absolute positioning of the canvas itself */}
+            {/* pb-5 provides the 20px bottom margin */}
+            <div className="flex-grow relative pb-5"> 
+              {/* This div will be filled by ReactFlow */}
+              <div className="absolute inset-0">
+                <ActualTopologyFlow />
+              </div>
             </div>
           </div>
-        </ReactFlowProvider>
-      </div>
+        </div>
+      </ReactFlowProvider>
     </AppLayout>
   );
 }

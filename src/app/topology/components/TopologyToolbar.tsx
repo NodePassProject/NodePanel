@@ -40,7 +40,7 @@ export function TopologyToolbar({
         <Send className="mr-2 h-4 w-4" />
         提交拓扑
       </Button>
-      <Button onClick={onClearCanvas} size="sm" variant="destructive" className="font-sans ml-auto"> {/* ml-auto to push to right if space allows */}
+      <Button onClick={onClearCanvas} size="sm" variant="destructive" className="font-sans ml-auto"> {/* ml-auto to push to right */}
         <Trash2 className="mr-2 h-4 w-4" />
         清空画布
       </Button>
