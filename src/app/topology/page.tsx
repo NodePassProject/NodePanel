@@ -46,6 +46,20 @@ import {
 const initialNodes: Node[] = [];
 const initialEdges: Edge[] = [];
 
+function TopologyPageContainer() {
+  return (
+    <AppLayout>
+      <div className="flex flex-col flex-grow"> {/* Parent grows to fill AppLayout's main */}
+        <div className="flex-grow p-5 flex"> {/* This child handles padding and also grows, allowing TopologyFlow to use h-full */}
+          <ReactFlowProvider>
+            <TopologyFlow /> {/* TopologyFlow's root div will use h-full w-full */}
+          </ReactFlowProvider>
+        </div>
+      </div>
+    </AppLayout>
+  );
+}
+
 function TopologyFlow() {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
@@ -275,19 +289,5 @@ function TopologyFlow() {
   );
 }
 
-export default function TopologyPageContainer() {
-  return (
-    <AppLayout>
-      <div className="flex flex-col flex-grow"> {/* Parent grows to fill AppLayout's main */}
-        <div className="flex-grow p-5 flex"> {/* This child handles padding and also grows, allowing TopologyFlow to use h-full */}
-          <ReactFlowProvider>
-            <TopologyFlow /> {/* TopologyFlow's root div will use h-full w-full */}
-          </ReactFlowProvider>
-        </div>
-      </div>
-    </AppLayout>
-  );
-}
-    
-
+export default TopologyPageContainer;
     
