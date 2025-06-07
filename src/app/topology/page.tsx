@@ -7,7 +7,6 @@ import ReactFlow, {
   useNodesState,
   useEdgesState,
   addEdge,
-  // Controls, // Removed Controls import
   Background,
   MiniMap,
   Position,
@@ -80,7 +79,6 @@ const ActualTopologyFlowWithState: React.FC<ActualTopologyFlowWithStateProps> = 
     borderRadius: '0.375rem',
   }), [resolvedTheme]);
 
-  // const memoizedControls = useMemo(() => <Controls style={{ bottom: 10, right: 10 }} />, []); // Controls removed
   const memoizedMiniMap = useMemo(() => (
     isClient ? <MiniMap style={miniMapStyle} nodeStrokeWidth={3} zoomable pannable /> : null
   ), [miniMapStyle, isClient]);
@@ -100,8 +98,8 @@ const ActualTopologyFlowWithState: React.FC<ActualTopologyFlowWithStateProps> = 
         nodesConnectable={true}
         elementsSelectable={true}
         deleteKeyCode={['Backspace', 'Delete']}
-        panOnScroll={false} 
-        zoomOnScroll={true} 
+        panOnScroll={false}
+        zoomOnScroll={true}
         panOnDrag={[PanOnScrollMode.Free, PanOnScrollMode.Right, PanOnScrollMode.Left]}
         selectionOnDrag
         className="h-full w-full"
@@ -116,7 +114,6 @@ const ActualTopologyFlowWithState: React.FC<ActualTopologyFlowWithStateProps> = 
             canSubmit={canSubmit}
           />
         </Panel>
-        {/* {memoizedControls} Controls removed */}
         {memoizedMiniMap}
         {memoizedBackground}
       </ReactFlow>
@@ -201,7 +198,7 @@ export default function TopologyPage() {
     setNodeIdCounter(newCounter);
     const newNodeId = `${newNodeData.type || 'node'}-${newCounter}`;
 
-    let position = { x: 100, y: 100 }; 
+    let position = { x: 100, y: 100 };
 
     if (reactFlowWrapperRef.current) {
         const bounds = reactFlowWrapperRef.current.getBoundingClientRect();
@@ -213,7 +210,7 @@ export default function TopologyPage() {
         } else {
             const currentViewport = reactFlowInstance.getViewport();
             position = {
-                x: -currentViewport.x / currentViewport.zoom + 150 + (Math.random() * 50 - 25), 
+                x: -currentViewport.x / currentViewport.zoom + 150 + (Math.random() * 50 - 25),
                 y: -currentViewport.y / currentViewport.zoom + 150 + (Math.random() * 50 - 25),
             };
         }
@@ -239,23 +236,23 @@ export default function TopologyPage() {
 
   const handleAddMasterNodeFromPalette = useCallback((masterConfig: NamedApiConfig, rfInstance: ReturnType<typeof useReactFlow>) => {
     const masterNodeData: Omit<Node, 'id' | 'position'> = {
-      type: 'default', 
+      type: 'default',
       data: {
         label: `主控: ${masterConfig.name}`,
-        nodeType: 'masterRepresentation', 
+        nodeType: 'masterRepresentation',
         masterId: masterConfig.id,
         masterName: masterConfig.name,
         apiUrl: masterConfig.apiUrl,
         defaultLogLevel: masterConfig.masterDefaultLogLevel,
         defaultTlsMode: masterConfig.masterDefaultTlsMode,
       },
-      style: { 
+      style: {
         borderColor: 'hsl(var(--primary))',
         borderWidth: 2,
         background: 'hsl(var(--primary)/10)',
         borderRadius: '0.375rem',
         padding: '8px 12px',
-        fontSize: '0.75rem', 
+        fontSize: '0.75rem',
       },
       sourcePosition: Position.Right,
       targetPosition: Position.Left,
@@ -292,12 +289,13 @@ export default function TopologyPage() {
 
   return (
     <AppLayout>
-      <ReactFlowProvider> 
-        <div className="flex flex-col flex-grow h-full">          
-          <div className="flex flex-row flex-grow h-full overflow-hidden"> 
-            
+      <ReactFlowProvider>
+        <div className="flex flex-col flex-grow h-full">
+          <div className="flex flex-row flex-grow h-full overflow-hidden">
+
             <div className="w-60 flex-shrink-0 p-2">
               <div className="flex flex-col h-full bg-background rounded-lg shadow-md border">
+                {/* Masters Palette Section */}
                 <div className="flex flex-col h-1/2 p-3">
                   <h2 className="text-base font-semibold font-title mb-1">主控列表</h2>
                   <p className="text-xs text-muted-foreground font-sans mb-2">点击主控添加到画布。</p>
@@ -308,12 +306,13 @@ export default function TopologyPage() {
 
                 <Separator className="my-0" />
 
+                {/* Node Properties Section */}
                 <div className="flex flex-col flex-grow min-h-0 p-3">
                   <h2 className="text-base font-semibold font-title mb-1">节点属性</h2>
                   <p className="text-xs text-muted-foreground font-sans mb-2">
                     {selectedNode ? `选中: ${selectedNode.data.label || selectedNode.id}` : '点击节点查看属性。'}
                   </p>
-                  <div className="flex-grow overflow-y-auto">
+                  <div className="flex-grow overflow-y-hidden"> {/* Changed from overflow-y-auto */}
                     <PropertiesDisplayPanel selectedNode={selectedNode} />
                   </div>
                 </div>
@@ -346,3 +345,4 @@ export default function TopologyPage() {
     </AppLayout>
   );
 }
+
