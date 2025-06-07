@@ -49,9 +49,15 @@ const initialEdges: Edge[] = [];
 function TopologyPageContainer() {
   return (
     <AppLayout>
-      <div className="flex flex-col flex-grow"> {/* Parent grows to fill AppLayout's main */}
-        <div className="flex-grow p-5 flex"> {/* This child handles padding and also grows, allowing TopologyFlow to use h-full */}
+      {/* This div is the direct child of AppLayout's main area.
+          It needs to grow and establish a context for its children.
+          It's a flex column that grows.
+      */}
+      <div className="flex flex-col flex-grow">
+        {/* This div provides the p-5 margin and should also grow, and be a flex column */}
+        <div className="flex-grow p-5 flex flex-col">
           <ReactFlowProvider>
+            {/* TopologyFlow will be made to grow within this flex column */}
             <TopologyFlow />
           </ReactFlowProvider>
         </div>
@@ -86,23 +92,20 @@ function TopologyFlow() {
     const newNodeData = { label: `New Node ${newCounter}` };
     
     const viewport = reactFlowInstance.getViewport();
-    const fallbackX = 100;
+    const fallbackX = 100; // Fallback if viewport dimensions are zero
     const fallbackY = 100;
 
-    // Position new node relative to the current viewport center or top-left
-    const viewCenterX = viewport.x + (viewport.width && viewport.width > 0 ? viewport.width / 2 : fallbackX);
-    const viewCenterY = viewport.y + (viewport.height && viewport.height > 0 ? viewport.height / 2 : fallbackY);
+    // Position new node relative to the current viewport top-left
+    // Ensure viewport dimensions are valid before using them for offset calculations
+    const positionX = viewport.x + ((viewport.width && viewport.width > 0) ? (Math.random() * viewport.width * 0.5) : fallbackX);
+    const positionY = viewport.y + ((viewport.height && viewport.height > 0) ? (Math.random() * viewport.height * 0.5) : fallbackY);
     
-    // Add some random offset to avoid all nodes appearing in the exact same spot
-    const offsetX = (Math.random() - 0.5) * 100;
-    const offsetY = (Math.random() - 0.5) * 100;
-
 
     const newNode: Node = {
       id: newNodeId,
       type: 'default',
       data: newNodeData,
-      position: { x: viewCenterX + offsetX, y: viewCenterY + offsetY },
+      position: { x: positionX, y: positionY },
       sourcePosition: Position.Right,
       targetPosition: Position.Left,
     };
@@ -120,11 +123,9 @@ function TopologyFlow() {
     const fallbackX = 80;
     const fallbackY = 80;
     
-    const viewCenterX = viewport.x + (viewport.width && viewport.width > 0 ? viewport.width / 2 : fallbackX);
-    const viewCenterY = viewport.y + (viewport.height && viewport.height > 0 ? viewport.height / 2 : fallbackY);
-    const offsetX = (Math.random() - 0.5) * 80;
-    const offsetY = (Math.random() - 0.5) * 80;
-    
+    const positionX = viewport.x + ((viewport.width && viewport.width > 0) ? (Math.random() * viewport.width * 0.4) : fallbackX);
+    const positionY = viewport.y + ((viewport.height && viewport.height > 0) ? (Math.random() * viewport.height * 0.4) : fallbackY);
+        
     const newNode: Node = {
       id: newNodeId,
       type: 'default', 
@@ -133,18 +134,17 @@ function TopologyFlow() {
         nodeType: 'masterRepresentation', 
         masterId: masterConfig.id,
         masterName: masterConfig.name,
-        // Pass other relevant info if needed, e.g., for display in properties panel
         apiUrl: masterConfig.apiUrl, 
         defaultLogLevel: masterConfig.masterDefaultLogLevel,
         defaultTlsMode: masterConfig.masterDefaultTlsMode,
       },
-      position: { x: viewCenterX + offsetX, y: viewCenterY + offsetY },
+      position: { x: positionX, y: positionY },
       style: { 
         borderColor: 'hsl(var(--primary))', 
         borderWidth: 2, 
         background: 'hsl(var(--primary)/10)', 
         borderRadius: '0.375rem',
-        padding: '8px 12px', // Add some padding
+        padding: '8px 12px',
       },
       sourcePosition: Position.Right,
       targetPosition: Position.Left,
@@ -158,7 +158,7 @@ function TopologyFlow() {
     setNodes([]);
     setEdges([]);
     setNodeIdCounter(0);
-    setSelectedNode(null); // Also clear selected node
+    setSelectedNode(null);
     toast({ title: "Canvas Cleared" });
     setIsToolbarPopoverOpen(false); 
   }, [setNodes, setEdges, setNodeIdCounter, toast]);
@@ -179,15 +179,12 @@ function TopologyFlow() {
   }, [reactFlowInstance, nodes, toast]);
 
   const handleFormatLayout = useCallback(() => {
-    // Placeholder: True auto-layout (ELK.js, Dagre) is complex.
-    // For now, it logs to console. A simple distribution might be possible later.
     toast({ title: "Format Layout", description: "This feature is pending implementation." });
     console.log("Format Layout button clicked. Nodes:", nodes, "Edges:", edges);
     setIsToolbarPopoverOpen(false); 
   }, [nodes, edges, toast]);
 
   const handleSubmitTopology = useCallback(() => {
-    // Placeholder: Logic for submitting topology (e.g., API calls)
     toast({ title: "Submit Topology", description: "This feature is pending implementation." });
     console.log("Submit Topology button clicked. Nodes:", nodes, "Edges:", edges);
     setIsToolbarPopoverOpen(false); 
@@ -196,23 +193,21 @@ function TopologyFlow() {
   const onSelectionChange = useCallback(({ nodes: selectedNodesList }: { nodes: Node[], edges: Edge[] }) => {
     if (selectedNodesList.length === 1) {
       setSelectedNode(selectedNodesList[0]);
-       if (!isPropertiesSheetOpen) { // Open properties sheet if a node is selected and it's not already open
+       if (!isPropertiesSheetOpen) {
          setIsPropertiesSheetOpen(true);
        }
     } else {
       setSelectedNode(null);
-      // Optionally close properties sheet if no node is selected or multiple are selected
        if (isPropertiesSheetOpen && selectedNodesList.length === 0) {
          setIsPropertiesSheetOpen(false);
        }
     }
-  }, [isPropertiesSheetOpen, setIsPropertiesSheetOpen]); // Added dependencies
+  }, [isPropertiesSheetOpen, setIsPropertiesSheetOpen]);
 
-  // Effect to clear selectedNode if it's deleted from the canvas
   useEffect(() => {
     if (selectedNode && !nodes.find(n => n.id === selectedNode.id)) {
       setSelectedNode(null);
-      setIsPropertiesSheetOpen(false); // Close properties panel if selected node is gone
+      setIsPropertiesSheetOpen(false);
     }
   }, [nodes, selectedNode]);
 
@@ -221,7 +216,9 @@ function TopologyFlow() {
   const memoizedBackground = useMemo(() => <Background variant="dots" gap={16} size={1} />, []);
 
   return (
-    <div className="h-full w-full relative bg-card rounded-lg shadow-md border border-border overflow-hidden">
+    // This div IS the canvas container AND the positioning parent for the buttons.
+    // It MUST grow to fill the space given by its parent (the div with p-5).
+    <div className="flex-grow w-full relative bg-card rounded-lg shadow-md border border-border overflow-hidden">
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -236,7 +233,7 @@ function TopologyFlow() {
         deleteKeyCode={['Backspace', 'Delete']}
         panOnScroll
         selectionOnDrag
-        panOnDrag={[PanOnScrollMode.Free, PanOnScrollMode.Right, PanOnScrollMode.Left]} // Allow pan with any mouse button that's not left-click for selection
+        panOnDrag={[PanOnScrollMode.Free, PanOnScrollMode.Right, PanOnScrollMode.Left]}
         className="h-full w-full" 
       >
         {memoizedControls}
@@ -251,7 +248,7 @@ function TopologyFlow() {
             <Button
               variant="ghost"
               size="icon"
-              className="h-8 w-8 hover:bg-accent/50" // Added hover effect
+              className="h-8 w-8 hover:bg-accent/50"
               aria-label="Open toolbar"
             >
               <Settings className="h-4 w-4" />
@@ -264,7 +261,7 @@ function TopologyFlow() {
               onFormatLayout={handleFormatLayout}
               onClearCanvas={handleClearCanvas}
               onSubmitTopology={handleSubmitTopology}
-              canSubmit={nodes.length > 0} // Disable submit if canvas is empty
+              canSubmit={nodes.length > 0}
             />
           </PopoverContent>
         </Popover>
@@ -280,20 +277,20 @@ function TopologyFlow() {
               <ListTree className="h-4 w-4" />
             </Button>
           </SheetTrigger>
-          <SheetContent side="left" className="w-72 p-0 flex flex-col"> {/* Ensure flex column for header and content */}
+          <SheetContent side="left" className="w-72 p-0 flex flex-col">
             <SheetHeader className="p-4 border-b">
               <SheetTitle className="font-title text-base">Masters List</SheetTitle>
               <SheetDescription className="font-sans text-xs">
                 Click a master to add its representation to the canvas.
               </SheetDescription>
             </SheetHeader>
-            <div className="p-4 flex-grow overflow-y-auto"> {/* Content area scrolls */}
+            <div className="p-4 flex-grow overflow-y-auto">
               <MastersPalette onAddMasterNode={handleAddMasterNodeFromPalette} />
             </div>
           </SheetContent>
         </Sheet>
 
-        {selectedNode && ( // Only show properties trigger if a node is selected
+        {selectedNode && (
           <Sheet open={isPropertiesSheetOpen} onOpenChange={setIsPropertiesSheetOpen}>
             <SheetTrigger asChild>
               <Button
@@ -305,7 +302,7 @@ function TopologyFlow() {
                 <InfoIcon className="h-4 w-4" />
               </Button>
             </SheetTrigger>
-            <SheetContent side="right" className="w-80 p-0 flex flex-col"> {/* Ensure flex column */}
+            <SheetContent side="right" className="w-80 p-0 flex flex-col">
                <PropertiesDisplayPanel selectedNode={selectedNode} />
             </SheetContent>
           </Sheet>

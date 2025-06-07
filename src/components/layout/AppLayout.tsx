@@ -62,7 +62,7 @@ export function AppLayout({ children, onLog }: AppLayoutProps) {
         onClearActiveConfig={handleClearActiveConfig} // Changed from onLogout to onClearActiveConfig
         onLog={onLog}
       />
-      <main className="flex-grow container mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="flex flex-col flex-grow container mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {children}
       </main>
       <ApiConfigDialog
