@@ -7,7 +7,7 @@ import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, For
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, Info, Network, Settings2, Share2 } from 'lucide-react';
+import { Loader2, Info, Network, Settings2, Share2, Zap } from 'lucide-react'; // Added Zap icon
 import type { CreateInstanceFormValues } from '@/zod-schemas/nodepass';
 import type { NamedApiConfig } from '@/hooks/use-api-key';
 import { MASTER_TLS_MODE_DISPLAY_MAP } from './constants';
@@ -16,6 +16,7 @@ interface CreateInstanceFormFieldsProps {
   form: UseFormReturn<CreateInstanceFormValues>;
   instanceType: "入口(c)" | "出口(s)";
   tlsMode?: string;
+  isSingleEndedForward: boolean; // New prop
   autoCreateServer: boolean;
   activeApiConfig: NamedApiConfig | null;
   apiConfigsList: NamedApiConfig[];
@@ -30,6 +31,7 @@ export function CreateInstanceFormFields({
   form,
   instanceType,
   tlsMode,
+  isSingleEndedForward, // Use new prop
   autoCreateServer,
   activeApiConfig,
   apiConfigsList,
@@ -78,6 +80,36 @@ export function CreateInstanceFormFields({
         {instanceType === '入口(c)' && (
           <FormField
             control={form.control}
+            name="isSingleEndedForward"
+            render={({ field }) => (
+              <FormItem className="flex flex-row items-center space-x-2 space-y-0 rounded-md border p-2 shadow-sm bg-muted/30">
+                <FormControl>
+                  <Checkbox
+                    checked={field.value}
+                    onCheckedChange={field.onChange}
+                    id="isSingleEndedForwardCheckbox"
+                    className="h-3.5 w-3.5"
+                  />
+                </FormControl>
+                <div className="space-y-0.5 leading-none">
+                  <FormLabel htmlFor="isSingleEndedForwardCheckbox" className="font-sans cursor-pointer text-xs flex items-center">
+                    <Zap size={13} className="mr-1 text-yellow-500" />
+                    单端转发模式
+                  </FormLabel>
+                  {showDetailedDescriptions && (
+                    <FormDescription className="font-sans text-xs mt-0.5">
+                      启用后，仅需配置本地监听端口和远程目标地址。
+                    </FormDescription>
+                  )}
+                </div>
+              </FormItem>
+            )}
+          />
+        )}
+
+        {instanceType === '入口(c)' && !isSingleEndedForward && ( // Show autoCreateServer only if NOT single-ended
+          <FormField
+            control={form.control}
             name="autoCreateServer"
             render={({ field }) => (
               <FormItem className="flex flex-row items-center space-x-2 space-y-0 rounded-md border p-2 shadow-sm bg-muted/30">
@@ -104,7 +136,7 @@ export function CreateInstanceFormFields({
           />
         )}
 
-        {instanceType === '入口(c)' && autoCreateServer && (
+        {instanceType === '入口(c)' && autoCreateServer && !isSingleEndedForward && ( // Show serverApiId only if autoCreate and NOT single-ended
           <FormField
             control={form.control}
             name="serverApiId"
@@ -157,7 +189,9 @@ export function CreateInstanceFormFields({
               <FormLabel className="font-sans text-xs flex items-center">
                  <Settings2 size={14} className="mr-1 text-muted-foreground" />
                 {instanceType === '出口(s)' ? '出口(s)隧道监听地址' :
-                 (autoCreateServer ? '自动创建的出口(s)监听端口' : '连接的出口(s)隧道地址')}
+                 (isSingleEndedForward ? '入口(c)本地监听端口' : 
+                   (autoCreateServer ? '自动创建的出口(s)监听端口' : '连接的出口(s)隧道地址')
+                 )}
               </FormLabel>
               <FormControl>
                 <Input
@@ -165,9 +199,11 @@ export function CreateInstanceFormFields({
                   placeholder={
                     instanceType === "出口(s)"
                       ? "例: 0.0.0.0:10101"
-                      : (autoCreateServer
-                          ? "例: 10101 (主机将固定为 [::])"
-                          : "例: your.server.com:10101")
+                      : (isSingleEndedForward
+                          ? "例: 8080" 
+                          : (autoCreateServer
+                              ? "例: 10101 (主机将固定为 [::])"
+                              : "例: your.server.com:10101"))
                   }
                   {...field}
                 />
@@ -176,12 +212,14 @@ export function CreateInstanceFormFields({
                 <FormDescription className="font-sans text-xs mt-0.5">
                   {instanceType === "出口(s)"
                     ? "出口(s)在此地址监听控制连接。"
-                    : (autoCreateServer
-                        ? "自动创建的出口(s)将在此端口监听 (主机固定为 [::])。"
-                        : "入口(c)连接此出口(s)地址的控制通道。")}
+                    : (isSingleEndedForward
+                        ? "入口(c)在此本地端口监听传入连接。"
+                        : (autoCreateServer
+                            ? "自动创建的出口(s)将在此端口监听 (主机固定为 [::])。"
+                            : "入口(c)连接此出口(s)地址的控制通道。"))}
                 </FormDescription>
                )}
-              {externalApiSuggestion && showDetailedDescriptions && instanceType === '入口(c)' && !autoCreateServer && (
+              {externalApiSuggestion && showDetailedDescriptions && instanceType === '入口(c)' && !autoCreateServer && !isSingleEndedForward && (
                 <FormDescription className="text-xs text-amber-600 dark:text-amber-400 mt-0.5 font-sans">
                   <Info size={12} className="inline-block mr-1 align-text-bottom" />
                   {externalApiSuggestion}
@@ -193,7 +231,7 @@ export function CreateInstanceFormFields({
         />
 
         {/* Server Target Address for Auto-Create Server */}
-        {instanceType === '入口(c)' && autoCreateServer && (
+        {instanceType === '入口(c)' && autoCreateServer && !isSingleEndedForward && (
           <FormField
             control={form.control}
             name="serverTargetAddressForAutoCreate"
@@ -222,7 +260,7 @@ export function CreateInstanceFormFields({
           />
         )}
 
-        {instanceType === '入口(c)' && !autoCreateServer && (
+        {instanceType === '入口(c)' && !autoCreateServer && !isSingleEndedForward && (
           <FormItem className="space-y-1">
             <FormLabel className="font-sans text-xs">或从其他主控的现有出口(s)选择隧道</FormLabel>
             <Select
@@ -271,14 +309,15 @@ export function CreateInstanceFormFields({
             <FormItem className="space-y-1">
               <FormLabel className="font-sans text-xs flex items-center">
                 <Share2 size={14} className="mr-1 text-muted-foreground" />
-                {instanceType === '出口(s)' ? '出口(s)目标地址 (业务数据)' : '入口(c)本地转发端口 (可选)'}
+                {instanceType === '出口(s)' ? '出口(s)目标地址 (业务数据)' :
+                 (isSingleEndedForward ? '目标地址 (业务数据)' : '入口(c)本地转发端口 (可选)')}
               </FormLabel>
               <FormControl>
                 <Input
                   className="text-xs font-mono h-9"
                   placeholder={
                       instanceType === '出口(s)' ? "例: 10.0.0.5:3000" :
-                      "例: 8000 (默认为出口(s)隧道端口+1)"
+                      (isSingleEndedForward ? "例: remote.service.com:3000" : "例: 8000 (默认为出口(s)隧道端口+1)")
                   }
                   {...field}
                 />
@@ -287,7 +326,9 @@ export function CreateInstanceFormFields({
                 <FormDescription className="font-sans text-xs mt-0.5">
                   {instanceType === "出口(s)"
                     ? "出口(s)业务数据的目标地址。"
-                    : "入口(c)将流量转发到的本地服务端口 (主机固定为 [::])。若留空，将使用 (出口(s)隧道端口+1) 自动生成。"}
+                    : (isSingleEndedForward
+                        ? "入口(c)将流量转发到的远程目标。"
+                        : "入口(c)将流量转发到的本地服务端口 (主机固定为 [::])。若留空，将使用 (出口(s)隧道端口+1) 自动生成。")}
                 </FormDescription>
               )}
               <FormMessage className="text-xs" />
@@ -322,7 +363,7 @@ export function CreateInstanceFormFields({
               {showDetailedDescriptions && (
                 <FormDescription className="font-sans text-xs mt-0.5">
                   实例日志级别。
-                  {autoCreateServer && instanceType === '入口(c)' && " 此设置亦用于自动创建的出口(s)。"}
+                  {autoCreateServer && instanceType === '入口(c)' && !isSingleEndedForward && " 此设置亦用于自动创建的出口(s)。"}
                 </FormDescription>
               )}
               <FormMessage className="text-xs" />
@@ -337,7 +378,9 @@ export function CreateInstanceFormFields({
             <FormItem className="space-y-1">
               <FormLabel className="font-sans text-xs">
                 {instanceType === '出口(s)' ? "TLS 模式 (出口(s)数据通道)"
-                  : (instanceType === '入口(c)' && autoCreateServer ? "TLS 模式 (自动创建的出口(s))" : "TLS 模式 (入口(c)连接行为)")}
+                  : (isSingleEndedForward ? "TLS 模式 (入口(c)连接目标)" 
+                      : (instanceType === '入口(c)' && autoCreateServer ? "TLS 模式 (自动创建的出口(s))" 
+                          : "TLS 模式 (入口(c)连接行为)"))}
               </FormLabel>
               <Select onValueChange={field.onChange} value={field.value || "master"}>
                 <FormControl>
@@ -358,16 +401,19 @@ export function CreateInstanceFormFields({
                 <FormDescription className="font-sans text-xs mt-0.5">
                   {instanceType === '出口(s)'
                     ? "出口(s)数据通道的TLS加密模式。"
-                    : (autoCreateServer
-                        ? "用于自动创建的出口(s)的数据通道。"
-                        : "入口(c)连接目标出口(s)时的TLS行为。")}
+                    : (isSingleEndedForward 
+                        ? "入口(c)连接远程目标时使用的TLS行为。"
+                        : (autoCreateServer
+                            ? "用于自动创建的出口(s)的数据通道。"
+                            : "入口(c)连接目标出口(s)时的TLS行为。"))}
                 </FormDescription>
               )}
               <FormMessage className="text-xs" />
             </FormItem>
           )}
         />
-        {(instanceType === '出口(s)' || (instanceType === '入口(c)' && autoCreateServer)) && tlsMode === '2' && (
+        {/* Show Cert/Key fields if TLS mode 2 is selected for server, or client (auto-create or single-ended) */}
+        {((instanceType === '出口(s)') || (instanceType === '入口(c)' && (autoCreateServer || isSingleEndedForward))) && tlsMode === '2' && (
           <>
             <FormField
               control={form.control}
@@ -385,7 +431,8 @@ export function CreateInstanceFormFields({
                   </FormControl>
                    {showDetailedDescriptions && (
                     <FormDescription className="font-sans text-xs mt-0.5">
-                      {instanceType === '入口(c)' && autoCreateServer ? "用于自动创建的出口(s)。" : ""}
+                      {instanceType === '入口(c)' && autoCreateServer && !isSingleEndedForward ? "用于自动创建的出口(s)。" : ""}
+                      {instanceType === '入口(c)' && isSingleEndedForward ? "用于单端转发客户端连接目标。" : ""}
                     </FormDescription>
                    )}
                   <FormMessage className="text-xs" />
@@ -408,7 +455,8 @@ export function CreateInstanceFormFields({
                   </FormControl>
                    {showDetailedDescriptions && (
                     <FormDescription className="font-sans text-xs mt-0.5">
-                    {instanceType === '入口(c)' && autoCreateServer ? "用于自动创建的出口(s)。" : ""}
+                    {instanceType === '入口(c)' && autoCreateServer && !isSingleEndedForward ? "用于自动创建的出口(s)。" : ""}
+                    {instanceType === '入口(c)' && isSingleEndedForward ? "用于单端转发客户端连接目标。" : ""}
                     </FormDescription>
                    )}
                   <FormMessage className="text-xs" />
