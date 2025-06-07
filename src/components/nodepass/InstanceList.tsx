@@ -231,7 +231,7 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
               {instance.id === '********' ? (apiName ? `${apiName} (API 密钥)`: '主控 API 密钥') : instance.url}
             </span>
         </TableCell>
-        <TableCell className="text-center text-xs whitespace-nowrap font-mono">
+        <TableCell className="text-left text-xs whitespace-nowrap font-mono">
           {instance.id === '********' ? (
             "N/A"
           ) : (
@@ -314,7 +314,7 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
                 <TableHead className="font-sans">状态</TableHead>
                 <TableHead className="font-sans">目标/隧道地址</TableHead>
                 <TableHead className="font-sans">URL / 密钥</TableHead>
-                <TableHead className="text-center whitespace-nowrap font-sans">流量 (TCP | UDP)</TableHead>
+                <TableHead className="text-left whitespace-nowrap font-sans">流量 (TCP | UDP)</TableHead>
                 <TableHead className="text-right font-sans">操作</TableHead>
               </TableRow>
             </TableHeader>
