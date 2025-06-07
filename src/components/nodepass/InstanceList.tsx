@@ -12,13 +12,13 @@ import {
 } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { AlertTriangle, Eye, Trash2, ServerIcon, SmartphoneIcon, Search, Pencil, KeyRound } from 'lucide-react';
+import { AlertTriangle, Eye, Trash2, ServerIcon, SmartphoneIcon, Search, KeyRound } from 'lucide-react'; // Pencil removed
 import type { Instance, UpdateInstanceRequest } from '@/types/nodepass';
 import { InstanceStatusBadge } from './InstanceStatusBadge';
 import { InstanceControls } from './InstanceControls';
 import { DeleteInstanceDialog } from './DeleteInstanceDialog';
 import { InstanceDetailsModal } from './InstanceDetailsModal';
-import { ModifyInstanceDialog } from './ModifyInstanceDialog';
+// ModifyInstanceDialog import removed
 import { useToast } from '@/hooks/use-toast';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { nodePassApi } from '@/lib/api';
@@ -50,11 +50,11 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
 
   const [selectedInstanceForDetails, setSelectedInstanceForDetails] = useState<Instance | null>(null);
   const [selectedInstanceForDelete, setSelectedInstanceForDelete] = useState<Instance | null>(null);
-  const [selectedInstanceForModify, setSelectedInstanceForModify] = useState<Instance | null>(null);
+  // selectedInstanceForModify state removed
   const [searchTerm, setSearchTerm] = useState('');
 
   const { data: instances, isLoading: isLoadingInstances, error: instancesError } = useQuery<Instance[], Error>({
-    queryKey: ['instances', apiId], 
+    queryKey: ['instances', apiId],
     queryFn: () => {
       if (!apiId || !apiRoot || !apiToken) throw new Error("主控配置不完整。");
       return nodePassApi.getInstances(apiRoot, apiToken);
@@ -103,7 +103,7 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
       });
       onLog?.(`实例 ${instanceId.substring(0,8)}... 已删除。`, 'SUCCESS');
       queryClient.invalidateQueries({ queryKey: ['instances', apiId] });
-      queryClient.invalidateQueries({ queryKey: ['allInstancesForTopology']}); 
+      queryClient.invalidateQueries({ queryKey: ['allInstancesForTopologyPage']});
       queryClient.invalidateQueries({ queryKey: ['allInstancesForTraffic']});
       setSelectedInstanceForDelete(null);
     },
@@ -172,7 +172,7 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
             className="items-center whitespace-nowrap text-xs font-sans"
           >
             {instance.type === 'server' ? <ServerIcon size={12} className="mr-1" /> : <SmartphoneIcon size={12} className="mr-1" />}
-            {instance.type === 'server' ? '服务端' : '客户端'}
+            {instance.type === 'server' ? '出口(s)' : '入口(c)'}
           </Badge>
         )}
       </TableCell>
@@ -224,13 +224,7 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
           </button>
           {instance.id !== '********' && (
             <>
-              <button
-                  className="p-2 rounded-md hover:bg-muted"
-                  onClick={() => setSelectedInstanceForModify(instance)}
-                  aria-label="修改"
-              >
-                  <Pencil className="h-4 w-4" />
-              </button>
+              {/* Modify button removed */}
               <button
                   className="p-2 rounded-md hover:bg-destructive/10 text-destructive"
                   onClick={() => setSelectedInstanceForDelete(instance)}
@@ -332,19 +326,7 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
         onConfirmDelete={(id) => deleteInstanceMutation.mutate(id)}
         isLoading={deleteInstanceMutation.isPending}
       />
-      <ModifyInstanceDialog
-        instance={selectedInstanceForModify}
-        open={!!selectedInstanceForModify}
-        onOpenChange={(open) => {
-          if (!open) setSelectedInstanceForModify(null);
-        }}
-        apiId={apiId}
-        apiName={apiName}
-        apiRoot={apiRoot}
-        apiToken={apiToken}
-        activeApiConfig={activeApiConfig}
-        onLog={onLog}
-      />
+      {/* ModifyInstanceDialog component usage removed */}
     </Card>
   );
 }
