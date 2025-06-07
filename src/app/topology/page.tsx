@@ -36,13 +36,13 @@ import { Separator } from '@/components/ui/separator';
 
 // Define our extended Node type
 export type NodeRole = 'M' | 'S' | 'C' | 'T' | 'U';
-export type MasterSubRole = 'client-role' | 'server-role' | 'generic';
+export type MasterSubRole = 'client-role' | 'server-role' | 'generic' | 'primary';
 
 export interface CustomNodeData {
   label: string;
   role: NodeRole;
   masterSubRole?: MasterSubRole;
-  nodeType?: string; 
+  nodeType?: string;
   masterId?: string;
   masterName?: string;
   apiUrl?: string;
@@ -168,7 +168,7 @@ const ActualTopologyFlowWithState: React.FC<ActualTopologyFlowWithStateProps> = 
         deleteKeyCode={['Backspace', 'Delete']}
         panOnScroll={false}
         zoomOnScroll={true}
-        panOnDrag={true} // Ensure panning is enabled
+        panOnDrag={true}
         selectionOnDrag
         className="h-full w-full"
         nodeOrigin={[0.5, 0.5]}
@@ -294,17 +294,17 @@ export default function TopologyPage() {
       const targetParentId = targetNode.data.parentNode;
 
       if ((sourceRole === 'S' || sourceRole === 'C') && sourceParentId) {
-        if (targetRole === 'S' || targetRole === 'C') { 
+        if (targetRole === 'S' || targetRole === 'C') {
           if (targetParentId !== sourceParentId) {
             toast({ title: '连接无效', description: `容器内的 ${sourceRole} 节点只能连接到同一主控容器内的 S 或 C 节点。`, variant: 'destructive' });
             return;
           }
-        } else if (targetRole === 'T') { 
-          if (targetParentId) { 
+        } else if (targetRole === 'T') {
+          if (targetParentId) {
             toast({ title: '连接无效', description: `容器内的 ${sourceRole} 节点只能连接到外部的 T 节点。此 T 节点位于容器内。`, variant: 'destructive' });
             return;
           }
-        } else { 
+        } else {
           toast({ title: '连接无效', description: `容器内的 ${sourceRole} 节点只能连接到同一容器内的 S/C 节点或外部的 T 节点。`, variant: 'destructive' });
           return;
         }
@@ -327,7 +327,7 @@ export default function TopologyPage() {
             toast({ title: '连接无效', description: '客户端角色的主控 (M) 只能连接到服务端角色的主控 (M)。', variant: 'destructive' });
             return;
         }
-        if (sourceSubRole === 'server-role') { 
+        if (sourceSubRole === 'server-role') {
             toast({ title: '连接无效', description: '服务端角色的主控 (M) 不能主动连接其他主控。请从客户端角色的主控发起连接。', variant: 'destructive' });
             return;
         }
@@ -366,20 +366,15 @@ export default function TopologyPage() {
 
     if (type === 'master' && draggedData) {
       const masterConfig = draggedData;
-      const existingMasterNodes = nodesInternal.filter(n => n.data.role === 'M');
-      
-      let masterSubRole: MasterSubRole;
-      let labelSuffix = ''; // For internal tracking or properties panel, not main label now
+      const existingMContainer = nodesInternal.find(n => n.data.role === 'M' && n.data.isContainer);
 
-      if (existingMasterNodes.length === 0) {
-        masterSubRole = 'client-role';
-        labelSuffix = ' (客户端角色)';
-      } else if (existingMasterNodes.length === 1 && existingMasterNodes[0].data.masterSubRole === 'client-role') {
-        masterSubRole = 'server-role';
-        labelSuffix = ' (服务端角色)';
-      } else {
-         masterSubRole = 'generic';
-         labelSuffix = ' (通用角色)';
+      if (existingMContainer) {
+        toast({
+          title: "操作无效",
+          description: "画布上已存在一个主控容器 (M)，无法添加更多。",
+          variant: "destructive", // Changed to destructive for better visibility
+        });
+        return; // Do not add the node
       }
       
       newNode = {
@@ -387,9 +382,9 @@ export default function TopologyPage() {
         type: 'default', 
         position,
         data: {
-          label: `主控: ${masterConfig.name || `M-${newCounter}`}`, // Simplified label
+          label: `主控: ${masterConfig.name || `M-${newCounter}`}`,
           role: 'M',
-          masterSubRole: masterSubRole,
+          masterSubRole: 'primary', // Since there's only one M container, its role is 'primary'
           isContainer: true,
           nodeType: 'masterRepresentation',
           masterId: masterConfig.id,
@@ -408,13 +403,13 @@ export default function TopologyPage() {
           width: mNodeWidth, 
           height: mNodeHeight, 
         },
-        width: mNodeWidth, // Explicit width on node object
-        height: mNodeHeight, // Explicit height on node object
+        width: mNodeWidth,
+        height: mNodeHeight,
         sourcePosition: Position.Right,
         targetPosition: Position.Left,
       };
-      toast({ title: "主控节点已添加", description: `已添加主控 "${masterConfig.name || `M-${newCounter}`}"${labelSuffix} 到画布。` });
-    } else {
+      toast({ title: "主控容器已添加", description: `已添加主控 "${masterConfig.name || `M-${newCounter}`}" 为容器。` });
+    } else if (type !== 'master') { // Handle S, C, T, U nodes
       const nodeRole = type.toUpperCase() as NodeRole; 
       let labelPrefix = '';
       let nodeStyle: React.CSSProperties = {
@@ -446,7 +441,6 @@ export default function TopologyPage() {
       let parentNodeFound: Node | undefined = undefined;
       if (nodeRole === 'S' || nodeRole === 'C') {
         for (const mNode of nodesInternal) {
-          // Ensure mNode.width and mNode.height are defined and used for boundary check
           if (mNode.data.isContainer && mNode.width && mNode.height) {
             const isInsideParent =
               position.x >= mNode.position.x &&
@@ -467,7 +461,7 @@ export default function TopologyPage() {
             description: `${labelPrefix} (${nodeRole}) 节点必须放置在主控 (M) 容器内。`,
             variant: "destructive",
           });
-          return; // Do not add the node
+          return; 
         }
       }
       
@@ -495,6 +489,8 @@ export default function TopologyPage() {
         targetPosition: Position.Left,
       };
       toast({ title: `${labelPrefix} 节点已添加`, description: `已添加 ${labelPrefix} (${nodeRole}) 到画布${parentNodeFound ? ` (于主控 ${parentNodeFound.data.label})` : ''}。` });
+    } else {
+      return; // Should not happen if type is 'master' but draggedData is missing
     }
     setNodesInternal((nds) => nds.concat(newNode));
   }, [nodeIdCounter, setNodesInternal, toast, nodesInternal]);
@@ -543,7 +539,7 @@ export default function TopologyPage() {
 
                 <Separator className="my-0" /> 
 
-                <div className="flex flex-col h-1/2 p-3"> {/* Adjusted height from 1/3 */}
+                <div className="flex flex-col h-1/2 p-3"> 
                   <h2 className="text-base font-semibold font-title mb-1">组件 (S, C, T, U)</h2>
                   <p className="text-xs text-muted-foreground font-sans mb-2">拖拽组件到画布或主控容器。</p>
                   <div className="flex-grow overflow-y-auto pr-1">
