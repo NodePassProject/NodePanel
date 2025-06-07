@@ -1,7 +1,7 @@
 
 'use client';
 
-import React, { useCallback } from 'react';
+import React, { useCallback, useState } from 'react';
 import ReactFlow, {
   ReactFlowProvider,
   useNodesState,
@@ -21,14 +21,14 @@ import 'reactflow/dist/style.css'; // Essential for ReactFlow styles
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Button } from '@/components/ui/button';
 import { PlusCircle, Trash2 } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
-// Initial setup (can be empty for max freedom at start)
 const initialNodes: Node[] = [
   {
     id: 'node-1',
-    type: 'default', 
+    type: 'default',
     data: { label: 'Drag me' },
-    position: { x: 100, y: 100 },
+    position: { x: 50, y: 50 }, // Adjusted initial position for visibility
     sourcePosition: Position.Right,
     targetPosition: Position.Left,
   },
@@ -36,18 +36,49 @@ const initialNodes: Node[] = [
     id: 'node-2',
     type: 'default',
     data: { label: 'Node 2' },
-    position: { x: 300, y: 200 },
+    position: { x: 250, y: 150 }, // Adjusted initial position
     sourcePosition: Position.Right,
     targetPosition: Position.Left,
   },
 ];
-const initialEdges: Edge[] = []; 
+const initialEdges: Edge[] = [];
 
-let nodeIdCounter = initialNodes.length;
+// New component for the ReactFlow canvas
+function FlowCanvas({ nodes, edges, onNodesChange, onEdgesChange, onConnect }: {
+  nodes: Node[];
+  edges: Edge[];
+  onNodesChange: (changes: any) => void;
+  onEdgesChange: (changes: any) => void;
+  onConnect: (params: Connection | Edge) => void;
+}) {
+  return (
+    <ReactFlow
+      nodes={nodes}
+      edges={edges}
+      onNodesChange={onNodesChange}
+      onEdgesChange={onEdgesChange}
+      onConnect={onConnect}
+      fitView
+      nodesDraggable={true}
+      nodesConnectable={true}
+      elementsSelectable={true}
+      deleteKeyCode={['Backspace', 'Delete']}
+      panOnScroll
+      selectionOnDrag
+      panOnDrag={[0, 1, 2]} // 0: left, 1: middle, 2: right mouse
+      className="h-full w-full" // Ensure it fills its container
+    >
+      <Controls />
+      <MiniMap nodeStrokeWidth={3} zoomable pannable />
+      <Background variant="dots" gap={12} size={1} />
+    </ReactFlow>
+  );
+}
 
-function FlowEditor() {
+export default function TopologyPage() {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
+  const [nodeIdCounter, setNodeIdCounter] = useState(initialNodes.length);
 
   const onConnect = useCallback(
     (params: Connection | Edge) =>
@@ -56,76 +87,78 @@ function FlowEditor() {
   );
 
   const onAddNode = useCallback(() => {
-    nodeIdCounter++;
-    const newNodeId = `node-${nodeIdCounter}`;
+    const newCounter = nodeIdCounter + 1;
+    setNodeIdCounter(newCounter);
+    const newNodeId = `node-${newCounter}`;
     const newNode: Node = {
       id: newNodeId,
       type: 'default',
-      data: { label: `Node ${nodeIdCounter}` },
+      data: { label: `Node ${newCounter}` },
       position: {
-        // Ensure new nodes appear within a reasonable area of the viewport
-        x: Math.random() * ( (typeof window !== "undefined" ? window.innerWidth : 800) * 0.5), 
-        y: Math.random() * ( (typeof window !== "undefined" ? window.innerHeight : 600) * 0.5),
+        x: Math.random() * 300 + 50, // Random position within a typical view
+        y: Math.random() * 200 + 50,
       },
       sourcePosition: Position.Right,
       targetPosition: Position.Left,
     };
     setNodes((nds) => nds.concat(newNode));
-  }, [setNodes]);
+  }, [nodeIdCounter, setNodes, setNodeIdCounter]);
 
   const onClearCanvas = useCallback(() => {
     setNodes([]);
     setEdges([]);
-    nodeIdCounter = 0;
-  }, [setNodes, setEdges]);
+    setNodeIdCounter(0);
+  }, [setNodes, setEdges, setNodeIdCounter]);
 
-  return (
-    <div className="h-full w-full relative">
-      <div className="absolute top-4 left-4 z-10 space-x-2">
-        <Button onClick={onAddNode} size="sm" variant="outline" className="shadow-md bg-card hover:bg-card/90">
-          <PlusCircle className="mr-2 h-4 w-4" />
-          Add Node
-        </Button>
-        <Button
-            onClick={onClearCanvas}
-            size="sm"
-            variant="destructive"
-            className="shadow-md"
-        >
-            <Trash2 className="mr-2 h-4 w-4" />
-            Clear Canvas
-        </Button>
-      </div>
-      <ReactFlow
-        nodes={nodes}
-        edges={edges}
-        onNodesChange={onNodesChange}
-        onEdgesChange={onEdgesChange}
-        onConnect={onConnect}
-        fitView
-        nodesDraggable={true}
-        nodesConnectable={true}
-        elementsSelectable={true}
-        deleteKeyCode={['Backspace', 'Delete']}
-        panOnScroll
-        selectionOnDrag
-        panOnDrag={[0, 1, 2]} // 0: left, 1: middle, 2: right mouse
-      >
-        <Controls />
-        <MiniMap nodeStrokeWidth={3} zoomable pannable />
-        <Background variant="dots" gap={12} size={1} />
-      </ReactFlow>
-    </div>
-  );
-}
-
-export default function TopologyPage() {
   return (
     <AppLayout>
-      <div className="h-[calc(100vh-var(--header-height)-var(--footer-height)-4rem)] w-full" data-testid="topology-page-container">
-        <ReactFlowProvider>
-          <FlowEditor />
-        </ReactFlowProvider>
+      {/* This div takes full height available within AppLayout's main padded area */}
+      <div className="flex h-full w-full gap-4" data-testid="topology-page-container">
+        {/* Sidebar: Tools and Nodes Area */}
+        <Card className="w-72 shrink-0 flex flex-col">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-xl font-title">工具区</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3 py-2">
+            <Button onClick={onAddNode} size="sm" variant="outline" className="w-full font-sans">
+              <PlusCircle className="mr-2 h-4 w-4" />
+              添加节点
+            </Button>
+            <Button onClick={onClearCanvas} size="sm" variant="destructive" className="w-full font-sans">
+              <Trash2 className="mr-2 h-4 w-4" />
+              清空画布
+            </Button>
+          </CardContent>
+
+          <CardHeader className="pb-2 pt-4">
+            <CardTitle className="text-xl font-title">节点区</CardTitle>
+          </CardHeader>
+          <CardContent className="flex-grow py-2"> {/* flex-grow allows this content to take remaining space */}
+            <div className="border rounded-md min-h-[200px] p-3 text-sm text-muted-foreground font-sans bg-muted/30 h-full">
+              <p>从这里拖拽节点类型到画布 (后续实现):</p>
+              <ul className="list-disc list-inside mt-2 space-y-1">
+                <li>服务端</li>
+                <li>客户端</li>
+                <li>落地</li>
+              </ul>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Canvas Area */}
+        <Card className="flex-grow overflow-hidden"> {/* flex-grow for canvas to take remaining width, overflow-hidden for clean edges */}
+          <CardContent className="p-0 h-full w-full"> {/* Remove padding and ensure full height for canvas */}
+            <ReactFlowProvider>
+              <FlowCanvas
+                nodes={nodes}
+                edges={edges}
+                onNodesChange={onNodesChange}
+                onEdgesChange={onEdgesChange}
+                onConnect={onConnect}
+              />
+            </ReactFlowProvider>
+          </CardContent>
+        </Card>
       </div>
     </AppLayout>
   );
