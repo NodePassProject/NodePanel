@@ -12,13 +12,12 @@ import {
 } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { AlertTriangle, Eye, Trash2, ServerIcon, SmartphoneIcon, Search, KeyRound } from 'lucide-react'; // Pencil removed
+import { AlertTriangle, Eye, Trash2, ServerIcon, SmartphoneIcon, Search, KeyRound } from 'lucide-react';
 import type { Instance, UpdateInstanceRequest } from '@/types/nodepass';
 import { InstanceStatusBadge } from './InstanceStatusBadge';
 import { InstanceControls } from './InstanceControls';
 import { DeleteInstanceDialog } from './DeleteInstanceDialog';
 import { InstanceDetailsModal } from './InstanceDetailsModal';
-// ModifyInstanceDialog import removed
 import { useToast } from '@/hooks/use-toast';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { nodePassApi } from '@/lib/api';
@@ -50,7 +49,6 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
 
   const [selectedInstanceForDetails, setSelectedInstanceForDetails] = useState<Instance | null>(null);
   const [selectedInstanceForDelete, setSelectedInstanceForDelete] = useState<Instance | null>(null);
-  // selectedInstanceForModify state removed
   const [searchTerm, setSearchTerm] = useState('');
 
   const { data: instances, isLoading: isLoadingInstances, error: instancesError } = useQuery<Instance[], Error>({
@@ -136,7 +134,7 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
     instance.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
     instance.url.toLowerCase().includes(searchTerm.toLowerCase()) ||
     (instance.id !== '********' && instance.type.toLowerCase().includes(searchTerm.toLowerCase())) ||
-    (instance.id === '********' && ('api key'.includes(searchTerm.toLowerCase()) || '密钥'.includes(searchTerm.toLowerCase()) )) // Ensure API key instance can be found
+    (instance.id === '********' && ('api key'.includes(searchTerm.toLowerCase()) || '密钥'.includes(searchTerm.toLowerCase()) || (apiName && apiName.toLowerCase().includes(searchTerm.toLowerCase())) ))
   );
 
   const apiKeyInstance = filteredInstances?.find(inst => inst.id === '********');
@@ -191,13 +189,13 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
       >
           <span
             className="cursor-pointer hover:text-primary transition-colors duration-150"
-            title={`点击复制: ${instance.url}`}
+            title={instance.id === '********' ? `点击复制主控 "${apiName || '当前主控'}" 的 API 密钥` : `点击复制: ${instance.url}`}
             onClick={(e) => {
               e.stopPropagation();
               handleCopyToClipboard(instance.url, instance.id === '********' ? 'API 密钥' : 'URL');
             }}
           >
-            {instance.id === '********' ? 'API 密钥 (已隐藏)' : instance.url}
+            {instance.id === '********' ? (apiName ? `${apiName} (API 密钥)`: '主控 API 密钥') : instance.url}
           </span>
       </TableCell>
       <TableCell className="text-center text-xs whitespace-nowrap font-mono">
@@ -224,7 +222,6 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
           </button>
           {instance.id !== '********' && (
             <>
-              {/* Modify button removed */}
               <button
                   className="p-2 rounded-md hover:bg-destructive/10 text-destructive"
                   onClick={() => setSelectedInstanceForDelete(instance)}
@@ -326,7 +323,7 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
         onConfirmDelete={(id) => deleteInstanceMutation.mutate(id)}
         isLoading={deleteInstanceMutation.isPending}
       />
-      {/* ModifyInstanceDialog component usage removed */}
     </Card>
   );
 }
+
