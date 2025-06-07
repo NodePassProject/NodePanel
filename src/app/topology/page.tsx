@@ -32,13 +32,10 @@ import { MastersPalette } from './components/MastersPalette';
 import { PropertiesDisplayPanel } from './components/PropertiesDisplayPanel';
 import type { NamedApiConfig } from '@/hooks/use-api-key';
 import { useToast } from '@/hooks/use-toast';
-import { Separator } from '@/components/ui/separator';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 
 const initialNodes: Node[] = [];
 const initialEdges: Edge[] = [];
-
-// Moved component definitions outside TopologyPage
 
 interface ActualTopologyFlowWithStateProps {
   nodes: Node[];
@@ -48,7 +45,6 @@ interface ActualTopologyFlowWithStateProps {
   onConnect: (params: Connection | Edge) => void;
   onSelectionChange: ({ nodes, edges }: { nodes: Node[]; edges: Edge[] }) => void;
   reactFlowWrapperRef: React.RefObject<HTMLDivElement>;
-  // Props for toolbar actions
   onCenterView: (instance: ReturnType<typeof useReactFlow>) => void;
   onFormatLayout: () => void;
   onClearCanvas: () => void;
@@ -90,7 +86,7 @@ const ActualTopologyFlowWithState: React.FC<ActualTopologyFlowWithStateProps> = 
   const memoizedBackground = useMemo(() => <Background variant="dots" gap={16} size={1} />, []);
 
   return (
-    <div ref={reactFlowWrapperRef} className="h-full w-full bg-background rounded-lg shadow-inner border border-border/50">
+    <div ref={reactFlowWrapperRef} className="h-full w-full bg-background rounded-lg shadow-md border">
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -294,8 +290,8 @@ export default function TopologyPage() {
       <ReactFlowProvider>
         <div className="flex flex-row flex-grow h-full overflow-hidden">
           {/* Left Sidebar */}
-          <div className="w-60 flex-shrink-0 flex flex-col border-r bg-muted/30 shadow-sm">
-            <Card className="flex flex-col h-1/2 m-2 shadow-md rounded-lg">
+          <div className="w-60 flex-shrink-0 flex flex-col border-r bg-muted/30 shadow-sm p-2 space-y-2">
+            <Card className="flex flex-col h-1/2 shadow-md rounded-lg">
               <CardHeader className="p-3 border-b">
                 <CardTitle className="text-base font-semibold font-title">主控列表</CardTitle>
                 <CardDescription className="text-xs text-muted-foreground font-sans">点击主控添加到画布。</CardDescription>
@@ -305,9 +301,7 @@ export default function TopologyPage() {
               </CardContent>
             </Card>
 
-            <Separator className="my-0" />
-
-            <Card className="flex flex-col flex-grow m-2 shadow-md rounded-lg min-h-0">
+            <Card className="flex flex-col flex-grow shadow-md rounded-lg min-h-0">
               <CardHeader className="p-3 border-b">
                 <CardTitle className="text-base font-semibold font-title">节点属性</CardTitle>
                 <CardDescription className="text-xs text-muted-foreground font-sans">
@@ -321,9 +315,9 @@ export default function TopologyPage() {
           </div>
 
           {/* Right Area (Canvas) */}
-          <div className="flex-grow flex flex-col overflow-hidden">
+          <div className="flex-grow flex flex-col overflow-hidden p-2">
             {/* Canvas Area - Toolbar is now inside ActualTopologyFlowWithState */}
-            <div className="flex-grow relative pb-5">
+            <div className="flex-grow relative">
               <div className="absolute inset-0">
                 <ActualTopologyFlowWithState
                   nodes={nodesInternal}
