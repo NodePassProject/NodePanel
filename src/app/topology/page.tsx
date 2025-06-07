@@ -770,11 +770,15 @@ function TopologyEditorCore() {
     const instancesToCreate: InstanceUrlConfigWithName[] = [];
     for (const node of nodesInternal) {
       if (node.data.role === 'S' || node.data.role === 'C') { // Standard S/C nodes
-        let masterId: string | undefined = node.data.representedMasterId;
-        if (node.parentNode) {
-          const parentMNode = getNodeById(node.parentNode);
-          masterId = parentMNode?.data.masterId;
+        let masterId: string | undefined;
+
+        if (node.data.representedMasterId) {
+            masterId = node.data.representedMasterId; // Prioritize representedMasterId
+        } else if (node.parentNode) {
+            const parentMNode = getNodeById(node.parentNode);
+            masterId = parentMNode?.data.masterId;
         }
+
 
         if (!masterId) {
           setNodesInternal(nds => nds.map(n => n.id === node.id ? { ...n, data: { ...n.data, submissionStatus: 'error', submissionMessage: '无主控' } } : n));
@@ -825,7 +829,7 @@ function TopologyEditorCore() {
           const finalUrl = buildUrlFromFormValues(urlParams, masterConfig);
           instancesToCreate.push({ 
             nodeId: node.id, 
-            nodeLabel: node.data.label,
+            nodeLabel: node.data.representedMasterName ? `${instanceTypeForBuild}: ${node.data.representedMasterName}` : node.data.label,
             masterId: masterConfig.id, 
             masterName: masterConfig.name, 
             url: finalUrl, 
