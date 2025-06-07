@@ -29,6 +29,12 @@ export function PropertiesDisplayPanel({ selectedNode }: PropertiesDisplayPanelP
         <strong className="text-muted-foreground">角色 (Role):</strong>
         <span className="ml-1 font-semibold">{data.role}</span>
       </div>
+      {data.masterSubRole && (
+        <div>
+          <strong className="text-muted-foreground">主控子角色 (SubRole):</strong>
+          <span className="ml-1">{data.masterSubRole}</span>
+        </div>
+      )}
       {data.label && (
         <div>
           <strong className="text-muted-foreground">标签 (Label):</strong>
@@ -60,9 +66,9 @@ export function PropertiesDisplayPanel({ selectedNode }: PropertiesDisplayPanelP
         </div>
       )}
        {/* Display other relevant properties based on role */}
-      {data.role === 'M' && data.masterName && (
+      {data.role === 'M' && data.masterName && ( // masterName is already covered by label for M nodes
         <div>
-          <strong className="text-muted-foreground">主控名称:</strong>
+          <strong className="text-muted-foreground">源主控名称:</strong>
           <span className="ml-1">{data.masterName}</span>
         </div>
       )}

@@ -36,9 +36,12 @@ import { Separator } from '@/components/ui/separator';
 
 // Define our extended Node type
 export type NodeRole = 'M' | 'S' | 'C' | 'T' | 'U';
+export type MasterSubRole = 'client-role' | 'server-role' | 'generic';
+
 export interface CustomNodeData {
   label: string;
   role: NodeRole;
+  masterSubRole?: MasterSubRole;
   nodeType?: string; // Keep existing if used, e.g., masterRepresentation
   masterId?: string;
   masterName?: string;
@@ -163,7 +166,7 @@ const ActualTopologyFlowWithState: React.FC<ActualTopologyFlowWithStateProps> = 
         deleteKeyCode={['Backspace', 'Delete']}
         panOnScroll={false}
         zoomOnScroll={true}
-        panOnDrag={true} // Corrected: should be boolean or [0,1,2]
+        panOnDrag={true}
         selectionOnDrag
         className="h-full w-full"
         nodeOrigin={[0.5, 0.5]}
@@ -287,36 +290,31 @@ export default function TopologyPage() {
         return;
       }
 
-      // --- NEW LINKING RULES based on roles ---
+      // --- REFINED LINKING RULES based on roles ---
       const sourceRole = sourceNode.data.role;
       const targetRole = targetNode.data.role;
       const sourceParentId = sourceNode.data.parentNode;
       const targetParentId = targetNode.data.parentNode;
 
-      // Rule: M 卡片空间内部 S/C 只能连接到同 M 内部的 S/C 或外部的 T
-      if ((sourceRole === 'S' || sourceRole === 'C') && sourceParentId) { // Source is S or C inside an M
-        if ((targetRole === 'S' || targetRole === 'C') && targetParentId !== sourceParentId) {
-          toast({ title: '连接无效', description: `容器内的 ${sourceRole} 只能连接到同一容器内的 S/C 或外部的 T。`, variant: 'destructive' });
-          return;
-        }
-        if (targetRole !== 'S' && targetRole !== 'C' && targetRole !== 'T') {
-           toast({ title: '连接无效', description: `容器内的 ${sourceRole} 只能连接到 S, C, 或外部的 T。`, variant: 'destructive' });
-          return;
-        }
-        if (targetRole === 'T' && targetParentId) { // T must be external
-            toast({ title: '连接无效', description: '落地端 (T) 必须在主控容器外部。', variant: 'destructive' });
+      // Rule for S/C nodes inside an M-container
+      if ((sourceRole === 'S' || sourceRole === 'C') && sourceParentId) {
+        if (targetRole === 'S' || targetRole === 'C') { // Target is also S or C
+          if (targetParentId !== sourceParentId) {
+            toast({ title: '连接无效', description: `容器内的 ${sourceRole} 节点只能连接到同一主控容器内的 S 或 C 节点。`, variant: 'destructive' });
             return;
+          }
+        } else if (targetRole === 'T') { // Target is T
+          if (targetParentId) { // T must be external (not parented)
+            toast({ title: '连接无效', description: `容器内的 ${sourceRole} 节点只能连接到外部的 T 节点。此 T 节点位于容器内。`, variant: 'destructive' });
+            return;
+          }
+        } else { // Target is M, U, or other invalid type for an S/C within an M
+          toast({ title: '连接无效', description: `容器内的 ${sourceRole} 节点只能连接到同一容器内的 S/C 节点或外部的 T 节点。`, variant: 'destructive' });
+          return;
         }
       }
       
-      // Rule: M 卡片空间内部的 S 可链接外部的 T 节点
-      if (sourceRole === 'S' && sourceParentId && targetRole === 'T' && targetParentId) {
-        toast({ title: '连接无效', description: '落地端 (T) 必须在主控容器外部才能被内部 S 连接。', variant: 'destructive' });
-        return;
-      }
-
-
-      // Rule: 用户（U）只能链接到 M 卡片空间
+      // Rule: 用户（U）只能链接到 M 卡片空间 (and M can link to U)
       if (sourceRole === 'U' && targetRole !== 'M') {
         toast({ title: '连接无效', description: '用户 (U) 只能连接到主控 (M)。', variant: 'destructive' });
         return;
@@ -326,22 +324,20 @@ export default function TopologyPage() {
         return;
       }
       
-      // Placeholder for more rules - e.g. M(C) to M(S)
+      // Rule: M to M connections based on masterSubRole
       if (sourceRole === 'M' && targetRole === 'M') {
-        // Add logic based on M roles if M_Client and M_Server distinction exists
-        const sourceMRole = sourceNode.data.label?.includes("客户端角色") ? "M_Client" : sourceNode.data.label?.includes("服务端角色") ? "M_Server" : "M_Generic";
-        const targetMRole = targetNode.data.label?.includes("客户端角色") ? "M_Client" : targetNode.data.label?.includes("服务端角色") ? "M_Server" : "M_Generic";
+        const sourceSubRole = sourceNode.data.masterSubRole;
+        const targetSubRole = targetNode.data.masterSubRole;
 
-        if (sourceMRole === "M_Client" && targetMRole !== "M_Server") {
+        if (sourceSubRole === 'client-role' && targetSubRole !== 'server-role') {
             toast({ title: '连接无效', description: '客户端角色的主控 (M) 只能连接到服务端角色的主控 (M)。', variant: 'destructive' });
             return;
         }
-         if (sourceMRole === "M_Server" && targetMRole !== "M_Client") { // Server M cannot initiate connection
-            toast({ title: '连接无效', description: '服务端角色的主控 (M) 不能主动连接其他主控。', variant: 'destructive' });
+        if (sourceSubRole === 'server-role') { 
+            toast({ title: '连接无效', description: '服务端角色的主控 (M) 不能主动连接其他主控。请从客户端角色的主控发起连接。', variant: 'destructive' });
             return;
         }
       }
-
 
       setEdgesInternal((eds) =>
         addEdge(
@@ -355,7 +351,7 @@ export default function TopologyPage() {
         )
       );
     },
-    [edgesInternal, setEdgesInternal, toast, getNodeById, nodesInternal] // added nodesInternal
+    [edgesInternal, setEdgesInternal, toast, getNodeById]
   );
 
   const onSelectionChange = useCallback(({ nodes: selectedNodesList }: { nodes: Node[], edges: Edge[] }) => {
@@ -375,70 +371,84 @@ export default function TopologyPage() {
     if (type === 'master' && draggedData) {
       const masterConfig = draggedData;
       const existingMasterNodes = nodesInternal.filter(n => n.data.role === 'M');
-      const masterRoleSuffix = existingMasterNodes.length === 0 ? ' (客户端角色)' : existingMasterNodes.length === 1 ? ' (服务端角色)' : '';
+      
+      let masterSubRole: MasterSubRole = 'generic';
+      let labelSuffix = '';
+
+      if (existingMasterNodes.length === 0) {
+        masterSubRole = 'client-role';
+        labelSuffix = ' (客户端角色)'; // Suffix for clarity, can be removed if properties panel is enough
+      } else if (existingMasterNodes.length === 1) {
+        masterSubRole = 'server-role';
+        labelSuffix = ' (服务端角色)';
+      }
       
       newNode = {
         id: `master-${masterConfig.id}-${newCounter}`,
-        type: 'default', // Or a custom type like 'masterContainerNode'
+        type: 'default',
         position,
         data: {
-          label: `主控: ${masterConfig.name}${masterRoleSuffix}`,
+          label: `主控: ${masterConfig.name}${labelSuffix}`,
           role: 'M',
+          masterSubRole: masterSubRole,
           isContainer: true,
-          nodeType: 'masterRepresentation', // Keep if used
+          nodeType: 'masterRepresentation',
           masterId: masterConfig.id,
           masterName: masterConfig.name,
           apiUrl: masterConfig.apiUrl,
           defaultLogLevel: masterConfig.masterDefaultLogLevel,
           defaultTlsMode: masterConfig.masterDefaultTlsMode,
         },
-        style: { // Differentiate M nodes
-          borderColor: 'hsl(var(--accent))',
-          borderWidth: 2,
-          background: 'hsl(var(--accent)/10)',
+        style: { 
+          borderColor: 'hsl(210 40% 50%)', // Muted blue
+          borderWidth: 1.5,
+          background: 'hsl(210 40% 95% / 0.7)', // Very light blue, semi-transparent
           borderRadius: '0.5rem',
           padding: '10px 15px',
           fontSize: '0.8rem',
-          width: 200, // Example container width
-          height: 150, // Example container height
+          width: 220, 
+          height: 180, 
         },
         sourcePosition: Position.Right,
         targetPosition: Position.Left,
       };
-      toast({ title: "主控节点已添加", description: `已添加主控 "${masterConfig.name}${masterRoleSuffix}" 到画布。` });
+      toast({ title: "主控节点已添加", description: `已添加主控 "${masterConfig.name}${labelSuffix}" 到画布。` });
     } else {
-      // Handle S, C, T, U nodes
-      const nodeRole = type.toUpperCase() as NodeRole; // S, C, T, U
+      const nodeRole = type.toUpperCase() as NodeRole; 
       let labelPrefix = '';
-      let nodeStyle = {};
+      let nodeStyle: React.CSSProperties = {
+        borderWidth: 1.5,
+        borderRadius: '0.375rem', // Slightly smaller radius for items
+        padding: '6px 10px',
+        fontSize: '0.7rem',
+      };
 
       switch(nodeRole) {
         case 'S':
           labelPrefix = '服务端';
-          nodeStyle = { borderColor: 'hsl(var(--primary))', background: 'hsl(var(--primary)/10)', borderWidth: 1.5, padding: '6px 10px', fontSize: '0.7rem' };
+          nodeStyle = { ...nodeStyle, borderColor: 'hsl(205 90% 40%)', background: 'hsl(205 90% 92% / 0.8)' }; // Stronger Blue
           break;
         case 'C':
           labelPrefix = '客户端';
-          nodeStyle = { borderColor: 'hsl(var(--secondary))', background: 'hsl(var(--secondary)/10)', borderWidth: 1.5, padding: '6px 10px', fontSize: '0.7rem' };
+          nodeStyle = { ...nodeStyle, borderColor: 'hsl(145 70% 35%)', background: 'hsl(145 70% 92% / 0.8)' }; // Stronger Green
           break;
         case 'T':
           labelPrefix = '落地端';
-          nodeStyle = { borderColor: 'hsl(120 60% 30%)', background: 'hsl(120 60% 30% / 0.1)', borderWidth: 1.5, padding: '6px 10px', fontSize: '0.7rem' };
+          nodeStyle = { ...nodeStyle, borderColor: 'hsl(35 90% 50%)', background: 'hsl(35 90% 92% / 0.8)' };   // Stronger Orange
           break;
         case 'U':
           labelPrefix = '用户';
-          nodeStyle = { borderColor: 'hsl(270 60% 50%)', background: 'hsl(270 60% 50% / 0.1)', borderWidth: 1.5, padding: '6px 10px', fontSize: '0.7rem' };
+          nodeStyle = { ...nodeStyle, borderColor: 'hsl(265 70% 50%)', background: 'hsl(265 70% 92% / 0.8)' }; // Stronger Purple
           break;
       }
 
-      // Basic check for dropping inside an M node (can be refined with onNodeDragStop)
       const parentNode = nodesInternal.find(
         (n) =>
           n.data.isContainer &&
           position.x > n.position.x &&
-          position.x < n.position.x + (n.width || 200) &&
+          position.x < n.position.x + (n.width || 220) && // Use M node width
           position.y > n.position.y &&
-          position.y < n.position.y + (n.height || 150)
+          position.y < n.position.y + (n.height || 180) // Use M node height
       );
 
       if ((nodeRole === 'S' || nodeRole === 'C') && !parentNode) {
@@ -446,30 +456,26 @@ export default function TopologyPage() {
         return;
       }
       
+      const finalStyle = parentNode 
+        ? { ...nodeStyle, width: 90, height: 45, padding: '4px 6px', fontSize: '0.65rem' } // Smaller if parented
+        : nodeStyle;
+
       newNode = {
         id: `${nodeRole.toLowerCase()}-${newCounter}`,
-        type: 'default', // Use custom types later if needed for smaller icons
+        type: 'default',
         position,
         data: {
           label: `${labelPrefix} ${newCounter}`,
           role: nodeRole,
           parentNode: parentNode?.id,
         },
-        style: {
-            ...nodeStyle,
-            ...(parentNode && { // Smaller style if inside a container
-              width: 80,
-              height: 40,
-              padding: '4px 6px',
-              fontSize: '0.6rem',
-            })
-        },
+        style: finalStyle,
         parentNode: parentNode?.id,
         extent: parentNode ? 'parent' : undefined,
         sourcePosition: Position.Right,
         targetPosition: Position.Left,
       };
-      toast({ title: `${labelPrefix} 节点已添加`, description: `已添加 ${labelPrefix} (${nodeRole}) 到画布。` });
+      toast({ title: `${labelPrefix} 节点已添加`, description: `已添加 ${labelPrefix} (${nodeRole}) 到画布${parentNode ? ` (于主控 ${parentNode.data.label})` : ''}。` });
     }
     setNodesInternal((nds) => nds.concat(newNode));
   }, [nodeIdCounter, setNodesInternal, toast, nodesInternal]);
@@ -510,18 +516,18 @@ export default function TopologyPage() {
             <div className="w-60 flex-shrink-0 flex flex-col border-r bg-muted/30 p-2">
               <div className="flex flex-col h-full bg-background rounded-lg shadow-md border">
                 {/* Masters Palette Section */}
-                <div className="flex flex-col h-1/2 p-3">
+                <div className="flex flex-col h-1/3 p-3">
                   <h2 className="text-base font-semibold font-title mb-1">主控列表 (M)</h2>
                   <p className="text-xs text-muted-foreground font-sans mb-2">拖拽主控到画布。</p>
                   <div className="flex-grow overflow-y-auto pr-1">
-                    <MastersPalette />
+                     <MastersPalette />
                   </div>
                 </div>
 
                 <Separator className="my-0" />
 
                  {/* Components Palette Section */}
-                <div className="flex flex-col h-1/2 p-3">
+                <div className="flex flex-col h-1/3 p-3">
                   <h2 className="text-base font-semibold font-title mb-1">组件 (S, C, T, U)</h2>
                   <p className="text-xs text-muted-foreground font-sans mb-2">拖拽组件到画布或主控容器。</p>
                   <div className="flex-grow overflow-y-auto pr-1">
@@ -537,7 +543,7 @@ export default function TopologyPage() {
                   <p className="text-xs text-muted-foreground font-sans mb-2">
                     {selectedNode ? `选中: ${selectedNode.data.label || selectedNode.id}` : '点击节点查看属性。'}
                   </p>
-                  <div className="flex-grow overflow-y-hidden">
+                  <div className="flex-grow overflow-y-hidden"> {/* Changed from auto to hidden */}
                     <PropertiesDisplayPanel selectedNode={selectedNode} />
                   </div>
                 </div>
@@ -572,5 +578,4 @@ export default function TopologyPage() {
     </AppLayout>
   );
 }
-
     
