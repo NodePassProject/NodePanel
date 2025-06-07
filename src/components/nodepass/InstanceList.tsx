@@ -52,7 +52,7 @@ function formatHostForDisplay(host: string | null | undefined): string {
 
 // Helper to check for wildcard hostnames (0.0.0.0, [::], ::)
 const isWildcardHost = (host: string | null | undefined): boolean => {
-    if (!host) return false; // An empty or null host isn't strictly a wildcard in all contexts, but for listen addresses it implies all.
+    if (!host) return false; 
     const lowerHost = host.toLowerCase();
     return lowerHost === '0.0.0.0' || lowerHost === '[::]' || lowerHost === '::';
 };
@@ -64,10 +64,11 @@ interface InstanceListProps {
   apiRoot: string | null;
   apiToken: string | null;
   activeApiConfig: NamedApiConfig | null;
+  apiConfigsList: NamedApiConfig[]; // Added to determine other masters
   onLog?: (message: string, type: AppLogEntry['type']) => void;
 }
 
-export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfig, onLog }: InstanceListProps) {
+export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfig, apiConfigsList, onLog }: InstanceListProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -271,7 +272,7 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
       );
     } else if (instance.type === 'server' && parsedUrl) {
         stringToCopy = parsedUrl.targetAddress || "N/A";
-        copyTitle = "出口(s)目标地址";
+        copyTitle = "出口(s)目标地址 (业务数据)";
         displayTargetTunnelContent = (
            <span
             className="font-mono text-xs cursor-pointer hover:text-primary transition-colors duration-150"
@@ -290,75 +291,56 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
         const clientUrlTunnelHost = extractHostname(parsedUrl.tunnelAddress || '');
         const clientUrlTunnelPort = extractPort(parsedUrl.tunnelAddress || '');
 
-        if (clientUrlTunnelPort && isWildcardHost(clientUrlTunnelHost)) {
-            // Single-ended client: display master_host:local_listening_port
-            const masterApiHost = extractHostname(activeApiConfig.apiUrl);
-            if (masterApiHost) {
-                stringToCopy = `${formatHostForDisplay(masterApiHost)}:${clientUrlTunnelPort}`;
+        const isSingleEnded = isWildcardHost(clientUrlTunnelHost);
+
+        if (isSingleEnded) {
+            const clientMasterHost = extractHostname(activeApiConfig.apiUrl);
+            const clientListeningPort = clientUrlTunnelPort;
+            if (clientMasterHost && clientListeningPort) {
+                stringToCopy = `${formatHostForDisplay(clientMasterHost)}:${clientListeningPort}`;
                 copyTitle = "入口(c)本地监听 (单端)";
-                displayTargetTunnelContent = (
-                    <span
-                        className="font-mono text-xs cursor-pointer hover:text-primary transition-colors duration-150"
-                        title={`点击复制: ${stringToCopy}`}
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            handleCopyToClipboard(stringToCopy, copyTitle);
-                        }}
-                    >
-                        {stringToCopy}
-                    </span>
-                );
             } else {
-                stringToCopy = `${clientUrlTunnelHost}:${clientUrlTunnelPort}`; // fallback if master host not found
-                copyTitle = "入口(c)本地监听 (单端)";
-                displayTargetTunnelContent = (
-                    <span className="font-mono text-xs text-muted-foreground" title={`点击复制: ${stringToCopy}`}>
-                        {stringToCopy} <span className="text-destructive">(主控地址未知)</span>
-                    </span>
-                );
+                stringToCopy = `${formatHostForDisplay(clientUrlTunnelHost)}:${clientListeningPort || '未知端口'}`;
+                copyTitle = "入口(c)本地监听 (单端, 主控地址未知)";
             }
         } else {
-            // Normal client (tunneling to a remote server): display its local forwarding target
-            if (parsedUrl.targetAddress) {
-                let localTargetHost = extractHostname(parsedUrl.targetAddress);
-                let localTargetPort = extractPort(parsedUrl.targetAddress);
-
-                if (localTargetPort) { 
-                    const displayHost = (!localTargetHost || isWildcardHost(localTargetHost) || localTargetHost.toLowerCase() === 'localhost') ? '127.0.0.1' : formatHostForDisplay(localTargetHost);
-                    stringToCopy = `${displayHost}:${localTargetPort}`;
-                    copyTitle = "入口(c)本地转发";
-                    displayTargetTunnelContent = (
-                       <span
-                        className="font-mono text-xs cursor-pointer hover:text-primary transition-colors duration-150"
-                        title={`点击复制: ${stringToCopy}`}
-                        onClick={(e) => { e.stopPropagation(); handleCopyToClipboard(stringToCopy, copyTitle); }}
-                       >
-                         {stringToCopy}
-                       </span>
-                    );
-                } else if (parsedUrl.targetAddress.match(/^\d+$/)) { // targetAddress is just a port number
-                    stringToCopy = `127.0.0.1:${parsedUrl.targetAddress}`;
-                    copyTitle = "入口(c)本地转发";
-                     displayTargetTunnelContent = (
-                       <span
-                        className="font-mono text-xs cursor-pointer hover:text-primary transition-colors duration-150"
-                        title={`点击复制: ${stringToCopy}`}
-                        onClick={(e) => { e.stopPropagation(); handleCopyToClipboard(stringToCopy, copyTitle); }}
-                       >
-                         {stringToCopy}
-                       </span>
-                    );
-                } else {
-                     stringToCopy = "N/A (目标无效)";
-                     copyTitle = "目标地址格式无效";
-                     displayTargetTunnelContent = <span className="font-mono text-xs text-muted-foreground" title={copyTitle}>{stringToCopy}</span>;
+            // Normal client or cross-API client
+            const clientLocalForwardTarget = parsedUrl.targetAddress;
+            const clientLocalForwardPort = extractPort(clientLocalForwardTarget);
+            
+            // Check if the client is tunneling to a server on a different master
+            let serverMasterApiHost: string | null = null;
+            if (clientUrlTunnelHost) {
+                const serverMasterConfig = apiConfigsList.find(config => {
+                    const configApiHost = extractHostname(config.apiUrl);
+                    return configApiHost && configApiHost.toLowerCase() === clientUrlTunnelHost.toLowerCase() && config.id !== activeApiConfig.id;
+                });
+                if (serverMasterConfig) {
+                    serverMasterApiHost = extractHostname(serverMasterConfig.apiUrl);
                 }
-            } else {
-                 stringToCopy = "N/A (无本地转发)";
-                 copyTitle = "未配置本地转发目标";
-                 displayTargetTunnelContent = <span className="font-mono text-xs text-muted-foreground" title={copyTitle}>{stringToCopy}</span>;
+            }
+
+            if (serverMasterApiHost && clientLocalForwardPort) { // Cross-API tunnel
+                stringToCopy = `${formatHostForDisplay(serverMasterApiHost)}:${clientLocalForwardPort}`;
+                copyTitle = `入口(c)本地转发 (目标主控: ${serverMasterApiHost})`;
+            } else { // Normal client (same master or unknown external)
+                const displayHost = (!clientLocalForwardTarget || isWildcardHost(extractHostname(clientLocalForwardTarget)) || extractHostname(clientLocalForwardTarget)?.toLowerCase() === 'localhost') 
+                                    ? '127.0.0.1' 
+                                    : formatHostForDisplay(extractHostname(clientLocalForwardTarget));
+                const effectivePort = clientLocalForwardPort || (clientUrlTunnelPort ? (parseInt(clientUrlTunnelPort, 10) + 1).toString() : "未知");
+                stringToCopy = `${displayHost}:${effectivePort}`;
+                copyTitle = "入口(c)本地转发";
             }
         }
+        displayTargetTunnelContent = (
+           <span
+            className="font-mono text-xs cursor-pointer hover:text-primary transition-colors duration-150"
+            title={`点击复制: ${stringToCopy}`}
+            onClick={(e) => { e.stopPropagation(); handleCopyToClipboard(stringToCopy, copyTitle); }}
+           >
+             {stringToCopy}
+           </span>
+        );
     }
 
 

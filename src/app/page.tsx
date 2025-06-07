@@ -108,6 +108,7 @@ export default function HomePage() {
               apiRoot={currentApiRoot}
               apiToken={currentToken}
               activeApiConfig={activeApiConfig}
+              apiConfigsList={apiConfigsList} // Pass the full list
               onLog={addPageLog}
             />
           </div>
