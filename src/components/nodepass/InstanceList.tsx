@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   Table,
   TableBody,
@@ -27,6 +27,9 @@ import type { NamedApiConfig } from '@/hooks/use-api-key';
 import type { AppLogEntry } from './EventLog';
 import { extractHostname, extractPort, parseNodePassUrlForTopology } from '@/app/topology/lib/topology-utils';
 import { formatHostForUrl } from '@/components/nodepass/create-instance-dialog/utils';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Button } from '@/components/ui/button';
+import { BulkDeleteInstancesDialog } from './BulkDeleteInstancesDialog';
 
 
 function formatBytes(bytes: number) {
@@ -53,6 +56,10 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
   const [selectedInstanceForDetails, setSelectedInstanceForDetails] = useState<Instance | null>(null);
   const [selectedInstanceForDelete, setSelectedInstanceForDelete] = useState<Instance | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedInstanceIds, setSelectedInstanceIds] = useState(new Set<string>());
+  const [isBulkDeleteDialogOpen, setIsBulkDeleteDialogOpen] = useState(false);
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+
 
   const { data: instances, isLoading: isLoadingInstances, error: instancesError } = useQuery<Instance[], Error>({
     queryKey: ['instances', apiId],
@@ -107,6 +114,11 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
       queryClient.invalidateQueries({ queryKey: ['allInstancesForTopologyPage']});
       queryClient.invalidateQueries({ queryKey: ['allInstancesForTraffic']});
       setSelectedInstanceForDelete(null);
+      setSelectedInstanceIds(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(instanceId);
+        return newSet;
+      });
     },
     onError: (error: any, instanceId) => {
       toast({
@@ -132,26 +144,82 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
     }
   };
 
-
   const filteredInstances = instances?.filter(instance =>
     instance.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
     instance.url.toLowerCase().includes(searchTerm.toLowerCase()) ||
     (instance.id !== '********' && instance.type.toLowerCase().includes(searchTerm.toLowerCase())) ||
     (instance.id === '********' && ('api key'.includes(searchTerm.toLowerCase()) || '密钥'.includes(searchTerm.toLowerCase()) || (apiName && apiName.toLowerCase().includes(searchTerm.toLowerCase())) ))
   );
+  
+  const deletableInstances = useMemo(() => filteredInstances?.filter(inst => inst.id !== '********') || [], [filteredInstances]);
 
   const apiKeyInstance = filteredInstances?.find(inst => inst.id === '********');
   const otherInstances = filteredInstances?.filter(inst => inst.id !== '********');
 
+
+  const handleSelectInstance = (instanceId: string) => {
+    setSelectedInstanceIds(prevSelectedIds => {
+      const newSelectedIds = new Set(prevSelectedIds);
+      if (newSelectedIds.has(instanceId)) {
+        newSelectedIds.delete(instanceId);
+      } else {
+        newSelectedIds.add(instanceId);
+      }
+      return newSelectedIds;
+    });
+  };
+
+  const handleSelectAllInstances = (checked: boolean | 'indeterminate') => {
+    if (checked === true) {
+      setSelectedInstanceIds(new Set(deletableInstances.map(inst => inst.id)));
+    } else {
+      setSelectedInstanceIds(new Set());
+    }
+  };
+
+  const handleConfirmBulkDelete = async () => {
+    if (selectedInstanceIds.size === 0) return;
+    setIsBulkDeleting(true);
+    onLog?.(`开始批量删除 ${selectedInstanceIds.size} 个实例...`, 'ACTION');
+
+    const results = await Promise.allSettled(
+      Array.from(selectedInstanceIds).map(id => deleteInstanceMutation.mutateAsync(id))
+    );
+
+    let successCount = 0;
+    let errorCount = 0;
+    results.forEach(result => {
+      if (result.status === 'fulfilled') successCount++;
+      else errorCount++;
+    });
+
+    if (successCount > 0) {
+      toast({ title: '批量删除成功', description: `${successCount} 个实例已删除。` });
+    }
+    if (errorCount > 0) {
+      toast({ title: '批量删除部分失败', description: `${errorCount} 个实例删除失败，请检查日志。`, variant: 'destructive' });
+    }
+    onLog?.(`批量删除完成: ${successCount} 成功, ${errorCount} 失败。`, errorCount > 0 ? 'ERROR' : 'SUCCESS');
+
+    queryClient.invalidateQueries({ queryKey: ['instances', apiId] });
+    queryClient.invalidateQueries({ queryKey: ['allInstancesForTopologyPage'] });
+    queryClient.invalidateQueries({ queryKey: ['allInstancesForTraffic'] });
+    setSelectedInstanceIds(new Set());
+    setIsBulkDeleting(false);
+    setIsBulkDeleteDialogOpen(false);
+  };
+
+
   const renderSkeletons = () => {
     return Array.from({ length: 3 }).map((_, i) => (
       <TableRow key={`skeleton-${i}`}>
+        <TableCell className="w-10"><Skeleton className="h-4 w-4" /></TableCell> {/* Checkbox skeleton */}
         <TableCell><Skeleton className="h-4 w-24" /></TableCell>
         <TableCell><Skeleton className="h-4 w-16" /></TableCell>
         <TableCell><Skeleton className="h-4 w-16" /></TableCell>
         <TableCell><Skeleton className="h-4 w-40" /></TableCell>
         <TableCell>
-          <div className="text-left"> {/* Ensure skeleton traffic is also left-aligned */}
+          <div className="text-left">
             <Skeleton className="h-4 w-20 mb-1" />
             <Skeleton className="h-4 w-20" />
           </div>
@@ -169,7 +237,7 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
     if (instance.id === '********') {
       displayTargetTunnelContent = (
         <span
-          className="cursor-pointer hover:text-primary transition-colors duration-150"
+          className="font-mono text-xs cursor-pointer hover:text-primary transition-colors duration-150"
           title={`点击复制主控 "${apiName}" 的 API 密钥`}
           onClick={(e) => {
             e.stopPropagation();
@@ -183,33 +251,28 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
       let textToShow = "N/A";
       if (instance.type === 'server') {
         textToShow = parsedUrl.targetAddress || "N/A";
-      } else if (instance.type === 'client') {
-        let clientLocalForwardPort: string | null = null;
-        if (parsedUrl.targetAddress) { // Target for client is local forward
-          clientLocalForwardPort = extractPort(parsedUrl.targetAddress);
-        }
+      } else if (instance.type === 'client' && activeApiConfig?.apiUrl) {
+          const clientManagingMasterHost = extractHostname(activeApiConfig.apiUrl);
+          let clientLocalForwardPort: string | null = null;
 
-        if (!clientLocalForwardPort && parsedUrl.tunnelAddress) { // Fallback for local port
-          const serverTunnelPort = extractPort(parsedUrl.tunnelAddress);
-          if (serverTunnelPort && /^\d+$/.test(serverTunnelPort)) {
-            clientLocalForwardPort = (parseInt(serverTunnelPort, 10) + 1).toString();
+          if (parsedUrl.targetAddress) { 
+            clientLocalForwardPort = extractPort(parsedUrl.targetAddress);
           }
-        }
-
-        let managingMasterHost: string | null = null;
-        if (activeApiConfig?.apiUrl) {
-          managingMasterHost = extractHostname(activeApiConfig.apiUrl);
-        }
-
-        if (managingMasterHost && clientLocalForwardPort) {
-          textToShow = `${formatHostForUrl(managingMasterHost)}:${clientLocalForwardPort}`;
-        } else {
-          textToShow = "N/A (信息不完整)";
-        }
+          if (!clientLocalForwardPort && parsedUrl.tunnelAddress) {
+            const serverTunnelPort = extractPort(parsedUrl.tunnelAddress);
+            if (serverTunnelPort && /^\d+$/.test(serverTunnelPort)) {
+              clientLocalForwardPort = (parseInt(serverTunnelPort, 10) + 1).toString();
+            }
+          }
+          if (clientManagingMasterHost && clientLocalForwardPort) {
+            textToShow = `${formatHostForUrl(clientManagingMasterHost)}:${clientLocalForwardPort}`;
+          } else {
+            textToShow = "N/A (信息不完整)";
+          }
       }
       displayTargetTunnelContent = (
         <span
-          className="cursor-pointer hover:text-primary transition-colors duration-150"
+          className="font-mono text-xs cursor-pointer hover:text-primary transition-colors duration-150"
           title={textToShow !== "N/A" && textToShow !== "N/A (信息不完整)" ? `点击复制: ${textToShow}` : ""}
           onClick={(e) => {
             e.stopPropagation();
@@ -228,8 +291,19 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
       <TableRow
         key={instance.id}
         className="text-foreground/90 hover:text-foreground"
-        onDoubleClick={() => setSelectedInstanceForDetails(instance)}
+        onDoubleClick={() => instance.id !== '********' && setSelectedInstanceForDetails(instance)} // API Key instance non-detailed
+        data-state={selectedInstanceIds.has(instance.id) ? "selected" : ""}
       >
+        <TableCell className="w-10">
+          {instance.id !== '********' && (
+            <Checkbox
+              checked={selectedInstanceIds.has(instance.id)}
+              onCheckedChange={() => handleSelectInstance(instance.id)}
+              aria-label={`选择实例 ${instance.id}`}
+              disabled={isBulkDeleting}
+            />
+          )}
+        </TableCell>
         <TableCell className="font-medium font-mono text-xs max-w-[100px] truncate" title={instance.id}>{instance.id}</TableCell>
         <TableCell>
           {instance.id === '********' ? (
@@ -261,7 +335,7 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
         >
           {displayTargetTunnelContent}
         </TableCell>
-        <TableCell className="text-left"> {/* Ensure traffic is left-aligned */}
+        <TableCell className="text-left">
           <div className="text-xs whitespace-nowrap font-mono">
             {instance.id === '********' ? (
               "N/A"
@@ -294,6 +368,7 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
                   className="p-2 rounded-md hover:bg-destructive/10 text-destructive"
                   onClick={() => setSelectedInstanceForDelete(instance)}
                   aria-label="删除"
+                  disabled={isBulkDeleting || deleteInstanceMutation.isPending && deleteInstanceMutation.variables === instance.id}
               >
                 <Trash2 className="h-4 w-4" />
               </button>
@@ -305,11 +380,11 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
   }
 
   const getTableBodyContent = () => {
-    if (isLoadingInstances) {
+    const rowsToRender: React.ReactNode[] = [];
+    if (isLoadingInstances && !instancesError) {
       return renderSkeletons();
     }
     
-    const rowsToRender: React.ReactNode[] = [];
     if (filteredInstances && filteredInstances.length > 0) {
       if (apiKeyInstance) {
         rowsToRender.push(renderInstanceRow(apiKeyInstance));
@@ -324,18 +399,21 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
     }
 
     let message = "加载中或无可用实例数据。";
-    if (activeApiConfig) {
-        if (instances && instances.length === 0) {
-            message = `主控 "${activeApiConfig.name}" 下无实例。`;
-        } else if (searchTerm) {
-            message = `在 "${activeApiConfig.name}" 中未找到与 "${searchTerm}" 匹配的实例。`;
-        }
-    } else {
+    if (apiId && !isLoadingInstances && !instancesError) {
+      if (instances && instances.length === 0) {
+          message = `主控 "${activeApiConfig?.name || apiName}" 下无实例。`;
+      } else if (searchTerm) {
+          message = `在 "${activeApiConfig?.name || apiName}" 中未找到与 "${searchTerm}" 匹配的实例。`;
+      }
+    } else if (!apiId) {
         message = "请选择活动主控以查看实例。";
+    } else if (instancesError) {
+        // Error already handled above
+        return null;
     }
     return (
       <TableRow>
-        <TableCell colSpan={6} className="text-center h-24 font-sans"> {/* Adjusted colSpan */}
+        <TableCell colSpan={7} className="text-center h-24 font-sans">
           {message}
         </TableCell>
       </TableRow>
@@ -350,15 +428,27 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
           <CardTitle className="font-title">实例概览 (主控: {apiName || 'N/A'})</CardTitle>
           <CardDescription className="font-sans">管理和监控 NodePass 实例。</CardDescription>
         </div>
-        <div className="relative mt-4 sm:mt-0 w-full sm:w-64">
-          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input
-            type="search"
-            placeholder="搜索实例..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-8 w-full font-sans"
-          />
+        <div className="flex items-center gap-2 mt-4 sm:mt-0 w-full sm:w-auto">
+          <Button
+            variant="destructive"
+            size="sm"
+            onClick={() => setIsBulkDeleteDialogOpen(true)}
+            disabled={selectedInstanceIds.size === 0 || isBulkDeleting}
+            className="font-sans"
+          >
+            <Trash2 className="mr-2 h-4 w-4" />
+            删除选中 ({selectedInstanceIds.size})
+          </Button>
+          <div className="relative w-full sm:w-64">
+            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              type="search"
+              placeholder="搜索实例..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-8 w-full font-sans"
+            />
+          </div>
         </div>
       </CardHeader>
       <CardContent>
@@ -378,6 +468,21 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-10">
+                  <Checkbox
+                    checked={
+                      deletableInstances.length > 0 &&
+                      selectedInstanceIds.size === deletableInstances.length
+                        ? true
+                        : deletableInstances.length > 0 && selectedInstanceIds.size > 0
+                        ? "indeterminate"
+                        : false
+                    }
+                    onCheckedChange={handleSelectAllInstances}
+                    aria-label="全选/取消全选实例"
+                    disabled={deletableInstances.length === 0 || isBulkDeleting}
+                  />
+                </TableHead>
                 <TableHead className="font-sans">ID</TableHead>
                 <TableHead className="font-sans">类型</TableHead>
                 <TableHead className="font-sans">状态</TableHead>
@@ -406,7 +511,18 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
         open={!!selectedInstanceForDelete}
         onOpenChange={(open) => !open && setSelectedInstanceForDelete(null)}
         onConfirmDelete={(id) => deleteInstanceMutation.mutate(id)}
-        isLoading={deleteInstanceMutation.isPending}
+        isLoading={deleteInstanceMutation.isPending && deleteInstanceMutation.variables === selectedInstanceForDelete?.id}
+      />
+      <BulkDeleteInstancesDialog
+        selectedInstances={
+          instances?.filter(inst => selectedInstanceIds.has(inst.id))
+            .map(inst => ({ id: inst.id, url: inst.url })) // Pass only necessary info
+          || []
+        }
+        open={isBulkDeleteDialogOpen}
+        onOpenChange={setIsBulkDeleteDialogOpen}
+        onConfirmDelete={handleConfirmBulkDelete}
+        isLoading={isBulkDeleting}
       />
     </Card>
   );
