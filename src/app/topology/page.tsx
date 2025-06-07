@@ -106,7 +106,6 @@ const ActualTopologyFlowWithState: React.FC<ActualTopologyFlowWithStateProps> = 
 };
 
 interface ToolbarWrapperComponentProps {
-  // onAddGenericNode removed
   onCenterView: (instance: ReturnType<typeof useReactFlow>) => void;
   onFormatLayout: () => void;
   onClearCanvas: () => void;
@@ -115,7 +114,6 @@ interface ToolbarWrapperComponentProps {
 }
 
 const ToolbarWrapperComponent: React.FC<ToolbarWrapperComponentProps> = ({
-  // onAddGenericNode removed
   onCenterView,
   onFormatLayout,
   onClearCanvas,
@@ -125,7 +123,6 @@ const ToolbarWrapperComponent: React.FC<ToolbarWrapperComponentProps> = ({
   const reactFlowInstance = useReactFlow();
   return (
     <TopologyToolbar
-      // onAddNode removed
       onCenterView={() => onCenterView(reactFlowInstance)}
       onFormatLayout={onFormatLayout}
       onClearCanvas={onClearCanvas}
@@ -189,23 +186,26 @@ export default function TopologyPage() {
 
     if (reactFlowWrapperRef.current) {
       const bounds = reactFlowWrapperRef.current.getBoundingClientRect();
-      if (bounds.width > 0 && bounds.height > 0) {
+      if (bounds.width > 0 && bounds.height > 0) { // Ensure bounds are valid
         const screenCenter = { x: bounds.width / 2, y: bounds.height / 2 };
         position = reactFlowInstance.screenToFlowPosition(screenCenter);
-        position.x += (Math.random() * 100 - 50); 
-        position.y += (Math.random() * 100 - 50);
+        // Add some randomness to avoid stacking nodes if multiple are added quickly
+        position.x += (Math.random() * 50 - 25); 
+        position.y += (Math.random() * 50 - 25);
       } else {
+        // Fallback if bounds are not valid (e.g., element not fully rendered)
         const currentViewport = reactFlowInstance.getViewport();
         position = {
-            x: -currentViewport.x / currentViewport.zoom + 150 + (Math.random() * 100 - 50),
-            y: -currentViewport.y / currentViewport.zoom + 150 + (Math.random() * 100 - 50),
+            x: -currentViewport.x / currentViewport.zoom + 150 + (Math.random() * 50 - 25),
+            y: -currentViewport.y / currentViewport.zoom + 150 + (Math.random() * 50 - 25),
         };
       }
     } else {
+       // Fallback if ref is not available
       const currentViewport = reactFlowInstance.getViewport();
       position = {
-          x: -currentViewport.x / currentViewport.zoom + 150 + (Math.random() * 100 - 50),
-          y: -currentViewport.y / currentViewport.zoom + 150 + (Math.random() * 100 - 50),
+          x: -currentViewport.x / currentViewport.zoom + 150 + (Math.random() * 50 - 25),
+          y: -currentViewport.y / currentViewport.zoom + 150 + (Math.random() * 50 - 25),
       };
     }
     
@@ -219,7 +219,6 @@ export default function TopologyPage() {
     toast({ title: "节点已添加", description: `已添加节点 "${finalNewNode.data.label || newNodeId}"。` });
   }, [nodeIdCounter, setNodesInternal, toast]);
 
-  // handleAddGenericNode is removed as the button is removed
 
   const handleAddMasterNodeFromPalette = useCallback((masterConfig: NamedApiConfig, rfInstance: ReturnType<typeof useReactFlow>) => {
     const masterNodeData: Omit<Node, 'id' | 'position'> = {
@@ -273,27 +272,27 @@ export default function TopologyPage() {
   return (
     <AppLayout>
       <ReactFlowProvider> {/* Provider wraps the entire layout for context availability */}
-        <div className="flex flex-row flex-grow h-full overflow-hidden">
+        <div className="flex flex-row flex-grow h-full overflow-hidden"> {/* Main horizontal layout */}
           {/* Left Sidebar */}
-          <div className="w-72 flex-shrink-0 flex flex-col border-r bg-muted/30 shadow-sm">
-            <Card className="flex flex-col h-1/2 m-2 shadow-md rounded-lg">
+          <div className="w-60 flex-shrink-0 flex flex-col border-r bg-muted/30 shadow-sm"> {/* Reduced width to w-60 */}
+            <Card className="flex flex-col h-1/2 m-2 shadow-md rounded-lg"> {/* Masters Palette takes top half of sidebar */}
               <CardHeader className="p-3 border-b">
                 <CardTitle className="text-base font-semibold font-title">主控列表</CardTitle>
                 <CardDescription className="text-xs text-muted-foreground font-sans">点击主控添加到画布。</CardDescription>
               </CardHeader>
-              <CardContent className="flex-grow overflow-y-auto p-1">
+              <CardContent className="flex-grow overflow-y-auto p-1"> {/* Scrollable content */}
                 <MastersPaletteWrapperComponent onAddMasterNodeFromPalette={handleAddMasterNodeFromPalette} />
               </CardContent>
             </Card>
             <Separator />
-            <Card className="flex flex-col flex-grow m-2 shadow-md rounded-lg min-h-0"> {/* min-h-0 is important for flex-grow in column */}
+            <Card className="flex flex-col flex-grow m-2 shadow-md rounded-lg min-h-0"> {/* Properties Panel takes remaining space, min-h-0 important for flex-grow */}
               <CardHeader className="p-3 border-b">
                 <CardTitle className="text-base font-semibold font-title">节点属性</CardTitle>
                 <CardDescription className="text-xs text-muted-foreground font-sans">
                   {selectedNode ? `选中: ${selectedNode.data.label || selectedNode.id}` : '点击节点查看属性。'}
                 </CardDescription>
               </CardHeader>
-              <CardContent className="flex-grow overflow-y-auto p-1">
+              <CardContent className="flex-grow overflow-y-auto p-1"> {/* Scrollable content */}
                 <PropertiesDisplayPanel selectedNode={selectedNode} />
               </CardContent>
             </Card>
@@ -304,7 +303,6 @@ export default function TopologyPage() {
             {/* Top Toolbar Area - Right Aligned */}
             <div className="flex-shrink-0 p-2 border-b bg-background shadow-sm flex justify-end">
               <ToolbarWrapperComponent
-                // onAddGenericNode removed
                 onCenterView={handleCenterViewCallback}
                 onFormatLayout={handleFormatLayoutCallback}
                 onClearCanvas={handleClearCanvasCallback}
@@ -332,3 +330,4 @@ export default function TopologyPage() {
     </AppLayout>
   );
 }
+    
