@@ -24,6 +24,7 @@ interface CreateInstanceFormFieldsProps {
   isLoadingServerInstances: boolean;
   externalApiSuggestion: string | null;
   onSubmitHandler: (values: CreateInstanceFormValues) => void;
+  showDetailedDescriptions: boolean;
 }
 
 export function CreateInstanceFormFields({
@@ -37,6 +38,7 @@ export function CreateInstanceFormFields({
   isLoadingServerInstances,
   externalApiSuggestion,
   onSubmitHandler,
+  showDetailedDescriptions,
 }: CreateInstanceFormFieldsProps) {
 
   const masterLogLevelDisplay = activeApiConfig?.masterDefaultLogLevel && activeApiConfig.masterDefaultLogLevel !== 'master'
@@ -51,7 +53,7 @@ export function CreateInstanceFormFields({
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmitHandler)} className="space-y-4 py-2 max-h-[70vh] overflow-y-auto pr-2" id="create-instance-form">
+      <form onSubmit={form.handleSubmit(onSubmitHandler)} className="space-y-4 py-2 max-h-[65vh] overflow-y-auto pr-2" id="create-instance-form">
         <FormField
           control={form.control}
           name="instanceType"
@@ -91,9 +93,11 @@ export function CreateInstanceFormFields({
                   <FormLabel htmlFor="autoCreateServerCheckbox" className="font-sans cursor-pointer text-sm">
                     自动创建匹配的出口(s)
                   </FormLabel>
-                  <FormDescription className="font-sans text-xs">
-                    在选定主控下创建相应出口(s)。入口(c)本地监听端口将使用出口(s)隧道监听端口+1。
-                  </FormDescription>
+                  {showDetailedDescriptions && (
+                    <FormDescription className="font-sans text-xs">
+                      在选定主控下创建相应出口(s)。入口(c)本地监听端口将使用出口(s)隧道监听端口+1。
+                    </FormDescription>
+                  )}
                 </div>
               </FormItem>
             )}
@@ -128,9 +132,11 @@ export function CreateInstanceFormFields({
                     ))}
                   </SelectContent>
                 </Select>
-                <FormDescription className="font-sans text-xs">
-                  选择自动创建的出口(s)实例将归属于哪个主控。
-                </FormDescription>
+                {showDetailedDescriptions && (
+                  <FormDescription className="font-sans text-xs">
+                    选择自动创建的出口(s)实例将归属于哪个主控。
+                  </FormDescription>
+                )}
                 {autoCreateServer && otherApiConfigs.length === 0 && (
                   <FormDescription className="font-sans text-xs text-destructive pt-1">
                     自动创建出口(s)需要至少一个其他主控配置。
@@ -165,14 +171,16 @@ export function CreateInstanceFormFields({
                   {...field}
                 />
               </FormControl>
-               <FormDescription className="font-sans text-xs">
-                {instanceType === "出口(s)"
-                  ? "出口(s)在此地址监听控制连接。"
-                  : (autoCreateServer
-                      ? "自动创建的出口(s)将在此端口监听 (主机固定为 [::])。"
-                      : "入口(c)连接此出口(s)地址的控制通道。")}
-              </FormDescription>
-              {externalApiSuggestion && (
+               {showDetailedDescriptions && (
+                <FormDescription className="font-sans text-xs">
+                  {instanceType === "出口(s)"
+                    ? "出口(s)在此地址监听控制连接。"
+                    : (autoCreateServer
+                        ? "自动创建的出口(s)将在此端口监听 (主机固定为 [::])。"
+                        : "入口(c)连接此出口(s)地址的控制通道。")}
+                </FormDescription>
+               )}
+              {externalApiSuggestion && showDetailedDescriptions && (
                 <FormDescription className="text-xs text-amber-600 dark:text-amber-400 mt-1 font-sans">
                   <Info size={14} className="inline-block mr-1.5 align-text-bottom" />
                   {externalApiSuggestion}
@@ -218,13 +226,12 @@ export function CreateInstanceFormFields({
                 ))}
               </SelectContent>
             </Select>
-            {serverInstancesForDropdown && serverInstancesForDropdown.length === 0 && !isLoadingServerInstances && (
+            {showDetailedDescriptions && serverInstancesForDropdown && serverInstancesForDropdown.length === 0 && !isLoadingServerInstances && (
                 <FormDescription className="font-sans text-xs">在其他主控下无可用出口(s)实例供选择。</FormDescription>
             )}
           </FormItem>
         )}
 
-        {/* Target Address Field: Label and Description vary based on context */}
         {(instanceType === '出口(s)' || (instanceType === '入口(c)' && autoCreateServer)) && (
           <FormField
             control={form.control}
@@ -245,13 +252,15 @@ export function CreateInstanceFormFields({
                     {...field}
                   />
                 </FormControl>
-                <FormDescription className="font-sans text-xs">
-                  {instanceType === "出口(s)"
-                    ? "出口(s)业务数据的目标地址。"
-                    : (autoCreateServer
-                        ? "自动创建的出口(s)将业务流量转发到此目标。"
-                        : "入口(c)将流量转发到的本地服务地址。若留空，将使用 `[::]:(连接的出口(s)隧道端口+1)` 自动生成。")}
-                </FormDescription>
+                {showDetailedDescriptions && (
+                  <FormDescription className="font-sans text-xs">
+                    {instanceType === "出口(s)"
+                      ? "出口(s)业务数据的目标地址。"
+                      : (autoCreateServer
+                          ? "自动创建的出口(s)将业务流量转发到此目标。"
+                          : "入口(c)将流量转发到的本地服务地址。若留空，将使用 `[::]:(连接的出口(s)隧道端口+1)` 自动生成。")}
+                  </FormDescription>
+                )}
                 <FormMessage />
               </FormItem>
             )}
@@ -272,9 +281,11 @@ export function CreateInstanceFormFields({
                     {...field}
                   />
                 </FormControl>
-                <FormDescription className="font-sans text-xs">
-                  入口(c)将流量转发到的本地服务地址。若留空，将使用 `[::]:(连接的出口(s)隧道端口+1)` 自动生成。
-                </FormDescription>
+                {showDetailedDescriptions && (
+                  <FormDescription className="font-sans text-xs">
+                    入口(c)将流量转发到的本地服务地址。若留空，将使用 `[::]:(连接的出口(s)隧道端口+1)` 自动生成。
+                  </FormDescription>
+                )}
                 <FormMessage />
               </FormItem>
             )}
@@ -305,10 +316,12 @@ export function CreateInstanceFormFields({
                   <SelectItem value="event" className="font-sans">Event</SelectItem>
                 </SelectContent>
               </Select>
-              <FormDescription className="font-sans text-xs">
-                实例日志级别。
-                {autoCreateServer && instanceType === '入口(c)' && " 此设置亦用于自动创建的出口(s)。"}
-              </FormDescription>
+              {showDetailedDescriptions && (
+                <FormDescription className="font-sans text-xs">
+                  实例日志级别。
+                  {autoCreateServer && instanceType === '入口(c)' && " 此设置亦用于自动创建的出口(s)。"}
+                </FormDescription>
+              )}
               <FormMessage />
             </FormItem>
           )}
@@ -338,13 +351,15 @@ export function CreateInstanceFormFields({
                   <SelectItem value="2" className="font-sans">2: 自定义</SelectItem>
                 </SelectContent>
               </Select>
-              <FormDescription className="font-sans text-xs">
-                {instanceType === '出口(s)'
-                  ? "出口(s)数据通道的TLS加密模式。"
-                  : (autoCreateServer
-                      ? "用于自动创建的出口(s)的数据通道。"
-                      : "入口(c)连接目标出口(s)时的TLS行为。")}
-              </FormDescription>
+              {showDetailedDescriptions && (
+                <FormDescription className="font-sans text-xs">
+                  {instanceType === '出口(s)'
+                    ? "出口(s)数据通道的TLS加密模式。"
+                    : (autoCreateServer
+                        ? "用于自动创建的出口(s)的数据通道。"
+                        : "入口(c)连接目标出口(s)时的TLS行为。")}
+                </FormDescription>
+              )}
               <FormMessage />
             </FormItem>
           )}
@@ -365,9 +380,11 @@ export function CreateInstanceFormFields({
                       value={field.value || ""}
                     />
                   </FormControl>
-                   <FormDescription className="font-sans text-xs">
-                    {instanceType === '入口(c)' && autoCreateServer ? "用于自动创建的出口(s)。" : ""}
-                  </FormDescription>
+                   {showDetailedDescriptions && (
+                    <FormDescription className="font-sans text-xs">
+                      {instanceType === '入口(c)' && autoCreateServer ? "用于自动创建的出口(s)。" : ""}
+                    </FormDescription>
+                   )}
                   <FormMessage />
                 </FormItem>
               )}
@@ -386,9 +403,11 @@ export function CreateInstanceFormFields({
                       value={field.value || ""}
                     />
                   </FormControl>
-                   <FormDescription className="font-sans text-xs">
-                   {instanceType === '入口(c)' && autoCreateServer ? "用于自动创建的出口(s)。" : ""}
-                  </FormDescription>
+                   {showDetailedDescriptions && (
+                    <FormDescription className="font-sans text-xs">
+                    {instanceType === '入口(c)' && autoCreateServer ? "用于自动创建的出口(s)。" : ""}
+                    </FormDescription>
+                   )}
                   <FormMessage />
                 </FormItem>
               )}

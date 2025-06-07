@@ -14,6 +14,8 @@ import {
   DialogClose,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { createInstanceFormSchema, type CreateInstanceFormValues, createInstanceApiSchema } from '@/zod-schemas/nodepass';
 import type { CreateInstanceRequest, Instance } from '@/types/nodepass';
@@ -51,13 +53,14 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
   const queryClient = useQueryClient();
   const { apiConfigsList, getApiConfigById, getApiRootUrl, getToken } = useApiConfig();
   const [externalApiSuggestion, setExternalApiSuggestion] = useState<string | null>(null);
+  const [showDetailedDescriptions, setShowDetailedDescriptions] = useState(false);
 
   const form = useForm<CreateInstanceFormValues>({
     resolver: zodResolver(createInstanceFormSchema),
     defaultValues: {
       instanceType: '入口(c)',
       autoCreateServer: false,
-      serverApiId: undefined, // Start with undefined, let autoCreateServer effect populate
+      serverApiId: undefined, 
       tunnelAddress: '',
       targetAddress: '',
       logLevel: 'master',
@@ -69,7 +72,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
 
   const instanceType = form.watch("instanceType");
   const tlsModeWatch = form.watch("tlsMode");
-  const autoCreateServerWatched = form.watch("autoCreateServer"); // Watched state
+  const autoCreateServerWatched = form.watch("autoCreateServer"); 
   const tunnelAddressValue = form.watch("tunnelAddress");
 
   useEffect(() => {
@@ -86,6 +89,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
         keyPath: '',
       });
       setExternalApiSuggestion(null);
+      setShowDetailedDescriptions(false); // Reset toggle on open
     }
   }, [open, form]);
 
@@ -114,11 +118,6 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
       } else {
         form.setValue("serverApiId", undefined, { shouldValidate: true, shouldDirty: true });
       }
-    } else if (instanceType === "入口(c)" && !autoCreateServerWatched) {
-      // When autoCreateServer is unchecked, serverApiId is no longer directly relevant for selection
-      // We can clear it or leave it; current form structure hides it.
-      // To be safe, let's clear if it was previously set for an "other master".
-      // form.setValue("serverApiId", undefined); // This could be too disruptive.
     }
   }, [instanceType, autoCreateServerWatched, apiConfigsList, activeApiConfig, form]);
 
@@ -265,21 +264,18 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
 
     let clientInstanceUrl = '';
     let serverInstanceUrlForAutoCreate: string | null = null;
-
-    // formTunnelInput will contain just the port if autoCreateServer is true for 入口(c),
-    // otherwise it's a full host:port string.
+    
     const formTunnelInput = values.tunnelAddress; 
-    const formTargetAddress = values.targetAddress; // This is server's target if auto-creating, client's local if not.
+    const formTargetAddress = values.targetAddress; 
 
     if (values.instanceType === '入口(c)') {
         if (values.autoCreateServer) {
-            // --- 1. 准备【出口(s)】参数 ---
-            const serverListenHost_ForDefinition = '[::]'; // Host is fixed to [::]
-            const serverListenPort_ForDefinition = formTunnelInput; // This is just the port string
+            const serverListenPort_ForDefinition = formTunnelInput; 
 
             if (!/^[0-9]+$/.test(serverListenPort_ForDefinition)) {
                 toast({ title: "错误", description: "出口(s)隧道端口格式无效。", variant: "destructive" }); return;
             }
+            const serverListenHost_ForDefinition = '[::]'; 
             
             const serverActualTargetAddress = formTargetAddress; 
             if (!serverActualTargetAddress) {
@@ -299,7 +295,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
 
             serverInstanceUrlForAutoCreate = buildUrlFromFormValues({
                 instanceType: '出口(s)',
-                tunnelAddress: `${serverListenHost_ForDefinition}:${serverListenPort_ForDefinition}`, // Construct full address
+                tunnelAddress: `${serverListenHost_ForDefinition}:${serverListenPort_ForDefinition}`, 
                 targetAddress: serverActualTargetAddress,
                 logLevel: values.logLevel,
                 tlsMode: values.tlsMode,
@@ -308,13 +304,11 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
             }, serverMasterConfig);
             onLog?.(`准备自动创建出口(s)于 "${serverMasterConfig.name}": ${serverInstanceUrlForAutoCreate}`, 'INFO');
 
-            // --- 2. 准备【入口(c)】参数 ---
             const clientConnectToServerHost = extractHostname(serverMasterConfig.apiUrl); 
             if (!clientConnectToServerHost) {
                  toast({ title: "错误", description: `无法从出口(s)主控 "${serverMasterConfig.name}" API URL提取主机名。`, variant: "destructive" }); return;
             }
-            const clientConnectToServerPort = serverListenPort_ForDefinition; // Port is the same
-
+            const clientConnectToServerPort = serverListenPort_ForDefinition; 
             const clientConnectToFullTunnelAddr = `${formatHostForUrl(clientConnectToServerHost)}:${clientConnectToServerPort}`;
             
             const clientActualLocalForwardTargetAddress = `${formatHostForUrl('[::]')}:${(parseInt(serverListenPort_ForDefinition, 10) + 1).toString()}`;
@@ -327,8 +321,8 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
             }, activeApiConfig); 
             onLog?.(`准备创建入口(c)实例于 "${activeApiConfig.name}": ${clientInstanceUrl}`, 'INFO');
 
-        } else { // 入口(c) connecting to an existing server
-            const clientRemoteFullAddress = formTunnelInput; // This should be host:port
+        } else { 
+            const clientRemoteFullAddress = formTunnelInput; 
             const clientRemotePort = extractPort(clientRemoteFullAddress);
             if (!clientRemotePort) {
                 toast({ title: "错误", description: "无法从连接的出口(s)隧道地址提取端口。", variant: "destructive" }); return;
@@ -345,8 +339,8 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
             onLog?.(`准备创建入口(c)实例于 "${activeApiConfig.name}": ${clientInstanceUrl}`, 'INFO');
         }
 
-    } else { // 出口(s) instance
-        const serverListenFullAddress = formTunnelInput; // This is host:port
+    } else { 
+        const serverListenFullAddress = formTunnelInput; 
         const serverListenPort = extractPort(serverListenFullAddress);
          if (!serverListenPort) {
             toast({ title: "错误", description: "无法从出口(s)隧道监听地址中提取有效端口。", variant: "destructive" }); return;
@@ -359,7 +353,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
 
         clientInstanceUrl = buildUrlFromFormValues({
             instanceType: '出口(s)',
-            tunnelAddress: serverListenFullAddress, // Pass full address
+            tunnelAddress: serverListenFullAddress, 
             targetAddress: serverActualTargetAddress,
             logLevel: values.logLevel,
             tlsMode: values.tlsMode,
@@ -427,6 +421,16 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
             为当前主控 “{apiName || 'N/A'}” 配置新实例。
           </DialogDescription>
         </DialogHeader>
+
+        <div className="flex items-center space-x-2 my-3">
+          <Switch
+            id="toggle-descriptions"
+            checked={showDetailedDescriptions}
+            onCheckedChange={setShowDetailedDescriptions}
+            aria-label="切换详细参数说明"
+          />
+          <Label htmlFor="toggle-descriptions" className="font-sans text-sm cursor-pointer">显示参数说明</Label>
+        </div>
         
         <CreateInstanceFormFields
             form={form}
@@ -439,6 +443,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
             isLoadingServerInstances={isLoadingServerInstances}
             externalApiSuggestion={externalApiSuggestion}
             onSubmitHandler={onSubmitHandler}
+            showDetailedDescriptions={showDetailedDescriptions}
         />
 
         <DialogFooter className="pt-4 font-sans">
