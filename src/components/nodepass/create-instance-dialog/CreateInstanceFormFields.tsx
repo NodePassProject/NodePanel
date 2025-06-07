@@ -7,9 +7,8 @@ import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, For
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, Info, Network } from 'lucide-react';
+import { Loader2, Info, Network, Settings2, Share2 } from 'lucide-react';
 import type { CreateInstanceFormValues } from '@/zod-schemas/nodepass';
-// Instance type removed as not directly used here for type checking, form has it.
 import type { NamedApiConfig } from '@/hooks/use-api-key';
 import { MASTER_TLS_MODE_DISPLAY_MAP } from './constants';
 
@@ -96,7 +95,7 @@ export function CreateInstanceFormFields({
                   </FormLabel>
                   {showDetailedDescriptions && (
                     <FormDescription className="font-sans text-xs mt-0.5">
-                      在选定主控下创建相应出口(s)。入口(c)本地监听端口将使用出口(s)隧道监听端口+1。
+                      在选定主控下创建相应出口(s)。入口(c)本地转发端口将使用出口(s)监听端口+1。
                     </FormDescription>
                   )}
                 </div>
@@ -149,15 +148,16 @@ export function CreateInstanceFormFields({
           />
         )}
 
-
+        {/* Tunnel Address / Port Field */}
         <FormField
           control={form.control}
           name="tunnelAddress"
           render={({ field }) => (
             <FormItem className="space-y-1">
-              <FormLabel className="font-sans text-xs">
+              <FormLabel className="font-sans text-xs flex items-center">
+                 <Settings2 size={14} className="mr-1 text-muted-foreground" />
                 {instanceType === '出口(s)' ? '出口(s)隧道监听地址' :
-                 (autoCreateServer ? '出口(s)隧道端口' : '连接的出口(s)隧道地址')}
+                 (autoCreateServer ? '自动创建的出口(s)监听端口' : '连接的出口(s)隧道地址')}
               </FormLabel>
               <FormControl>
                 <Input
@@ -181,7 +181,7 @@ export function CreateInstanceFormFields({
                         : "入口(c)连接此出口(s)地址的控制通道。")}
                 </FormDescription>
                )}
-              {externalApiSuggestion && showDetailedDescriptions && (
+              {externalApiSuggestion && showDetailedDescriptions && instanceType === '入口(c)' && !autoCreateServer && (
                 <FormDescription className="text-xs text-amber-600 dark:text-amber-400 mt-0.5 font-sans">
                   <Info size={12} className="inline-block mr-1 align-text-bottom" />
                   {externalApiSuggestion}
@@ -191,6 +191,36 @@ export function CreateInstanceFormFields({
             </FormItem>
           )}
         />
+
+        {/* Server Target Address for Auto-Create Server */}
+        {instanceType === '入口(c)' && autoCreateServer && (
+          <FormField
+            control={form.control}
+            name="serverTargetAddressForAutoCreate"
+            render={({ field }) => (
+              <FormItem className="space-y-1">
+                <FormLabel className="font-sans text-xs flex items-center">
+                  <Share2 size={14} className="mr-1 text-muted-foreground" />
+                  自动创建的出口(s)目标地址 (业务数据)
+                </FormLabel>
+                <FormControl>
+                  <Input
+                    className="text-xs font-mono h-9"
+                    placeholder="例: 10.0.0.5:3000"
+                    {...field}
+                    value={field.value || ""} 
+                  />
+                </FormControl>
+                {showDetailedDescriptions && (
+                  <FormDescription className="font-sans text-xs mt-0.5">
+                    自动创建的出口(s)实例会将流量转发到此地址。
+                  </FormDescription>
+                )}
+                <FormMessage className="text-xs" />
+              </FormItem>
+            )}
+          />
+        )}
 
         {instanceType === '入口(c)' && !autoCreateServer && (
           <FormItem className="space-y-1">
@@ -233,12 +263,14 @@ export function CreateInstanceFormFields({
           </FormItem>
         )}
 
+        {/* Target Address Field (context-dependent) */}
         <FormField
           control={form.control}
           name="targetAddress"
           render={({ field }) => (
             <FormItem className="space-y-1">
-              <FormLabel className="font-sans text-xs">
+              <FormLabel className="font-sans text-xs flex items-center">
+                <Share2 size={14} className="mr-1 text-muted-foreground" />
                 {instanceType === '出口(s)' ? '出口(s)目标地址 (业务数据)' : '入口(c)本地转发端口 (可选)'}
               </FormLabel>
               <FormControl>
