@@ -32,7 +32,7 @@ import { MastersPalette } from './components/MastersPalette';
 import { PropertiesDisplayPanel } from './components/PropertiesDisplayPanel';
 import type { NamedApiConfig } from '@/hooks/use-api-key';
 import { useToast } from '@/hooks/use-toast';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'; // Card still used for structure if needed elsewhere
 import { Separator } from '@/components/ui/separator';
 
 
@@ -47,6 +47,7 @@ interface ActualTopologyFlowWithStateProps {
   onConnect: (params: Connection | Edge) => void;
   onSelectionChange: ({ nodes, edges }: { nodes: Node[]; edges: Edge[] }) => void;
   reactFlowWrapperRef: React.RefObject<HTMLDivElement>;
+  // Toolbar props
   onCenterView: (instance: ReturnType<typeof useReactFlow>) => void;
   onFormatLayout: () => void;
   onClearCanvas: () => void;
@@ -54,7 +55,6 @@ interface ActualTopologyFlowWithStateProps {
   canSubmit: boolean;
 }
 
-// Moved ActualTopologyFlowWithState outside TopologyPage
 const ActualTopologyFlowWithState: React.FC<ActualTopologyFlowWithStateProps> = ({
   nodes,
   edges,
@@ -102,8 +102,8 @@ const ActualTopologyFlowWithState: React.FC<ActualTopologyFlowWithStateProps> = 
         nodesConnectable={true}
         elementsSelectable={true}
         deleteKeyCode={['Backspace', 'Delete']}
-        panOnScroll={false}
-        zoomOnScroll={true}
+        panOnScroll={false} 
+        zoomOnScroll={true} 
         panOnDrag={[PanOnScrollMode.Free, PanOnScrollMode.Right, PanOnScrollMode.Left]}
         selectionOnDrag
         className="h-full w-full"
@@ -134,7 +134,6 @@ interface ToolbarWrapperComponentProps {
   canSubmit: boolean;
 }
 
-// Moved ToolbarWrapperComponent outside TopologyPage
 const ToolbarWrapperComponent: React.FC<ToolbarWrapperComponentProps> = ({
   onCenterView,
   onFormatLayout,
@@ -158,7 +157,6 @@ interface MastersPaletteWrapperComponentProps {
   onAddMasterNodeFromPalette: (config: NamedApiConfig, instance: ReturnType<typeof useReactFlow>) => void;
 }
 
-// Moved MastersPaletteWrapperComponent outside TopologyPage
 const MastersPaletteWrapperComponent: React.FC<MastersPaletteWrapperComponentProps> = ({
   onAddMasterNodeFromPalette,
 }) => {
@@ -298,32 +296,37 @@ export default function TopologyPage() {
     <AppLayout>
       <ReactFlowProvider> 
         <div className="flex flex-col flex-grow h-full">          
-          <div className="flex flex-row flex-grow overflow-hidden"> 
+          <div className="flex flex-row flex-grow h-full overflow-hidden"> 
             
-            <div className="w-60 flex-shrink-0 flex flex-col bg-muted/30 border-r p-2 space-y-2">
-              <Card className="flex flex-col h-1/2 rounded-lg border shadow-none">
-                <CardHeader className="p-3 border-b">
-                  <CardTitle className="text-base font-semibold font-title">主控列表</CardTitle>
-                  <CardDescription className="text-xs text-muted-foreground font-sans">点击主控添加到画布。</CardDescription>
-                </CardHeader>
-                <CardContent className="flex-grow overflow-y-auto p-1">
-                  <MastersPaletteWrapperComponent onAddMasterNodeFromPalette={handleAddMasterNodeFromPalette} />
-                </CardContent>
-              </Card>
+            {/* Left Sidebar Column with p-2 for gutter */}
+            <div className="w-60 flex-shrink-0 p-2">
+              {/* Single Unified Panel for Left Sidebar */}
+              <div className="flex flex-col h-full bg-background rounded-lg shadow-md border">
+                {/* Masters Palette Section */}
+                <div className="flex flex-col h-1/2 p-3">
+                  <h2 className="text-base font-semibold font-title mb-1">主控列表</h2>
+                  <p className="text-xs text-muted-foreground font-sans mb-2">点击主控添加到画布。</p>
+                  <div className="flex-grow overflow-y-auto">
+                    <MastersPaletteWrapperComponent onAddMasterNodeFromPalette={handleAddMasterNodeFromPalette} />
+                  </div>
+                </div>
 
-              <Card className="flex flex-col flex-grow min-h-0 rounded-lg border shadow-none"> 
-                <CardHeader className="p-3 border-b">
-                  <CardTitle className="text-base font-semibold font-title">节点属性</CardTitle>
-                  <CardDescription className="text-xs text-muted-foreground font-sans">
+                <Separator className="mx-3 my-0" /> 
+
+                {/* Node Properties Section */}
+                <div className="flex flex-col flex-grow min-h-0 p-3">
+                  <h2 className="text-base font-semibold font-title mb-1">节点属性</h2>
+                  <p className="text-xs text-muted-foreground font-sans mb-2">
                     {selectedNode ? `选中: ${selectedNode.data.label || selectedNode.id}` : '点击节点查看属性。'}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="flex-grow overflow-y-auto p-1">
-                  <PropertiesDisplayPanel selectedNode={selectedNode} />
-                </CardContent>
-              </Card>
+                  </p>
+                  <div className="flex-grow overflow-y-auto">
+                    <PropertiesDisplayPanel selectedNode={selectedNode} />
+                  </div>
+                </div>
+              </div>
             </div>
 
+            {/* Right Canvas Area Column with p-2 for gutter */}
             <div className="flex-grow flex flex-col overflow-hidden p-2">
               <div className="flex-grow relative">
                 <div className="absolute inset-0">
@@ -350,4 +353,3 @@ export default function TopologyPage() {
     </AppLayout>
   );
 }
-
