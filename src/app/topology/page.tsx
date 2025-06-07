@@ -27,7 +27,7 @@ import { PropertiesDisplayPanel } from './components/PropertiesDisplayPanel';
 import type { NamedApiConfig } from '@/hooks/use-api-key';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
-import { Settings, ListTree, Info as InfoIcon, PlusCircle, Maximize, Minimize } from 'lucide-react';
+import { Settings, ListTree, Info as InfoIcon } from 'lucide-react';
 
 import {
   Popover,
@@ -42,7 +42,6 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
-import { Card } from '@/components/ui/card';
 
 const initialNodes: Node[] = [];
 const initialEdges: Edge[] = [];
@@ -70,11 +69,15 @@ function TopologyFlow() {
     const newCounter = nodeIdCounter + 1;
     setNodeIdCounter(newCounter);
     const newNodeId = `node-${newCounter}`;
-    const newNodeData = { label: `新节点 ${newCounter}` };
+    const newNodeData = { label: `New Node ${newCounter}` };
     
     const viewport = reactFlowInstance.getViewport();
-    const posX = viewport.x + (viewport.width && viewport.width > 0 ? Math.random() * viewport.width * 0.5 + 50 : 100);
-    const posY = viewport.y + (viewport.height && viewport.height > 0 ? Math.random() * viewport.height * 0.5 + 50 : 100);
+    const fallbackX = 100;
+    const fallbackY = 100;
+
+    const posX = viewport.x + (viewport.width && viewport.width > 0 ? Math.random() * viewport.width * 0.2 + 50 : fallbackX);
+    const posY = viewport.y + (viewport.height && viewport.height > 0 ? Math.random() * viewport.height * 0.2 + 50 : fallbackY);
+
 
     const newNode: Node = {
       id: newNodeId,
@@ -85,7 +88,7 @@ function TopologyFlow() {
       targetPosition: Position.Left,
     };
     setNodes((nds) => nds.concat(newNode));
-    toast({ title: "节点已添加", description: `添加了节点 "${newNodeData.label}".` });
+    toast({ title: "Node Added", description: `Added node "${newNodeData.label}".` });
     setIsToolbarPopoverOpen(false);
   }, [nodeIdCounter, setNodes, setNodeIdCounter, reactFlowInstance, toast]);
 
@@ -95,14 +98,17 @@ function TopologyFlow() {
     const newNodeId = `master-node-${masterConfig.id}-${newCounter}`;
 
     const viewport = reactFlowInstance.getViewport();
-    const posX = viewport.x + (viewport.width && viewport.width > 0 ? Math.random() * viewport.width * 0.5 + 20 : 80);
-    const posY = viewport.y + (viewport.height && viewport.height > 0 ? Math.random() * viewport.height * 0.5 + 20 : 80);
+    const fallbackX = 80;
+    const fallbackY = 80;
+    
+    const posX = viewport.x + (viewport.width && viewport.width > 0 ? Math.random() * viewport.width * 0.2 + 20 : fallbackX);
+    const posY = viewport.y + (viewport.height && viewport.height > 0 ? Math.random() * viewport.height * 0.2 + 20 : fallbackY);
     
     const newNode: Node = {
       id: newNodeId,
       type: 'default', 
       data: {
-        label: `主控: ${masterConfig.name}`,
+        label: `Master: ${masterConfig.name}`,
         nodeType: 'masterRepresentation', 
         masterId: masterConfig.id,
         masterName: masterConfig.name,
@@ -113,7 +119,7 @@ function TopologyFlow() {
       targetPosition: Position.Left,
     };
     setNodes((nds) => nds.concat(newNode));
-    toast({ title: "主控节点已添加", description: `添加主控 "${masterConfig.name}" 到画布.` });
+    toast({ title: "Master Node Added", description: `Added master "${masterConfig.name}" to canvas.` });
     setIsMastersSheetOpen(false); 
   }, [nodeIdCounter, setNodes, setNodeIdCounter, toast, reactFlowInstance]);
 
@@ -122,7 +128,7 @@ function TopologyFlow() {
     setEdges([]);
     setNodeIdCounter(0);
     setSelectedNode(null);
-    toast({ title: "画布已清空" });
+    toast({ title: "Canvas Cleared" });
     setIsToolbarPopoverOpen(false); 
   }, [setNodes, setEdges, setNodeIdCounter, toast]);
 
@@ -131,24 +137,24 @@ function TopologyFlow() {
     if (masterNodes.length > 0) {
       const firstMasterNode = masterNodes[0];
       reactFlowInstance.fitView({ nodes: [{ id: firstMasterNode.id }], duration: 300, padding: 0.3 });
-      toast({ title: "视图已居中", description: `聚焦于主控 "${firstMasterNode.data.label}".` });
+      toast({ title: "View Centered", description: `Focused on master "${firstMasterNode.data.label}".` });
     } else if (nodes.length > 0) {
       reactFlowInstance.fitView({ duration: 300, padding: 0.2 }); 
-      toast({ title: "视图已适应所有节点" });
+      toast({ title: "View Fitted to Nodes" });
     } else {
-      toast({ title: "画布为空", description: "没有可居中的节点.", variant: "destructive" });
+      toast({ title: "Canvas Empty", description: "No nodes to center.", variant: "destructive" });
     }
     setIsToolbarPopoverOpen(false); 
   }, [reactFlowInstance, nodes, toast]);
 
   const handleFormatLayout = useCallback(() => {
-    toast({ title: "格式化布局", description: "此功能待实现." });
+    toast({ title: "Format Layout", description: "This feature is pending implementation." });
     console.log("Format Layout button clicked. Nodes:", nodes, "Edges:", edges);
     setIsToolbarPopoverOpen(false); 
   }, [nodes, edges, toast]);
 
   const handleSubmitTopology = useCallback(() => {
-    toast({ title: "提交拓扑", description: "此功能待实现." });
+    toast({ title: "Submit Topology", description: "This feature is pending implementation." });
     console.log("Submit Topology button clicked. Nodes:", nodes, "Edges:", edges);
     setIsToolbarPopoverOpen(false); 
   }, [nodes, edges, toast]);
@@ -156,11 +162,8 @@ function TopologyFlow() {
   const onSelectionChange = useCallback(({ nodes: selectedNodesList }: { nodes: Node[], edges: Edge[] }) => {
     if (selectedNodesList.length === 1) {
       setSelectedNode(selectedNodesList[0]);
-      // Potentially auto-open properties sheet if desired, and it's not already open due to this selection
-      // if (!isPropertiesSheetOpen) { setIsPropertiesSheetOpen(true); } 
     } else {
       setSelectedNode(null);
-       // Optionally close properties sheet if no node or multiple nodes are selected
       if (isPropertiesSheetOpen && selectedNodesList.length === 0) {
          setIsPropertiesSheetOpen(false);
       }
@@ -177,7 +180,6 @@ function TopologyFlow() {
   const memoizedControls = useMemo(() => <Controls style={{ bottom: 10, right: 10 }} />, []);
   const memoizedMiniMap = useMemo(() => <MiniMap nodeStrokeWidth={3} zoomable pannable style={{ bottom: 10, left: 10, backgroundColor: 'hsl(var(--background)/0.8)'}} className="rounded-md shadow-md border border-border" />, []);
   const memoizedBackground = useMemo(() => <Background variant="dots" gap={16} size={1} />, []);
-
 
   return (
     <div className="h-full w-full relative bg-card rounded-lg shadow-md border border-border overflow-hidden">
@@ -210,7 +212,7 @@ function TopologyFlow() {
               variant="ghost"
               size="icon"
               className="h-8 w-8 hover:bg-accent/50"
-              aria-label="打开工具栏"
+              aria-label="Open toolbar"
             >
               <Settings className="h-4 w-4" />
             </Button>
@@ -233,16 +235,16 @@ function TopologyFlow() {
               variant="ghost"
               size="icon"
               className="h-8 w-8 hover:bg-accent/50"
-              aria-label="打开主控列表"
+              aria-label="Open masters list"
             >
               <ListTree className="h-4 w-4" />
             </Button>
           </SheetTrigger>
           <SheetContent side="left" className="w-72 p-0 flex flex-col">
             <SheetHeader className="p-4 border-b">
-              <SheetTitle className="font-title text-base">主控列表</SheetTitle>
+              <SheetTitle className="font-title text-base">Masters List</SheetTitle>
               <SheetDescription className="font-sans text-xs">
-                点击主控将其表示添加到画布。
+                Click a master to add its representation to the canvas.
               </SheetDescription>
             </SheetHeader>
             <div className="p-4 flex-grow overflow-y-auto">
@@ -258,7 +260,7 @@ function TopologyFlow() {
                 variant="ghost"
                 size="icon"
                 className="h-8 w-8 hover:bg-accent/50"
-                aria-label="打开属性面板"
+                aria-label="Open properties panel"
               >
                 <InfoIcon className="h-4 w-4" />
               </Button>
@@ -276,10 +278,12 @@ function TopologyFlow() {
 export default function TopologyPageContainer() {
   return (
     <AppLayout>
-      <div className="flex flex-col flex-grow p-5"> 
-        <ReactFlowProvider>
-          <TopologyFlow />
-        </ReactFlowProvider>
+      <div className="flex flex-col flex-grow"> {/* Parent grows to fill AppLayout's main */}
+        <div className="flex-grow p-5 flex"> {/* This child handles padding and also grows, allowing TopologyFlow to use h-full */}
+          <ReactFlowProvider>
+            <TopologyFlow /> {/* TopologyFlow's root div will use h-full w-full */}
+          </ReactFlowProvider>
+        </div>
       </div>
     </AppLayout>
   );
