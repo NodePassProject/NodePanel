@@ -247,43 +247,52 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
           {apiName ? `${apiName} (API 密钥)` : '主控 API 密钥'}
         </span>
       );
-    } else if (parsedUrl) {
-      let textToShow = "N/A";
-      if (instance.type === 'server') {
-        textToShow = parsedUrl.targetAddress || "N/A";
-      } else if (instance.type === 'client' && activeApiConfig?.apiUrl) {
-          const clientManagingMasterHost = extractHostname(activeApiConfig.apiUrl);
-          let clientLocalForwardPort: string | null = null;
+    } else if (instance.type === 'server' && parsedUrl) {
+        displayTargetTunnelContent = (
+           <span
+            className="font-mono text-xs cursor-pointer hover:text-primary transition-colors duration-150"
+            title={parsedUrl.targetAddress ? `点击复制: ${parsedUrl.targetAddress}` : "N/A"}
+            onClick={(e) => {
+                e.stopPropagation();
+                if (parsedUrl.targetAddress) {
+                handleCopyToClipboard(parsedUrl.targetAddress, "出口(s)目标地址");
+                }
+            }}
+            >
+            {parsedUrl.targetAddress || "N/A"}
+            </span>
+        );
+    } else if (instance.type === 'client' && parsedUrl && activeApiConfig) {
+        const clientManagingMasterHost = extractHostname(activeApiConfig.apiUrl);
+        let clientLocalForwardPort: string | null = null;
 
-          if (parsedUrl.targetAddress) { 
+        if (parsedUrl.targetAddress) { 
             clientLocalForwardPort = extractPort(parsedUrl.targetAddress);
-          }
-          if (!clientLocalForwardPort && parsedUrl.tunnelAddress) {
+        }
+        if (!clientLocalForwardPort && parsedUrl.tunnelAddress) {
             const serverTunnelPort = extractPort(parsedUrl.tunnelAddress);
             if (serverTunnelPort && /^\d+$/.test(serverTunnelPort)) {
-              clientLocalForwardPort = (parseInt(serverTunnelPort, 10) + 1).toString();
+                clientLocalForwardPort = (parseInt(serverTunnelPort, 10) + 1).toString();
             }
-          }
-          if (clientManagingMasterHost && clientLocalForwardPort) {
-            textToShow = `${formatHostForUrl(clientManagingMasterHost)}:${clientLocalForwardPort}`;
-          } else {
-            textToShow = "N/A (信息不完整)";
-          }
-      }
-      displayTargetTunnelContent = (
-        <span
-          className="font-mono text-xs cursor-pointer hover:text-primary transition-colors duration-150"
-          title={textToShow !== "N/A" && textToShow !== "N/A (信息不完整)" ? `点击复制: ${textToShow}` : ""}
-          onClick={(e) => {
-            e.stopPropagation();
-            if (textToShow !== "N/A" && textToShow !== "N/A (信息不完整)") {
-              handleCopyToClipboard(textToShow, "目标/隧道地址");
-            }
-          }}
-        >
-          {textToShow}
-        </span>
-      );
+        }
+
+        if (clientManagingMasterHost && clientLocalForwardPort) {
+            const fullClientForwardAddress = `${formatHostForUrl(clientManagingMasterHost)}:${clientLocalForwardPort}`;
+            displayTargetTunnelContent = (
+                <span
+                className="font-mono text-xs cursor-pointer hover:text-primary transition-colors duration-150"
+                title={`点击复制: ${fullClientForwardAddress}`}
+                onClick={(e) => {
+                    e.stopPropagation();
+                    handleCopyToClipboard(fullClientForwardAddress, "入口(c)本地转发");
+                }}
+                >
+                {fullClientForwardAddress}
+                </span>
+            );
+        } else {
+            displayTargetTunnelContent = <span className="font-mono text-xs text-muted-foreground">N/A (信息不完整)</span>;
+        }
     }
 
 
@@ -429,16 +438,18 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
           <CardDescription className="font-sans">管理和监控 NodePass 实例。</CardDescription>
         </div>
         <div className="flex items-center gap-2 mt-4 sm:mt-0 w-full sm:w-auto">
-          <Button
-            variant="destructive"
-            size="sm"
-            onClick={() => setIsBulkDeleteDialogOpen(true)}
-            disabled={selectedInstanceIds.size === 0 || isBulkDeleting}
-            className="font-sans"
-          >
-            <Trash2 className="mr-2 h-4 w-4" />
-            删除选中 ({selectedInstanceIds.size})
-          </Button>
+          {selectedInstanceIds.size > 1 && (
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => setIsBulkDeleteDialogOpen(true)}
+              disabled={isBulkDeleting}
+              className="font-sans"
+            >
+              <Trash2 className="mr-2 h-4 w-4" />
+              删除选中 ({selectedInstanceIds.size})
+            </Button>
+          )}
           <div className="relative w-full sm:w-64">
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input
@@ -521,8 +532,8 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
         }
         open={isBulkDeleteDialogOpen}
         onOpenChange={setIsBulkDeleteDialogOpen}
-        onConfirmDelete={handleConfirmBulkDelete}
         isLoading={isBulkDeleting}
+        onConfirmDelete={handleConfirmBulkDelete}
       />
     </Card>
   );
