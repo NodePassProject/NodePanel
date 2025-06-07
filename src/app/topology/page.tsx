@@ -55,21 +55,22 @@ export default function TopologyPage() {
     setNodeIdCounter(newCounter);
     const newNodeId = `master-node-${masterConfig.id}-${newCounter}`;
 
-    const { x: viewX, y: viewY, zoom } = reactFlowInstanceRef.getViewport();
-    // Calculate center of the current viewport
+    const { x: viewX, y: viewY, zoom: rawZoom } = reactFlowInstanceRef.getViewport();
+    const zoom = rawZoom === 0 ? 1 : rawZoom; // Safeguard against zoom being 0
+    
     const canvasWidth = reactFlowInstanceRef.width || 0;
     const canvasHeight = reactFlowInstanceRef.height || 0;
     
-    const positionX = viewX + (canvasWidth / (2 * zoom)) + (Math.random() * 100 - 50); // Place near center with some randomness
+    const positionX = viewX + (canvasWidth / (2 * zoom)) + (Math.random() * 100 - 50); 
     const positionY = viewY + (canvasHeight / (2 * zoom)) + (Math.random() * 100 - 50);
 
 
     const newNode: Node = {
       id: newNodeId,
-      type: 'default', // Default type, can be customized later
+      type: 'default', 
       data: {
         label: `主控: ${masterConfig.name}`,
-        nodeType: 'masterRepresentation', // Custom type identifier
+        nodeType: 'masterRepresentation', 
         masterId: masterConfig.id,
         masterName: masterConfig.name,
         apiUrl: masterConfig.apiUrl,
@@ -77,13 +78,13 @@ export default function TopologyPage() {
         defaultTlsMode: masterConfig.masterDefaultTlsMode,
       },
       position: { x: positionX, y: positionY },
-      style: { // Example styling for master nodes
+      style: { 
         borderColor: 'hsl(var(--primary))',
         borderWidth: 2,
         background: 'hsl(var(--primary)/10)',
-        borderRadius: '0.375rem', // Equivalent to rounded-md
+        borderRadius: '0.375rem', 
         padding: '8px 12px',
-        fontSize: '0.75rem', // text-xs
+        fontSize: '0.75rem', 
       },
       sourcePosition: Position.Right,
       targetPosition: Position.Left,
@@ -129,7 +130,7 @@ export default function TopologyPage() {
     );
 
     const miniMapStyle = useMemo(() => ({
-      backgroundColor: resolvedTheme === 'dark' ? 'hsl(var(--popover))' : 'hsl(var(--card))', // Theme-aware background
+      backgroundColor: resolvedTheme === 'dark' ? 'hsl(var(--popover))' : 'hsl(var(--card))',
       border: `1px solid hsl(var(--border))`,
       borderRadius: '0.375rem',
     }), [resolvedTheme]);
@@ -175,18 +176,19 @@ export default function TopologyPage() {
             const newNodeId = `node-${newCounter}`;
             const newNodeData = { label: `新节点 ${newCounter}` };
 
-            const { x: viewX, y: viewY, zoom } = reactFlowInstance.getViewport();
-            const canvasWidth = reactFlowInstance.width || 0; // Ensure these are not undefined
+            const { x: viewX, y: viewY, zoom: rawZoom } = reactFlowInstance.getViewport();
+            const zoom = rawZoom === 0 ? 1 : rawZoom; // Safeguard
+            
+            const canvasWidth = reactFlowInstance.width || 0; 
             const canvasHeight = reactFlowInstance.height || 0;
             
-            // Place near the center of the current view, or fallback if dimensions are zero
             const positionX = viewX + (canvasWidth > 0 ? (canvasWidth / (2 * zoom)) : 100) + (Math.random() * 50 - 25);
             const positionY = viewY + (canvasHeight > 0 ? (canvasHeight / (2 * zoom)) : 100) + (Math.random() * 50 - 25);
 
 
             const newNodeToAdd: Node = {
               id: newNodeId,
-              type: 'default', // Use 'default' or a custom node type
+              type: 'default', 
               data: newNodeData,
               position: { x: positionX, y: positionY },
               sourcePosition: Position.Right,
@@ -211,9 +213,11 @@ export default function TopologyPage() {
 
   return (
     <AppLayout>
-      <ReactFlowProvider> {/* Provider moved here */}
-        <div className="flex flex-col flex-grow h-full">
-          <div className="flex flex-row flex-grow h-full overflow-hidden">
+      {/* Root div for TopologyPage content, flex-grow ensures it takes available space from AppLayout's main */}
+      <div className="flex flex-col flex-grow"> 
+        <ReactFlowProvider>
+           {/* This div establishes the main horizontal layout: Left Sidebar | Right Content Area */}
+          <div className="flex flex-row flex-grow overflow-hidden">
             {/* Left Sidebar */}
             <div className="w-72 flex-shrink-0 flex flex-col border-r bg-muted/30 shadow-sm">
               <Card className="flex flex-col h-1/2 m-2 shadow-md rounded-lg">
@@ -228,7 +232,7 @@ export default function TopologyPage() {
 
               <Separator />
 
-              <Card className="flex flex-col flex-grow m-2 shadow-md rounded-lg min-h-0"> {/* flex-grow and min-h-0 for properties panel */}
+              <Card className="flex flex-col flex-grow m-2 shadow-md rounded-lg min-h-0">
                 <CardHeader className="p-3 border-b">
                   <CardTitle className="text-base font-semibold font-title">节点属性</CardTitle>
                   <CardDescription className="text-xs text-muted-foreground font-sans">
@@ -249,15 +253,19 @@ export default function TopologyPage() {
                 </div>
 
                 {/* Canvas Area with Bottom Margin */}
-                <div className="flex-grow relative pb-5"> {/* pb-5 for 20px bottom margin */}
+                {/* flex-grow allows this area to take up remaining vertical space */}
+                {/* relative is for absolute positioning of the canvas itself */}
+                {/* pb-5 provides the 20px bottom margin */}
+                <div className="flex-grow relative pb-5"> 
+                  {/* This div will be filled by ReactFlow */}
                   <div className="absolute inset-0">
                     <ActualTopologyFlowWithState />
                   </div>
                 </div>
             </div>
           </div>
-        </div>
-      </ReactFlowProvider>
+        </ReactFlowProvider>
+      </div>
     </AppLayout>
   );
 }
