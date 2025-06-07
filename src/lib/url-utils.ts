@@ -130,3 +130,11 @@ export function isWildcardHostname(host: string | null | undefined): boolean {
     return lowerHost === '0.0.0.0' || lowerHost === '[::]' || lowerHost === '::';
 }
 
+export function formatHostForDisplay(host: string | null | undefined): string {
+  if (!host) return '未提供主机'; // Placeholder for display purposes
+  // If it's an IPv6 address and not bracketed, bracket it for host:port construction.
+  if (host.includes(':') && !host.startsWith('[')) {
+    return `[${host}]`;
+  }
+  return host; // Return IPv4, FQDN, or already bracketed IPv6 as is.
+}
