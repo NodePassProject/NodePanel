@@ -90,8 +90,8 @@ const ActualTopologyFlowWithState: React.FC<ActualTopologyFlowWithStateProps> = 
         nodesConnectable={true}
         elementsSelectable={true}
         deleteKeyCode={['Backspace', 'Delete']}
-        panOnScroll={false} // Ensure mouse wheel pans, not scrolls page
-        zoomOnScroll={true}  // Enable mouse wheel zoom
+        panOnScroll={false} 
+        zoomOnScroll={true}  
         selectionOnDrag
         panOnDrag={[PanOnScrollMode.Free, PanOnScrollMode.Right, PanOnScrollMode.Left]}
         className="h-full w-full"
@@ -106,7 +106,7 @@ const ActualTopologyFlowWithState: React.FC<ActualTopologyFlowWithStateProps> = 
 };
 
 interface ToolbarWrapperComponentProps {
-  onAddGenericNode: (instance: ReturnType<typeof useReactFlow>) => void;
+  // onAddGenericNode removed
   onCenterView: (instance: ReturnType<typeof useReactFlow>) => void;
   onFormatLayout: () => void;
   onClearCanvas: () => void;
@@ -115,7 +115,7 @@ interface ToolbarWrapperComponentProps {
 }
 
 const ToolbarWrapperComponent: React.FC<ToolbarWrapperComponentProps> = ({
-  onAddGenericNode,
+  // onAddGenericNode removed
   onCenterView,
   onFormatLayout,
   onClearCanvas,
@@ -125,7 +125,7 @@ const ToolbarWrapperComponent: React.FC<ToolbarWrapperComponentProps> = ({
   const reactFlowInstance = useReactFlow();
   return (
     <TopologyToolbar
-      onAddNode={() => onAddGenericNode(reactFlowInstance)}
+      // onAddNode removed
       onCenterView={() => onCenterView(reactFlowInstance)}
       onFormatLayout={onFormatLayout}
       onClearCanvas={onClearCanvas}
@@ -148,8 +148,8 @@ const MastersPaletteWrapperComponent: React.FC<MastersPaletteWrapperComponentPro
 
 
 export default function TopologyPage() {
-  const [nodes, setNodesInternal, onNodesChangeInternalWrapped] = useNodesState(initialNodes);
-  const [edges, setEdgesInternal, onEdgesChangeInternalWrapped] = useEdgesState(initialEdges);
+  const [nodesInternal, setNodesInternal, onNodesChangeInternalWrapped] = useNodesState(initialNodes);
+  const [edgesInternal, setEdgesInternal, onEdgesChangeInternalWrapped] = useEdgesState(initialEdges);
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
   const [nodeIdCounter, setNodeIdCounter] = useState(0);
   const { toast } = useToast();
@@ -192,10 +192,9 @@ export default function TopologyPage() {
       if (bounds.width > 0 && bounds.height > 0) {
         const screenCenter = { x: bounds.width / 2, y: bounds.height / 2 };
         position = reactFlowInstance.screenToFlowPosition(screenCenter);
-        position.x += (Math.random() * 100 - 50); // Add some randomness to avoid perfect overlap
+        position.x += (Math.random() * 100 - 50); 
         position.y += (Math.random() * 100 - 50);
       } else {
-         // Fallback if bounds are not ready (e.g. initial render)
         const currentViewport = reactFlowInstance.getViewport();
         position = {
             x: -currentViewport.x / currentViewport.zoom + 150 + (Math.random() * 100 - 50),
@@ -203,7 +202,6 @@ export default function TopologyPage() {
         };
       }
     } else {
-      // Fallback using viewport center if wrapperRef is not available or bounds are 0
       const currentViewport = reactFlowInstance.getViewport();
       position = {
           x: -currentViewport.x / currentViewport.zoom + 150 + (Math.random() * 100 - 50),
@@ -221,23 +219,15 @@ export default function TopologyPage() {
     toast({ title: "节点已添加", description: `已添加节点 "${finalNewNode.data.label || newNodeId}"。` });
   }, [nodeIdCounter, setNodesInternal, toast]);
 
-  const handleAddGenericNode = useCallback((instance: ReturnType<typeof useReactFlow>) => {
-    const genericNodeData: Omit<Node, 'id' | 'position'> = {
-      type: 'default',
-      data: { label: `新节点 ${nodeIdCounter + 1}` },
-      sourcePosition: Position.Right,
-      targetPosition: Position.Left,
-    };
-    addNodeToCanvas(genericNodeData, instance);
-  }, [addNodeToCanvas, nodeIdCounter]);
+  // handleAddGenericNode is removed as the button is removed
 
   const handleAddMasterNodeFromPalette = useCallback((masterConfig: NamedApiConfig, rfInstance: ReturnType<typeof useReactFlow>) => {
     const masterNodeData: Omit<Node, 'id' | 'position'> = {
       type: 'default',
       data: {
         label: `主控: ${masterConfig.name}`,
-        nodeType: 'masterRepresentation', // Custom property for identification
-        masterId: masterConfig.id,       // Store the master's ID
+        nodeType: 'masterRepresentation', 
+        masterId: masterConfig.id,       
         masterName: masterConfig.name,
         apiUrl: masterConfig.apiUrl,
         defaultLogLevel: masterConfig.masterDefaultLogLevel,
@@ -268,9 +258,9 @@ export default function TopologyPage() {
 
   const handleCenterViewCallback = useCallback((instance: ReturnType<typeof useReactFlow> | null) => {
     if (!instance) return;
-    if (nodes.length > 0) instance.fitView({ duration: 300, padding: 0.2 });
+    if (nodesInternal.length > 0) instance.fitView({ duration: 300, padding: 0.2 });
     else toast({ title: "画布为空", description: "无法居中空画布。" });
-  }, [nodes, toast]);
+  }, [nodesInternal, toast]);
 
   const handleFormatLayoutCallback = useCallback(() => {
     toast({ title: "格式化布局", description: "此功能待实现。" });
@@ -282,8 +272,9 @@ export default function TopologyPage() {
 
   return (
     <AppLayout>
-      <ReactFlowProvider>
+      <ReactFlowProvider> {/* Provider wraps the entire layout for context availability */}
         <div className="flex flex-row flex-grow h-full overflow-hidden">
+          {/* Left Sidebar */}
           <div className="w-72 flex-shrink-0 flex flex-col border-r bg-muted/30 shadow-sm">
             <Card className="flex flex-col h-1/2 m-2 shadow-md rounded-lg">
               <CardHeader className="p-3 border-b">
@@ -295,7 +286,7 @@ export default function TopologyPage() {
               </CardContent>
             </Card>
             <Separator />
-            <Card className="flex flex-col flex-grow m-2 shadow-md rounded-lg min-h-0">
+            <Card className="flex flex-col flex-grow m-2 shadow-md rounded-lg min-h-0"> {/* min-h-0 is important for flex-grow in column */}
               <CardHeader className="p-3 border-b">
                 <CardTitle className="text-base font-semibold font-title">节点属性</CardTitle>
                 <CardDescription className="text-xs text-muted-foreground font-sans">
@@ -308,22 +299,25 @@ export default function TopologyPage() {
             </Card>
           </div>
 
+          {/* Right Area (Toolbar + Canvas) */}
           <div className="flex-grow flex flex-col overflow-hidden">
-            <div className="flex-shrink-0 p-2 border-b bg-background shadow-sm">
+            {/* Top Toolbar Area - Right Aligned */}
+            <div className="flex-shrink-0 p-2 border-b bg-background shadow-sm flex justify-end">
               <ToolbarWrapperComponent
-                onAddGenericNode={handleAddGenericNode}
+                // onAddGenericNode removed
                 onCenterView={handleCenterViewCallback}
                 onFormatLayout={handleFormatLayoutCallback}
                 onClearCanvas={handleClearCanvasCallback}
                 onSubmitTopology={handleSubmitTopologyCallback}
-                canSubmit={nodes.length > 0}
+                canSubmit={nodesInternal.length > 0}
               />
             </div>
+            {/* Canvas Area */}
             <div className="flex-grow relative pb-5"> {/* pb-5 provides 20px bottom margin */}
               <div className="absolute inset-0">
                 <ActualTopologyFlowWithState
-                  nodes={nodes}
-                  edges={edges}
+                  nodes={nodesInternal}
+                  edges={edgesInternal}
                   onNodesChange={onNodesChange}
                   onEdgesChange={onEdgesChange}
                   onConnect={onConnect}
