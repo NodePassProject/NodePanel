@@ -22,27 +22,29 @@ interface EditTopologyNodeDialogProps {
   onSave: (nodeId: string, updatedData: Partial<CustomNodeData>) => void;
 }
 
+const hostPortRegex = /^(?:\[[0-9a-fA-F:]+\]|[0-9a-zA-Z.-]+):[0-9]+$/;
+const hostPortErrorMsg = "地址格式无效 (例: host:port 或 [ipv6]:port)。";
+
 const baseSchema = z.object({
   label: z.string().min(1, "标签不能为空。"),
 });
 
 const masterSchema = baseSchema.extend({
   masterSubRoleM: z.enum(["primary", "client-role", "server-role", "generic"]),
-  targetAddressM: z.optional(z.string().regex(/^(?:\[[0-9a-fA-F:]+\]|[0-9a-zA-Z.-]+):[0-9]+$/, "本地服务地址格式无效 (例: host:port 或 [ipv6]:port)。")), // For client-role: local service address
+  targetAddressM: z.optional(z.string().regex(hostPortRegex, hostPortErrorMsg)), 
   logLevelM: z.enum(["master", "debug", "info", "warn", "error", "event"]),
-  tlsModeM: z.enum(["master", "0", "1", "2"]), // For server-role or client-role (for its server part)
+  tlsModeM: z.enum(["master", "0", "1", "2"]), 
   
-  // Fields for client-role defining a cross-master tunnel
   remoteMasterIdForTunnel: z.optional(z.string()),
-  remoteServerListenAddress: z.optional(z.string().regex(/^(?:\[[0-9a-fA-F:]+\]|[0-9a-zA-Z.-]+):[0-9]+$/, "远程出口(s)监听地址格式无效 (例: host:port 或 [ipv6]:port)。")),
-  remoteServerForwardAddress: z.optional(z.string().regex(/^(?:\[[0-9a-fA-F:]+\]|[0-9a-zA-Z.-]+):[0-9]+$/, "远程出口(s)转发地址格式无效 (例: host:port 或 [ipv6]:port)。")),
+  remoteServerListenAddress: z.optional(z.string().regex(hostPortRegex, "远程出口(s)监听地址格式无效 (例: [::]:10101)。")),
+  remoteServerForwardAddress: z.optional(z.string().regex(hostPortRegex, "远程出口(s)转发地址格式无效 (例: 192.168.1.10:80)。")),
 });
 
 
 const serverSchema = baseSchema.extend({
   tunnelHost: z.string().min(1, "监听主机不能为空。").default("[::]"),
   tunnelPort: z.string().regex(/^[0-9]+$/, "端口必须是数字。").min(1, "监听端口不能为空。"),
-  targetAddressS: z.string().min(1, "转发地址不能为空。").regex(/^(?:\[[0-9a-fA-F:]+\]|[0-9a-zA-Z.-]+):[0-9]+$/, "转发地址格式无效 (例: host:port 或 [ipv6]:port)。"),
+  targetAddressS: z.string().min(1, "转发地址不能为空。").regex(hostPortRegex, hostPortErrorMsg),
   logLevelS: z.enum(["master", "debug", "info", "warn", "error", "event"]),
   tlsModeS: z.enum(["master", "0", "1", "2"]),
   certPathS: z.optional(z.string()),
@@ -50,15 +52,14 @@ const serverSchema = baseSchema.extend({
 });
 
 const clientSchema = baseSchema.extend({
-  tunnelAddressC: z.string().min(1, "服务端隧道地址不能为空。").regex(/^(?:\[[0-9a-fA-F:]+\]|[0-9a-zA-Z.-]+):[0-9]+$/, "服务端隧道地址格式无效 (例: host:port 或 [ipv6]:port)。"),
+  tunnelAddressC: z.string().min(1, "服务端隧道地址不能为空。").regex(hostPortRegex, hostPortErrorMsg),
   localHostC: z.string().min(1, "本地监听主机不能为空。").default("[::]"),
   localPortC: z.string().regex(/^[0-9]+$/, "端口必须是数字。").min(1, "本地监听端口不能为空。"),
   logLevelC: z.enum(["master", "debug", "info", "warn", "error", "event"]),
 });
 
 const landingSchema = baseSchema.extend({
-  ipAddressT: z.string().min(1, "IP地址不能为空。"),
-  portT: z.string().regex(/^[0-9]+$/, "端口必须是数字。").min(1, "端口不能为空。"),
+  targetAddressT: z.string().min(1, "流量转发地址不能为空。").regex(hostPortRegex, hostPortErrorMsg),
 });
 
 type FormValues = z.infer<typeof masterSchema> | z.infer<typeof serverSchema> | z.infer<typeof clientSchema> | z.infer<typeof landingSchema>;
@@ -85,7 +86,7 @@ export function EditTopologyNodeDialog({ open, onOpenChange, node, onSave }: Edi
         defaultVals = {
           ...defaultVals,
           masterSubRoleM: data.masterSubRole || "generic",
-          targetAddressM: data.targetAddress || "", // For M-Client-Role, this is its local forward/listen address
+          targetAddressM: data.targetAddress || "", 
           logLevelM: (data.logLevel as any) || data.defaultLogLevel || "master",
           tlsModeM: (data.tlsMode as any) || data.defaultTlsMode || "master",
           remoteMasterIdForTunnel: data.remoteMasterIdForTunnel || "",
@@ -114,8 +115,7 @@ export function EditTopologyNodeDialog({ open, onOpenChange, node, onSave }: Edi
       } else if (role === 'T') {
         defaultVals = {
           ...defaultVals,
-          ipAddressT: data.ipAddress || "",
-          portT: data.port || "",
+          targetAddressT: data.targetAddress || "", // Use targetAddress from node data for T
         };
       }
       form.reset(defaultVals);
@@ -134,11 +134,11 @@ export function EditTopologyNodeDialog({ open, onOpenChange, node, onSave }: Edi
         tlsMode: values.tlsModeM,
       };
       if (values.masterSubRoleM === 'client-role') {
-        updatedData.targetAddress = values.targetAddressM; // This M-node's client's local service address
+        updatedData.targetAddress = values.targetAddressM; 
         updatedData.remoteMasterIdForTunnel = values.remoteMasterIdForTunnel;
         updatedData.remoteServerListenAddress = values.remoteServerListenAddress;
         updatedData.remoteServerForwardAddress = values.remoteServerForwardAddress;
-      } else { // Clear client-role specific fields if not in that sub-role
+      } else { 
         updatedData.targetAddress = "";
         updatedData.remoteMasterIdForTunnel = "";
         updatedData.remoteServerListenAddress = "";
@@ -162,11 +162,10 @@ export function EditTopologyNodeDialog({ open, onOpenChange, node, onSave }: Edi
         targetAddress: `${formatHostForDisplay(values.localHostC)}:${values.localPortC}`,
         logLevel: values.logLevelC,
       };
-    } else if (role === 'T' && 'ipAddressT' in values) {
+    } else if (role === 'T' && 'targetAddressT' in values) {
       updatedData = {
         ...updatedData,
-        ipAddress: values.ipAddressT,
-        port: values.portT,
+        targetAddress: values.targetAddressT, // Map form field to CustomNodeData field
       };
     }
     onSave(node.id, updatedData);
@@ -280,10 +279,8 @@ export function EditTopologyNodeDialog({ open, onOpenChange, node, onSave }: Edi
 
             {role === 'T' && (
               <>
-                <FormField control={form.control} name="ipAddressT" render={({ field }) => (
-                  <FormItem><FormLabel className="font-sans">IP 地址</FormLabel><FormControl><Input {...field} placeholder="例: 192.168.1.100" className="font-mono" /></FormControl><FormMessage /></FormItem>)} />
-                <FormField control={form.control} name="portT" render={({ field }) => (
-                  <FormItem><FormLabel className="font-sans">端口</FormLabel><FormControl><Input {...field} placeholder="例: 80" className="font-mono" /></FormControl><FormMessage /></FormItem>)} />
+                <FormField control={form.control} name="targetAddressT" render={({ field }) => (
+                  <FormItem><FormLabel className="font-sans">流量转发地址</FormLabel><FormControl><Input {...field} placeholder="例: 192.168.1.100:80" className="font-mono" /></FormControl><FormMessage /></FormItem>)} />
               </>
             )}
             <DialogFooter className="pt-4">

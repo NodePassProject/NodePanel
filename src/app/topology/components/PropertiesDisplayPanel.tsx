@@ -90,23 +90,22 @@ export function PropertiesDisplayPanel({ selectedNode }: PropertiesDisplayPanelP
           <span className="ml-1 font-mono break-all">{data.tunnelAddress}</span>
         </div>
       )}
-      {(data.role === 'S' || data.role === 'C') && data.targetAddress && (
+      { (data.role === 'S' || data.role === 'C' || data.role === 'T' || (data.role === 'M' && data.masterSubRole === 'client-role')) && data.targetAddress && (
         <div>
-          <strong className="text-muted-foreground">目标地址:</strong>
+          <strong className="text-muted-foreground">
+            {data.role === 'S' ? '出口(s)转发地址:' : 
+             data.role === 'C' ? '入口(c)本地转发:' : 
+             data.role === 'T' ? '落地端转发地址:' : 
+             (data.role === 'M' && data.masterSubRole === 'client-role') ? 'M(客户)本地服务:' : 
+             '目标地址:' 
+            }
+          </strong>
           <span className="ml-1 font-mono break-all">{data.targetAddress}</span>
         </div>
       )}
-      {data.role === 'T' && (
-        <>
-          {data.ipAddress && (
-            <div><strong className="text-muted-foreground">IP 地址:</strong> <span className="ml-1 font-mono">{data.ipAddress}</span></div>
-          )}
-          {data.port && (
-            <div><strong className="text-muted-foreground">端口:</strong> <span className="ml-1 font-mono">{data.port}</span></div>
-          )}
-        </>
-      )}
+      {/* Deprecated T-node ipAddress/port display removed, using targetAddress now */}
     </div>
   );
 }
     
+

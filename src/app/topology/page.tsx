@@ -67,9 +67,9 @@ export interface CustomNodeData {
   defaultLogLevel?: string;
   defaultTlsMode?: string;
   tunnelAddress?: string; 
-  targetAddress?: string; // For M (client-role), this is its local service address. For S/C, their respective tunnel/target.
-  ipAddress?: string; // For T-nodes
-  port?: string;    // For T-nodes
+  targetAddress?: string; // For M (client-role), this is its local service address. For S/C, their respective tunnel/target. For T, this is its forward address.
+  ipAddress?: string; // For T-nodes (deprecated, use targetAddress)
+  port?: string;    // For T-nodes (deprecated, use targetAddress)
   submissionStatus?: 'pending' | 'success' | 'error'; 
   submissionMessage?: string; 
   logLevel?: string; 
@@ -346,8 +346,6 @@ function TopologyEditorCore() {
     onMutate: (variables) => {
       setNodesInternal(nds => nds.map(n => {
         if (n.id === variables.originalNodeId) {
-          // If it's an M-node that generated two instances, we might need a more nuanced status update
-          // For now, assume direct S/C nodes, or the M-node itself gets the status
           return { ...n, data: { ...n.data, submissionStatus: 'pending', submissionMessage: '提交中...' } };
         }
         return n;
@@ -358,7 +356,6 @@ function TopologyEditorCore() {
       setNodesInternal(nds => nds.map(n => {
          if (n.id === variables.originalNodeId) {
             let message = `ID: ${createdInstance.id.substring(0,8)}...`;
-            // If M-node generated this, and it's the second part of a pair, append to existing message.
             if (n.data.role === 'M' && n.data.submissionMessage && n.data.submissionMessage.startsWith('ID:')) {
                 message = `${n.data.submissionMessage}, ${message}`;
             }
@@ -366,18 +363,14 @@ function TopologyEditorCore() {
         }
         return n;
       }));
-      // Invalidate queries for the specific master where the instance was created.
-      // The master ID is part of the variables if we pass it correctly from prepareInstancesForSubmission.
-      // For now, we'll rely on the activeApiConfig's ID for S/C nodes created under it,
-      // and for M-nodes, we need to get the masterId from the InstanceUrlConfigWithName.
-      
-      // This needs to be more precise: find the master ID from instancesForConfirmation using originalNodeId
       const submittedInstanceInfo = instancesForConfirmation.find(inst => inst.nodeId === variables.originalNodeId && inst.url === variables.data.url);
       if (submittedInstanceInfo) {
         queryClient.invalidateQueries({ queryKey: ['instances', submittedInstanceInfo.masterId]});
       } else {
-        // Fallback, less precise
-         queryClient.invalidateQueries({ queryKey: ['instances', getApiConfigById(variables.useApiRoot)?.id]}); // This might not be correct if useApiRoot is the URL
+         const masterIdForInvalidation = getNodeById(variables.originalNodeId)?.data.masterId;
+         if (masterIdForInvalidation) {
+           queryClient.invalidateQueries({ queryKey: ['instances', masterIdForInvalidation]});
+         }
       }
       queryClient.invalidateQueries({ queryKey: ['allInstancesForTopologyPage']});
       queryClient.invalidateQueries({ queryKey: ['allInstancesForTraffic']});
@@ -429,19 +422,11 @@ function TopologyEditorCore() {
         return;
       }
       
-      // Prevent direct M (server-role or generic) to M (any role other than its own children)
-      if (sourceNode.data.role === 'M' && targetNode.data.role === 'M' && sourceNode.id !== targetNode.data.parentNode && targetNode.id !== sourceNode.data.parentNode) {
-        // Allow M (client-role) to connect to M (server-role) if it's for defining a tunnel, but this is handled by properties, not direct edge for S/C creation.
-        // A general M to M edge might represent high-level dependency, not direct S/C creation.
-        // For now, if M->M edge represents some high-level link, let it pass, but it won't auto-create S/C.
-        // The cross-master tunnel is defined via properties of an M (client-role) node.
-      }
-      
       if (targetNode.data.role === 'T') {
-        const sourceIsMaster = sourceNode.data.role === 'M';
-        const sourceIsInMaster = !!sourceNode.data.parentNode; // S or C node inside an M container
-        if (!sourceIsMaster && !sourceIsInMaster && sourceNode.data.role !== 'S' && sourceNode.data.role !== 'C') {
-            toast({ title: '连接无效', description: '落地端 (T) 节点只能被主控 (M), 出口(s), 或 入口(c) 节点链接。', variant: 'destructive' });
+        const sourceIsMasterClientRole = sourceNode.data.role === 'M' && sourceNode.data.masterSubRole === 'client-role';
+        const sourceIsConnectableToT = sourceNode.data.role === 'S' || sourceNode.data.role === 'C' || sourceIsMasterClientRole;
+        if (!sourceIsConnectableToT) {
+            toast({ title: '连接无效', description: '落地端 (T) 节点只能被主控 (客户隧道角色), 出口(s), 或 入口(c) 节点链接。', variant: 'destructive' });
             return;
         }
       }
@@ -467,25 +452,28 @@ function TopologyEditorCore() {
       let updatedNodes = [...nodesInternal];
 
       // Client (C) connects to Server (S) - Update Client's tunnelAddress
-      if (sourceNode.data.role === 'C' && targetNode.data.role === 'S') { // C -> S
+      if (sourceNode.data.role === 'C' && targetNode.data.role === 'S') {
         const clientNode = sourceNode;
         const serverNode = targetNode;
         const serverNodeData = serverNode.data;
         
         let masterApiHost: string | null = null;
-        const serverMasterNodeId = serverNodeData.parentNode || serverNodeData.representedMasterId;
+        // Determine the correct Master API host for the server node
+        const serverMasterNodeId = serverNodeData.parentNode || serverNodeData.representedMasterId; // parentNode if S is inside M, representedMasterId if S was dragged from MasterPalette
+        const parentMContainerForServer = serverNodeData.parentNode ? getNodeById(serverNodeData.parentNode) : null;
 
-        if (serverMasterNodeId) {
-            const masterContainerNode = serverNodeData.parentNode ? getNodeById(serverMasterNodeId) : null;
-            const actualMasterId = masterContainerNode ? masterContainerNode.data.masterId : serverMasterNodeId;
-            if (actualMasterId) {
-                const masterConfig = getApiConfigById(actualMasterId);
-                if (masterConfig?.apiUrl) {
-                    masterApiHost = extractHostname(masterConfig.apiUrl);
-                }
+        if (parentMContainerForServer && clientNode.data.parentNode === serverNode.data.parentNode) { // C and S are in the same M-container
+             const masterConfigForMContainer = getApiConfigById(parentMContainerForServer.data.masterId!);
+             if (masterConfigForMContainer?.apiUrl) {
+                 masterApiHost = extractHostname(masterConfigForMContainer.apiUrl);
+             }
+        } else if (serverMasterNodeId) { // S is standalone or from palette, C might be elsewhere or in a different M
+            const masterConfig = getApiConfigById(serverMasterNodeId);
+            if (masterConfig?.apiUrl) {
+                masterApiHost = extractHostname(masterConfig.apiUrl);
             }
         }
-
+        
         const serverListenHost = extractHostname(serverNodeData.tunnelAddress || "");
         const serverListenPort = extractPort(serverNodeData.tunnelAddress || "");
         let clientEffectiveTunnelHost = serverListenHost;
@@ -514,21 +502,21 @@ function TopologyEditorCore() {
         toast({ title: "入口(c) 地址已更新", description: `入口(c) ${clientNode.data.label} 已自动配置连接到 出口(s) ${serverNode.data.label}。`});
       }
 
-      // Sync S/C or M(client-role) with T
+      // Sync S/C or M(client-role) targetAddress with T targetAddress
       const sourceIsConnectableToT = sourceNode.data.role === 'S' || sourceNode.data.role === 'C' || (sourceNode.data.role === 'M' && sourceNode.data.masterSubRole === 'client-role');
       if (sourceIsConnectableToT && targetNode.data.role === 'T') {
         const scOrMNode = sourceNode;
         const tNode = targetNode;
-        if (scOrMNode.data.targetAddress) { // If S/C/M(client-role) has a targetAddress, T-node should reflect it
-          const host = extractHostname(scOrMNode.data.targetAddress);
-          const port = extractPort(scOrMNode.data.targetAddress);
+        if (scOrMNode.data.targetAddress && scOrMNode.data.targetAddress !== tNode.data.targetAddress) {
           updatedNodes = updatedNodes.map(n => 
-            n.id === tNode.id ? { ...n, data: { ...n.data, ipAddress: host || "", port: port || "" } } : n
+            n.id === tNode.id ? { ...n, data: { ...n.data, targetAddress: scOrMNode.data.targetAddress } } : n
           );
-        } else if (tNode.data.ipAddress && tNode.data.port) { // If T-node has an address, S/C/M(client-role) should reflect it
+           toast({ title: `落地端 ${tNode.data.label} 已同步上游目标地址。`});
+        } else if (tNode.data.targetAddress && tNode.data.targetAddress !== scOrMNode.data.targetAddress) {
           updatedNodes = updatedNodes.map(n =>
-            n.id === scOrMNode.id ? { ...n, data: { ...n.data, targetAddress: `${formatHostForDisplay(tNode.data.ipAddress!)}:${tNode.data.port!}` } } : n
+            n.id === scOrMNode.id ? { ...n, data: { ...n.data, targetAddress: tNode.data.targetAddress } } : n
           );
+           toast({ title: `${scOrMNode.data.label} 已同步落地端目标地址。`});
         }
       }
       setNodesInternal(updatedNodes);
@@ -589,7 +577,7 @@ function TopologyEditorCore() {
       });
 
       if (type === 'master' && draggedData) {
-          if (parentMContainer) { // Dragged a master config *onto* an existing M-container node - treat as adding S/C node
+          if (parentMContainer) { 
               const sNodeId = `s-from-master-${draggedData.id.substring(0, 8)}-${++currentCounter}`;
               const relativePosition = { x: position.x - parentMContainer.position.x - (CARD_NODE_WIDTH / 2), y: position.y - parentMContainer.position.y - (CARD_NODE_HEIGHT / 2) };
               const sNode: Node = {
@@ -614,10 +602,10 @@ function TopologyEditorCore() {
                   });
               }
               toast({ title: "出口(s)节点已添加至主控容器" });
-          } else { // Dragged a master config onto empty canvas - create M-container with U and T
+          } else { 
               const mId = `master-${draggedData.id.substring(0, 8)}-${++currentCounter}`;
               const uId = `user-for-${mId}`;
-              const cId = `default-client-for-${mId}`; // This default C is inside M
+              const cId = `default-client-for-${mId}`; 
               const tId = `default-tunnel-for-${mId}`;
 
               newNodes.push({
@@ -628,7 +616,7 @@ function TopologyEditorCore() {
                     apiUrl: draggedData.apiUrl, 
                     defaultLogLevel: draggedData.masterDefaultLogLevel,
                     defaultTlsMode: draggedData.masterDefaultTlsMode,
-                    masterSubRole: "server-role", // Default new M-container to server-role
+                    masterSubRole: "server-role", 
                   },
                   style: { ...nodeStyles.m.base, width: mNodeWidth, height: mNodeHeight },
                   width: mNodeWidth, height: mNodeHeight,
@@ -654,7 +642,7 @@ function TopologyEditorCore() {
               newNodes.push({
                   id: tId, type: 'cardNode',
                   position: { x: position.x + mNodeWidth + 60, y: position.y + (mNodeHeight / 2) - (CARD_NODE_HEIGHT / 2) },
-                  data: { label: '落地端', role: 'T', icon: Cable, ipAddress: '192.168.1.10', port: '80' },
+                  data: { label: '落地端', role: 'T', icon: Cable, targetAddress: '192.168.1.10:80' },
                   width: CARD_NODE_WIDTH, height: CARD_NODE_HEIGHT,
               });
 
@@ -696,7 +684,7 @@ function TopologyEditorCore() {
           } else if (nodeRole === 'C') {
             newNodeData.targetAddress = `[::]:${10001 + currentCounter + Math.floor(Math.random()*50)}`;
           } else if (nodeRole === 'T') {
-            newNodeData.ipAddress = '192.168.1.20'; newNodeData.port = '8080';
+            newNodeData.targetAddress = '192.168.1.20:8080';
           }
           
           const newNode: Node = { id: newNodeId, type: 'cardNode', position, data: newNodeData, width, height };
@@ -715,12 +703,28 @@ function TopologyEditorCore() {
                           id: `edge-${defaultClient.id}-${newNodeId}`, source: defaultClient.id, target: newNodeId, 
                           type: 'step', markerEnd: { type: MarkerType.ArrowClosed }, animated: true, style: { strokeDasharray: '5 5' },
                       });
-                      const serverTunnelAddr = newNode.data.tunnelAddress || "";
-                      let clientTargetPort = "0";
-                      const serverPortNum = parseInt(extractPort(serverTunnelAddr) || "0", 10);
-                      if (serverPortNum > 0) clientTargetPort = (serverPortNum + 1).toString();
+                      
+                      // Sync default client's tunnelAddress based on new server within same M-container
+                      let masterApiHost: string | null = null;
+                      const masterConfigForMContainer = getApiConfigById(parentMContainer.data.masterId!);
+                      if (masterConfigForMContainer?.apiUrl) {
+                          masterApiHost = extractHostname(masterConfigForMContainer.apiUrl);
+                      }
+                      const serverListenHost = extractHostname(newNode.data.tunnelAddress || "");
+                      const serverListenPort = extractPort(newNode.data.tunnelAddress || "");
+                      let clientEffectiveTunnelHost = serverListenHost;
+                      if (serverListenHost && isWildcardHostname(serverListenHost) && masterApiHost) {
+                          clientEffectiveTunnelHost = masterApiHost;
+                      }
+                      const newClientTunnelAddress = serverListenPort && clientEffectiveTunnelHost 
+                          ? `${formatHostForUrl(clientEffectiveTunnelHost)}:${serverListenPort}`
+                          : newNode.data.tunnelAddress || "";
 
-                      setNodesInternal(nds => nds.map(n => n.id === defaultClient.id ? { ...n, data: { ...n.data, tunnelAddress: serverTunnelAddr, targetAddress: `[::]:${clientTargetPort}` } } : n));
+                      let clientLocalTargetPort = "0";
+                      const serverPortNum = parseInt(serverListenPort || "0", 10);
+                      if (serverPortNum > 0) clientLocalTargetPort = (serverPortNum + 1).toString();
+
+                      setNodesInternal(nds => nds.map(n => n.id === defaultClient.id ? { ...n, data: { ...n.data, tunnelAddress: newClientTunnelAddress, targetAddress: `[::]:${clientLocalTargetPort}` } } : n));
                   }
               }
           }
@@ -737,7 +741,7 @@ function TopologyEditorCore() {
           fitView({ nodes: nodesToFit, duration: 400, padding: 0.2 });
         }, 50);
       }
-  }, [nodeIdCounter, nodesInternal, toast, setNodesInternal, setEdgesInternal, fitView]);
+  }, [nodeIdCounter, nodesInternal, toast, setNodesInternal, setEdgesInternal, fitView, getApiConfigById]);
 
     const handleChangeNodeRole = useCallback((nodeId: string, newRole: 'S' | 'C') => {
         setNodesInternal(nds => nds.map(node => {
@@ -829,7 +833,6 @@ function TopologyEditorCore() {
           });
         }
       } else if (node.data.role === 'M' && node.data.masterSubRole === 'client-role' && node.data.remoteMasterIdForTunnel && node.data.remoteServerListenAddress && node.data.remoteServerForwardAddress && node.data.targetAddress) {
-        // M-node configured for cross-master tunnel
         const clientMasterConfig = getApiConfigById(node.data.masterId!);
         const serverMasterConfig = getApiConfigById(node.data.remoteMasterIdForTunnel);
 
@@ -838,7 +841,6 @@ function TopologyEditorCore() {
           continue;
         }
 
-        // Client part (on this M-node's master)
         const clientRemoteHost = extractHostname(serverMasterConfig.apiUrl);
         const clientRemotePort = extractPort(node.data.remoteServerListenAddress);
         if (!clientRemoteHost || !clientRemotePort) {
@@ -850,12 +852,12 @@ function TopologyEditorCore() {
         const clientUrlParams: BuildUrlParams = {
             instanceType: "入口(c)",
             tunnelAddress: clientTunnelAddressToRemote,
-            targetAddress: node.data.targetAddress, // M-node's targetAddress is its local service
+            targetAddress: node.data.targetAddress, 
             logLevel: (node.data.logLevel as any) || clientMasterConfig.masterDefaultLogLevel || 'master',
         };
         const clientFinalUrl = buildUrlFromFormValues(clientUrlParams, clientMasterConfig);
         instancesToCreate.push({
-            nodeId: node.id, // Use M-node's ID, will be differentiated by label/type in modal
+            nodeId: node.id, 
             nodeLabel: `${node.data.label} (入口部分)`,
             masterId: clientMasterConfig.id,
             masterName: clientMasterConfig.name,
@@ -863,19 +865,16 @@ function TopologyEditorCore() {
             instanceType: "入口(c)",
         });
 
-        // Server part (on the remoteMasterIdForTunnel)
         const serverUrlParams: BuildUrlParams = {
             instanceType: "出口(s)",
             tunnelAddress: node.data.remoteServerListenAddress,
             targetAddress: node.data.remoteServerForwardAddress,
             logLevel: (node.data.logLevel as any) || serverMasterConfig.masterDefaultLogLevel || 'master',
             tlsMode: (node.data.tlsMode as any) || serverMasterConfig.masterDefaultTlsMode || 'master',
-            // Assuming M-node dialog doesn't have separate cert/key for this specific cross-tunnel definition yet
-            // If needed, these would come from node.data too.
         };
         const serverFinalUrl = buildUrlFromFormValues(serverUrlParams, serverMasterConfig);
         instancesToCreate.push({
-            nodeId: node.id, // Use M-node's ID
+            nodeId: node.id, 
             nodeLabel: `${node.data.label} (出口部分 @ ${serverMasterConfig.name})`,
             masterId: serverMasterConfig.id,
             masterName: serverMasterConfig.name,
@@ -944,17 +943,15 @@ function TopologyEditorCore() {
     const originalNode = newNodes[nodeIndex];
     const mergedData = { ...originalNode.data, ...updatedDataFromDialog };
     newNodes[nodeIndex] = { ...originalNode, data: mergedData };
-
-    // Sync logic for S/C with T, and M(client-role) with T
+    
+    // Sync S/C/M(client-role) targetAddress with T targetAddress (bidirectional)
     if (mergedData.role === 'S' || mergedData.role === 'C' || (mergedData.role === 'M' && mergedData.masterSubRole === 'client-role')) {
       const scOrMNode = newNodes[nodeIndex];
       edgesInternal.forEach(edge => {
-        if (edge.source === scOrMNode.id && getNodeById(edge.target)?.data.role === 'T') {
-          const tNodeIndex = newNodes.findIndex(n => n.id === edge.target);
-          if (tNodeIndex !== -1 && scOrMNode.data.targetAddress) {
-            const newTargetHost = extractHostname(scOrMNode.data.targetAddress);
-            const newTargetPort = extractPort(scOrMNode.data.targetAddress);
-            newNodes[tNodeIndex] = { ...newNodes[tNodeIndex], data: { ...newNodes[tNodeIndex].data, ipAddress: newTargetHost || "", port: newTargetPort || "" }};
+        if (edge.source === scOrMNode.id) {
+          const targetTNodeIndex = newNodes.findIndex(n => n.id === edge.target && n.data.role === 'T');
+          if (targetTNodeIndex !== -1 && scOrMNode.data.targetAddress !== newNodes[targetTNodeIndex].data.targetAddress) {
+            newNodes[targetTNodeIndex] = { ...newNodes[targetTNodeIndex], data: { ...newNodes[targetTNodeIndex].data, targetAddress: scOrMNode.data.targetAddress }};
           }
         }
       });
@@ -962,35 +959,37 @@ function TopologyEditorCore() {
       const tNode = newNodes[nodeIndex];
       edgesInternal.forEach(edge => {
         if (edge.target === tNode.id) {
-          const connectedNode = getNodeById(edge.source);
-          if (connectedNode && (connectedNode.data.role === 'S' || connectedNode.data.role === 'C' || (connectedNode.data.role === 'M' && connectedNode.data.masterSubRole === 'client-role'))) {
-            const scOrMNodeIndex = newNodes.findIndex(n => n.id === edge.source);
-            if (scOrMNodeIndex !== -1) {
-              const newScTargetAddress = `${formatHostForDisplay(mergedData.ipAddress || "")}:${mergedData.port || ""}`;
-              newNodes[scOrMNodeIndex] = { ...newNodes[scOrMNodeIndex], data: { ...newNodes[scOrMNodeIndex].data, targetAddress: newScTargetAddress }};
-            }
+          const sourceNodeIndex = newNodes.findIndex(n => n.id === edge.source && (n.data.role === 'S' || n.data.role === 'C' || (n.data.role === 'M' && n.data.masterSubRole === 'client-role')));
+          if (sourceNodeIndex !== -1 && tNode.data.targetAddress !== newNodes[sourceNodeIndex].data.targetAddress) {
+            newNodes[sourceNodeIndex] = { ...newNodes[sourceNodeIndex], data: { ...newNodes[sourceNodeIndex].data, targetAddress: tNode.data.targetAddress }};
           }
         }
       });
     }
     
-    // If S-node's tunnelAddress or master changes, update connected C-nodes' tunnelAddress
+    // If S-node's tunnelAddress changes, or its M-container's API changes, update connected C-nodes' tunnelAddress
     if (mergedData.role === 'S') {
         const serverNode = newNodes[nodeIndex];
         edgesInternal.forEach(edge => {
-            if (edge.target === serverNode.id) { // C -> S connection
+            if (edge.target === serverNode.id) { 
                 const clientNodeIndex = newNodes.findIndex(n => n.id === edge.source && n.data.role === 'C');
                 if (clientNodeIndex !== -1) {
                     const clientNode = newNodes[clientNodeIndex];
                     let masterApiHost: string | null = null;
-                    const serverMasterNodeId = serverNode.data.parentNode || serverNode.data.representedMasterId;
-                     if (serverMasterNodeId) {
-                        const masterContainerNode = serverNode.data.parentNode ? getNodeById(serverMasterNodeId) : null;
-                        const actualMasterId = masterContainerNode ? masterContainerNode.data.masterId : serverMasterNodeId;
-                        if (actualMasterId) {
-                            const masterConfig = getApiConfigById(actualMasterId);
-                            if (masterConfig?.apiUrl) masterApiHost = extractHostname(masterConfig.apiUrl);
-                        }
+                    
+                    const serverParentMContainerId = serverNode.data.parentNode;
+                    const clientParentMContainerId = clientNode.data.parentNode;
+
+                    if (serverParentMContainerId && clientParentMContainerId && serverParentMContainerId === clientParentMContainerId) {
+                        // C and S are in the same M-container
+                        const mContainerNode = getNodeById(serverParentMContainerId);
+                        const masterConfigForM = mContainerNode ? getApiConfigById(mContainerNode.data.masterId!) : null;
+                        if (masterConfigForM?.apiUrl) masterApiHost = extractHostname(masterConfigForM.apiUrl);
+                    } else {
+                        // S is standalone or in a different M than C. Use S's represented/parent master.
+                        const serverMasterId = serverNode.data.representedMasterId || (serverParentMContainerId ? getNodeById(serverParentMContainerId)?.data.masterId : null);
+                        const masterConfigForS = serverMasterId ? getApiConfigById(serverMasterId) : null;
+                        if (masterConfigForS?.apiUrl) masterApiHost = extractHostname(masterConfigForS.apiUrl);
                     }
 
                     const serverListenHost = extractHostname(serverNode.data.tunnelAddress || "");
@@ -1007,6 +1006,31 @@ function TopologyEditorCore() {
                     newNodes[clientNodeIndex] = { ...clientNode, data: { ...clientNode.data, tunnelAddress: newClientTunnelAddress }};
                 }
             }
+        });
+    } else if (mergedData.role === 'M' && originalNode.data.apiUrl !== mergedData.apiUrl) { // If M-container's API URL changed
+        // Update any internal C-nodes that connect to internal S-nodes
+        const mContainerNode = newNodes[nodeIndex];
+        const internalServerNodes = newNodes.filter(n => n.data.parentNode === mContainerNode.id && n.data.role === 'S');
+        internalServerNodes.forEach(serverNode => {
+            edgesInternal.forEach(edge => {
+                if (edge.target === serverNode.id) {
+                    const clientNodeIndex = newNodes.findIndex(n => n.id === edge.source && n.data.role === 'C' && n.data.parentNode === mContainerNode.id);
+                    if (clientNodeIndex !== -1) {
+                        const clientNode = newNodes[clientNodeIndex];
+                        const masterApiHost = extractHostname(mContainerNode.data.apiUrl || "");
+                        const serverListenHost = extractHostname(serverNode.data.tunnelAddress || "");
+                        const serverListenPort = extractPort(serverNode.data.tunnelAddress || "");
+                        let clientEffectiveTunnelHost = serverListenHost;
+                         if (serverListenHost && isWildcardHostname(serverListenHost) && masterApiHost) {
+                            clientEffectiveTunnelHost = masterApiHost;
+                        }
+                        const newClientTunnelAddress = serverListenPort && clientEffectiveTunnelHost 
+                            ? `${formatHostForUrl(clientEffectiveTunnelHost)}:${serverListenPort}`
+                            : serverNode.data.tunnelAddress || "";
+                        newNodes[clientNodeIndex] = { ...clientNode, data: { ...clientNode.data, tunnelAddress: newClientTunnelAddress }};
+                    }
+                }
+            });
         });
     }
     
