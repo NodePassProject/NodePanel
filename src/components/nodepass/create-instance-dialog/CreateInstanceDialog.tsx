@@ -301,12 +301,14 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
     let primaryUrlParams: BuildUrlParams | null = null;
     let secondaryUrlParams: BuildUrlParams | null = null;
     let secondaryMasterConfig: NamedApiConfig | null = null;
+    
+    const localOnLog = (message: string, type: 'INFO' | 'WARN' | 'ERROR') => {
+      if (type === 'ERROR') toast({ title: "配置错误", description: message, variant: "destructive" });
+      onLog?.(message, type);
+    };
 
     if (values.instanceType === '入口(c)') {
-      const clientSubmission = prepareClientUrlParams(values, activeApiConfig, getApiConfigById, (message, type) => {
-        if (type === 'ERROR') toast({ title: "配置错误", description: message, variant: "destructive"});
-        onLog?.(message, type);
-      });
+      const clientSubmission = prepareClientUrlParams(values, activeApiConfig, getApiConfigById, localOnLog);
       if (!clientSubmission) return;
 
       primaryUrlParams = clientSubmission.clientParams;
@@ -315,10 +317,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
         secondaryMasterConfig = clientSubmission.serverMasterForAutoCreate;
       }
     } else { // '出口(s)'
-      const serverSubmission = prepareServerUrlParams(values, (message, type) => {
-        if (type === 'ERROR') toast({ title: "配置错误", description: message, variant: "destructive"});
-        onLog?.(message, type);
-      });
+      const serverSubmission = prepareServerUrlParams(values, localOnLog);
       if (!serverSubmission) return;
       primaryUrlParams = serverSubmission.serverParams;
     }
@@ -363,7 +362,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
       if (primaryInstanceUrl && serverCreationOk) {
         await createInstanceMutation.mutateAsync({
             data: { url: primaryInstanceUrl },
-            useApiRoot: apiRoot, // Primary instance uses the current active master's root/token
+            useApiRoot: apiRoot, 
             useApiToken: apiToken,
          });
       }
@@ -441,3 +440,5 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
     </Dialog>
   );
 }
+
+    
