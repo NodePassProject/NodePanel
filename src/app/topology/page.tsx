@@ -42,9 +42,11 @@ export interface CustomNodeData {
   label: string;
   role: NodeRole;
   masterSubRole?: MasterSubRole;
-  nodeType?: string;
-  masterId?: string;
-  masterName?: string;
+  nodeType?: string; // e.g. 'masterRepresentation', 'componentNode'
+  masterId?: string; // For M nodes, stores the original NamedApiConfig ID
+  masterName?: string; // For M nodes, stores the original NamedApiConfig name
+  representedMasterId?: string; // For S/C nodes created from a master drag, stores the original NamedApiConfig ID
+  representedMasterName?: string; // For S/C nodes created from a master drag, stores the original NamedApiConfig name
   apiUrl?: string;
   defaultLogLevel?: string;
   defaultTlsMode?: string;
@@ -293,23 +295,25 @@ export default function TopologyPage() {
       const sourceParentId = sourceNode.data.parentNode;
       const targetParentId = targetNode.data.parentNode;
 
+      // Rule: S/C nodes within an M-container
       if ((sourceRole === 'S' || sourceRole === 'C') && sourceParentId) {
-        if (targetRole === 'S' || targetRole === 'C') {
+        if (targetRole === 'S' || targetRole === 'C') { // S/C to S/C
           if (targetParentId !== sourceParentId) {
             toast({ title: '连接无效', description: `容器内的 ${sourceRole} 节点只能连接到同一主控容器内的 S 或 C 节点。`, variant: 'destructive' });
             return;
           }
-        } else if (targetRole === 'T') {
-          if (targetParentId) {
+        } else if (targetRole === 'T') { // S/C to T
+          if (targetParentId) { // T must be external
             toast({ title: '连接无效', description: `容器内的 ${sourceRole} 节点只能连接到外部的 T 节点。此 T 节点位于容器内。`, variant: 'destructive' });
             return;
           }
-        } else {
+        } else { // S/C to anything else (M, U)
           toast({ title: '连接无效', description: `容器内的 ${sourceRole} 节点只能连接到同一容器内的 S/C 节点或外部的 T 节点。`, variant: 'destructive' });
           return;
         }
       }
       
+      // Rule: User (U) connections
       if (sourceRole === 'U' && targetRole !== 'M') {
         toast({ title: '连接无效', description: '用户 (U) 只能连接到主控 (M)。', variant: 'destructive' });
         return;
@@ -319,6 +323,7 @@ export default function TopologyPage() {
         return;
       }
       
+      // Rule: M to M connections
       if (sourceRole === 'M' && targetRole === 'M') {
         const sourceSubRole = sourceNode.data.masterSubRole;
         const targetSubRole = targetNode.data.masterSubRole;
@@ -327,7 +332,7 @@ export default function TopologyPage() {
             toast({ title: '连接无效', description: '客户端角色的主控 (M) 只能连接到服务端角色的主控 (M)。', variant: 'destructive' });
             return;
         }
-        if (sourceSubRole === 'server-role') {
+        if (sourceSubRole === 'server-role') { // Server role M cannot initiate connection
             toast({ title: '连接无效', description: '服务端角色的主控 (M) 不能主动连接其他主控。请从客户端角色的主控发起连接。', variant: 'destructive' });
             return;
         }
@@ -356,7 +361,7 @@ export default function TopologyPage() {
  const handleNodeDroppedOnCanvas = useCallback((
     type: DraggableNodeType | 'master',
     position: { x: number; y: number },
-    draggedData?: NamedApiConfig
+    draggedData?: NamedApiConfig // This is the NamedApiConfig if type is 'master'
   ) => {
     const newCounter = nodeIdCounter + 1;
     setNodeIdCounter(newCounter);
@@ -369,47 +374,78 @@ export default function TopologyPage() {
       const existingMContainer = nodesInternal.find(n => n.data.role === 'M' && n.data.isContainer);
 
       if (existingMContainer) {
-        toast({
-          title: "操作无效",
-          description: "画布上已存在一个主控容器 (M)，无法添加更多。",
-          variant: "destructive", // Changed to destructive for better visibility
-        });
-        return; // Do not add the node
+        // If an M-container already exists, create an 'S' node inside it, representing the dragged master
+        newNode = {
+          id: `s-from-master-${masterConfig.id}-${newCounter}`,
+          type: 'default',
+          position: {
+            x: position.x - existingMContainer.position.x, // Relative position
+            y: position.y - existingMContainer.position.y, // Relative position
+          },
+          parentNode: existingMContainer.id,
+          extent: 'parent',
+          data: {
+            label: `${masterConfig.name} (服务端)`,
+            role: 'S',
+            parentNode: existingMContainer.id,
+            representedMasterId: masterConfig.id,
+            representedMasterName: masterConfig.name,
+            defaultLogLevel: masterConfig.masterDefaultLogLevel, // Carry over defaults
+            defaultTlsMode: masterConfig.masterDefaultTlsMode,
+            // Other S-specific defaults can be set here
+          },
+          style: { 
+            borderWidth: 1.5,
+            borderRadius: '0.375rem',
+            background: 'hsl(205 90% 92% / 0.8)', 
+            borderColor: 'hsl(205 90% 40%)', 
+            color: 'hsl(205 90% 20%)',
+            width: 90, 
+            height: 45, 
+            padding: '4px 6px', 
+            fontSize: '0.65rem',
+          },
+          sourcePosition: Position.Right,
+          targetPosition: Position.Left,
+        };
+        toast({ title: "服务端节点已添加", description: `“${masterConfig.name}” 已作为服务端节点添加到主控容器 “${existingMContainer.data.label}”。` });
+
+      } else {
+        // First master drag, create the M-container
+        newNode = {
+          id: `master-${masterConfig.id}-${newCounter}`,
+          type: 'default', 
+          position,
+          data: {
+            label: `主控: ${masterConfig.name || `M-${newCounter}`}`,
+            role: 'M',
+            masterSubRole: 'primary', 
+            isContainer: true,
+            nodeType: 'masterRepresentation',
+            masterId: masterConfig.id,
+            masterName: masterConfig.name,
+            apiUrl: masterConfig.apiUrl,
+            defaultLogLevel: masterConfig.masterDefaultLogLevel,
+            defaultTlsMode: masterConfig.masterDefaultTlsMode,
+          },
+          style: { 
+            borderColor: 'hsl(var(--border))',
+            borderWidth: 1.5,
+            background: 'hsl(var(--muted) / 0.3)',
+            borderRadius: '0.5rem',
+            padding: '10px 15px',
+            fontSize: '0.8rem',
+            width: mNodeWidth, 
+            height: mNodeHeight, 
+          },
+          width: mNodeWidth,
+          height: mNodeHeight,
+          sourcePosition: Position.Right,
+          targetPosition: Position.Left,
+        };
+        toast({ title: "主控容器已添加", description: `已添加主控 “${masterConfig.name || `M-${newCounter}`}" 为容器。` });
       }
-      
-      newNode = {
-        id: `master-${masterConfig.id}-${newCounter}`,
-        type: 'default', 
-        position,
-        data: {
-          label: `主控: ${masterConfig.name || `M-${newCounter}`}`,
-          role: 'M',
-          masterSubRole: 'primary', // Since there's only one M container, its role is 'primary'
-          isContainer: true,
-          nodeType: 'masterRepresentation',
-          masterId: masterConfig.id,
-          masterName: masterConfig.name,
-          apiUrl: masterConfig.apiUrl,
-          defaultLogLevel: masterConfig.masterDefaultLogLevel,
-          defaultTlsMode: masterConfig.masterDefaultTlsMode,
-        },
-        style: { 
-          borderColor: 'hsl(var(--border))', 
-          borderWidth: 1.5,
-          background: 'hsl(var(--muted) / 0.3)', 
-          borderRadius: '0.5rem',
-          padding: '10px 15px',
-          fontSize: '0.8rem',
-          width: mNodeWidth, 
-          height: mNodeHeight, 
-        },
-        width: mNodeWidth,
-        height: mNodeHeight,
-        sourcePosition: Position.Right,
-        targetPosition: Position.Left,
-      };
-      toast({ title: "主控容器已添加", description: `已添加主控 "${masterConfig.name || `M-${newCounter}`}" 为容器。` });
-    } else if (type !== 'master') { // Handle S, C, T, U nodes
+    } else if (type !== 'master') { // Handle S, C, T, U component nodes
       const nodeRole = type.toUpperCase() as NodeRole; 
       let labelPrefix = '';
       let nodeStyle: React.CSSProperties = {
@@ -422,19 +458,19 @@ export default function TopologyPage() {
       switch(nodeRole) {
         case 'S':
           labelPrefix = '服务端';
-          nodeStyle = { ...nodeStyle, borderColor: 'hsl(205 90% 40%)', background: 'hsl(205 90% 92% / 0.8)', color: 'hsl(205 90% 20%)' };
+          nodeStyle = { ...nodeStyle, background: 'hsl(205 90% 92% / 0.8)', borderColor: 'hsl(205 90% 40%)', color: 'hsl(205 90% 20%)' };
           break;
         case 'C':
           labelPrefix = '客户端';
-          nodeStyle = { ...nodeStyle, borderColor: 'hsl(145 70% 35%)', background: 'hsl(145 70% 92% / 0.8)', color: 'hsl(145 70% 15%)' };
+          nodeStyle = { ...nodeStyle, background: 'hsl(145 70% 92% / 0.8)', borderColor: 'hsl(145 70% 35%)', color: 'hsl(145 70% 15%)' };
           break;
         case 'T':
           labelPrefix = '落地端';
-          nodeStyle = { ...nodeStyle, borderColor: 'hsl(35 90% 50%)', background: 'hsl(35 90% 92% / 0.8)', color: 'hsl(35 90% 30%)' };  
+          nodeStyle = { ...nodeStyle, background: 'hsl(35 90% 92% / 0.8)', borderColor: 'hsl(35 90% 50%)', color: 'hsl(35 90% 30%)' };  
           break;
         case 'U':
           labelPrefix = '用户';
-          nodeStyle = { ...nodeStyle, borderColor: 'hsl(265 70% 50%)', background: 'hsl(265 70% 92% / 0.8)', color: 'hsl(265 70% 30%)' }; 
+          nodeStyle = { ...nodeStyle, background: 'hsl(265 70% 92% / 0.8)', borderColor: 'hsl(265 70% 50%)', color: 'hsl(265 70% 30%)' }; 
           break;
       }
 
@@ -458,7 +494,7 @@ export default function TopologyPage() {
         if (!parentNodeFound) {
           toast({
             title: "放置无效",
-            description: `${labelPrefix} (${nodeRole}) 节点必须放置在主控 (M) 容器内。`,
+            description: `服务端 (S) / 客户端 (C) 节点必须放置在主控 (M) 容器内。`,
             variant: "destructive",
           });
           return; 
@@ -488,9 +524,9 @@ export default function TopologyPage() {
         sourcePosition: Position.Right,
         targetPosition: Position.Left,
       };
-      toast({ title: `${labelPrefix} 节点已添加`, description: `已添加 ${labelPrefix} (${nodeRole}) 到画布${parentNodeFound ? ` (于主控 ${parentNodeFound.data.label})` : ''}。` });
+      toast({ title: `${labelPrefix} 节点已添加`, description: `已添加 ${labelPrefix} (${nodeRole}) 到画布${parentNodeFound ? ` (于主控 “${parentNodeFound.data.label}”)` : ''}。` });
     } else {
-      return; // Should not happen if type is 'master' but draggedData is missing
+      return; // Should not happen if type is 'master' but draggedData is missing, or other unknown type
     }
     setNodesInternal((nds) => nds.concat(newNode));
   }, [nodeIdCounter, setNodesInternal, toast, nodesInternal]);

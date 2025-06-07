@@ -47,10 +47,22 @@ export function PropertiesDisplayPanel({ selectedNode }: PropertiesDisplayPanelP
           <span className="ml-1">{data.nodeType}</span>
         </div>
       )}
-      {data.masterId && (
+      {data.masterId && ( // For M nodes representing a master config
          <div>
-          <strong className="text-muted-foreground">主控ID (MasterID):</strong>
+          <strong className="text-muted-foreground">源主控ID:</strong>
           <span className="ml-1 font-mono break-all">{data.masterId}</span>
+        </div>
+      )}
+      {data.representedMasterId && ( // For S/C nodes created from a master drag
+         <div>
+          <strong className="text-muted-foreground">代表主控ID:</strong>
+          <span className="ml-1 font-mono break-all">{data.representedMasterId}</span>
+        </div>
+      )}
+       {data.representedMasterName && ( // For S/C nodes created from a master drag
+         <div>
+          <strong className="text-muted-foreground">代表主控名:</strong>
+          <span className="ml-1">{data.representedMasterName}</span>
         </div>
       )}
        {data.parentNode && (
@@ -66,7 +78,7 @@ export function PropertiesDisplayPanel({ selectedNode }: PropertiesDisplayPanelP
         </div>
       )}
        {/* Display other relevant properties based on role */}
-      {data.role === 'M' && data.masterName && ( // masterName is already covered by label for M nodes
+      {data.role === 'M' && data.masterName && ( 
         <div>
           <strong className="text-muted-foreground">源主控名称:</strong>
           <span className="ml-1">{data.masterName}</span>
