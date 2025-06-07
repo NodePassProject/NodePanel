@@ -229,7 +229,7 @@ export function parseNodePassUrlForTopology(url: string): ParsedTopologyUrlData 
     if (queryPart) {
       const params = new URLSearchParams(queryPart);
       const log = params.get('log');
-      if (log && ['debug', 'info', 'warn', 'error', 'fatal'].includes(log)) {
+      if (log && ['debug', 'info', 'warn', 'error', 'event'].includes(log)) {
         result.logLevel = log as MasterLogLevel;
       } else {
         result.logLevel = 'master'; // Default if param is missing or invalid

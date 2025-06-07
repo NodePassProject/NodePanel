@@ -10,7 +10,7 @@ export const createInstanceFormSchema = z.object({
   serverApiId: z.optional(z.string()), 
   tunnelAddress: z.string().min(1, "隧道地址是必需的。").regex(/^(?:\[[0-9a-fA-F:]+\]|[0-9a-zA-Z.-]+):[0-9]+$/, "隧道地址格式无效 (例: host:port 或 [ipv6]:port)"),
   targetAddress: z.string().optional(), 
-  logLevel: z.enum(["master", "debug", "info", "warn", "error", "fatal"], {
+  logLevel: z.enum(["master", "debug", "info", "warn", "error", "event"], {
     required_error: "日志级别是必需的。",
   }),
   tlsMode: z.string(),
@@ -91,7 +91,7 @@ export const modifyInstanceFormSchema = z.object({
   }),
   tunnelAddress: z.string().min(1, "隧道地址是必需的。").regex(/^(?:\[[0-9a-fA-F:]+\]|[0-9a-zA-Z.-]+):[0-9]+$/, "隧道地址格式无效 (例: host:port)"),
   targetAddress: z.string().min(1, "目标地址是必需的。").regex(/^(?:\[[0-9a-fA-F:]+\]|[0-9a-zA-Z.-]+):[0-9]+$/, "目标地址格式无效 (例: host:port)"),
-  logLevel: z.enum(["master", "debug", "info", "warn", "error", "fatal"], {
+  logLevel: z.enum(["master", "debug", "info", "warn", "error", "event"], {
     required_error: "日志级别是必需的。",
   }),
   tlsMode: z.string(), 

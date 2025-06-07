@@ -89,7 +89,7 @@ function parseNodePassUrl(url: string): ParsedNodePassUrl {
     if (queryPart) {
       const params = new URLSearchParams(queryPart);
       const log = params.get('log');
-      if (log && ['debug', 'info', 'warn', 'error', 'fatal'].includes(log)) {
+      if (log && ['debug', 'info', 'warn', 'error', 'event'].includes(log)) {
         result.logLevel = log as MasterLogLevel;
       } else {
         result.logLevel = 'master'; 
@@ -227,7 +227,7 @@ export function ModifyInstanceDialog({ instance, open, onOpenChange, apiId, apiR
   }
   
   const masterLogLevelDisplay = activeApiConfig?.masterDefaultLogLevel && activeApiConfig.masterDefaultLogLevel !== 'master'
-    ? activeApiConfig.masterDefaultLogLevel.toUpperCase()
+    ? activeApiConfig.masterDefaultLogLevel.charAt(0).toUpperCase() + activeApiConfig.masterDefaultLogLevel.slice(1)
     : '主控配置';
 
   const masterTlsModeDisplay = activeApiConfig?.masterDefaultTlsMode && activeApiConfig.masterDefaultTlsMode !== 'master'
@@ -343,7 +343,7 @@ export function ModifyInstanceDialog({ instance, open, onOpenChange, apiId, apiR
                       <SelectItem value="info" className="font-sans">Info</SelectItem>
                       <SelectItem value="warn" className="font-sans">Warn</SelectItem>
                       <SelectItem value="error" className="font-sans">Error</SelectItem>
-                      <SelectItem value="fatal" className="font-sans">Fatal</SelectItem>
+                      <SelectItem value="event" className="font-sans">Event</SelectItem>
                     </SelectContent>
                   </Select>
                   <FormDescription className="font-sans text-xs">

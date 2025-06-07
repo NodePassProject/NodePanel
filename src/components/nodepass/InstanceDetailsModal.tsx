@@ -12,7 +12,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import type { Instance } from '@/types/nodepass';
 import { InstanceStatusBadge } from './InstanceStatusBadge';
-import { ArrowDownCircle, ArrowUpCircle, ServerIcon, SmartphoneIcon, Fingerprint, Cable, KeyRound, Eye, EyeOff, ScrollText, Network, AlertTriangle, Info as InfoIcon, MessageSquare, AlertCircle, Bug, HelpCircle } from 'lucide-react';
+import { ArrowDownCircle, ArrowUpCircle, ServerIcon, SmartphoneIcon, Fingerprint, Cable, KeyRound, Eye, EyeOff, ScrollText, Network, AlertTriangle, Info as InfoIcon, MessageSquare, AlertCircle, Bug, HelpCircle, FileText } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { getEventsUrl } from '@/lib/api';
@@ -37,7 +37,7 @@ interface ParsedLogEntry {
   id: string;
   fullTimestamp: string;
   time: string;
-  level: 'ERROR' | 'WARN' | 'INFO' | 'DEBUG' | 'FATAL' | 'UNKNOWN';
+  level: 'ERROR' | 'WARN' | 'INFO' | 'DEBUG' | 'FATAL' | 'EVENT' | 'UNKNOWN';
   message: string;
 }
 
@@ -59,7 +59,7 @@ function stripAnsiCodes(str: string): string {
 
 const logLineRegex = /^(\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2}\.\d{3})\s+([A-Z]+)\s+(.*)$/s;
 const bracketedLevelRegex = /^\[?([A-Z]+)\]?\s+(.*)$/s;
-const KNOWN_LOG_LEVELS: ReadonlyArray<ParsedLogEntry['level']> = ['ERROR', 'WARN', 'INFO', 'DEBUG', 'FATAL'];
+const KNOWN_LOG_LEVELS: ReadonlyArray<ParsedLogEntry['level']> = ['ERROR', 'WARN', 'INFO', 'DEBUG', 'FATAL', 'EVENT'];
 
 
 function parseAndFormatLogLine(
@@ -86,14 +86,13 @@ function parseAndFormatLogLine(
   if (standardLogMatch) {
     const matchedFullTimestamp = standardLogMatch[1].trim();
     const levelString = standardLogMatch[2].trim().toUpperCase();
-    let message = standardLogMatch[3].trim(); // Use let for message as it might be reassigned
+    let message = standardLogMatch[3].trim();
     const time = new Date(matchedFullTimestamp).toLocaleTimeString('zh-CN', { hour12: false });
     
-    const level = KNOWN_LOG_LEVELS.includes(levelString as any)
+    let parsedLevel = KNOWN_LOG_LEVELS.includes(levelString as any)
       ? (levelString as ParsedLogEntry['level'])
-      : 'INFO'; // Default to INFO if timestamped but level is not standard (e.g., "EVENT")
+      : 'INFO'; // Default to INFO if timestamped but level is not standard
 
-    // Check for TRAFFIC_STATS message
     if (message.startsWith("Exchange complete: TRAFFIC_STATS|")) {
       try {
         const statsPart = message.substring("Exchange complete: TRAFFIC_STATS|".length);
@@ -119,17 +118,15 @@ UDP 流量: ${formatBytes(udpRx)} / ${formatBytes(udpTx)}`;
           id: `${matchedFullTimestamp}-${index}-traffic-${Math.random()}`, 
           fullTimestamp: matchedFullTimestamp, 
           time, 
-          level: 'INFO', // As requested, display traffic stats as INFO
+          level: 'EVENT', // Traffic stats are considered 'EVENT' level
           message: formattedMessage 
         };
       } catch (parseError) {
         console.warn("Failed to parse traffic stats from log message:", message, parseError);
-        // Fallback to showing the original message if parsing fails, with the determined level
-        return { id: `${matchedFullTimestamp}-${index}-trafficfail-${Math.random()}`, fullTimestamp: matchedFullTimestamp, time, level, message };
+        return { id: `${matchedFullTimestamp}-${index}-trafficfail-${Math.random()}`, fullTimestamp: matchedFullTimestamp, time, level: parsedLevel, message };
       }
     }
-    // If not traffic stats, return as before
-    return { id: `${matchedFullTimestamp}-${index}-${Math.random()}`, fullTimestamp: matchedFullTimestamp, time, level, message };
+    return { id: `${matchedFullTimestamp}-${index}-${Math.random()}`, fullTimestamp: matchedFullTimestamp, time, level: parsedLevel, message };
   }
 
   const diagnosticLevelMatch = cleanedLog.match(bracketedLevelRegex);
@@ -304,27 +301,27 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
               } else if (jsonData.type === 'initial') {
                   // Handled silently for API key instance, otherwise log for general instances
                   if (Array.isArray(jsonData.instance)) {
-                    addLogEntry(parseAndFormatLogLine(`收到初始实例数据 (${jsonData.instance.length} 个)。`, logCounterRef.current++, 'INFO'), 'INFO');
+                    addLogEntry(parseAndFormatLogLine(`收到初始实例数据 (${jsonData.instance.length} 个)。`, logCounterRef.current++, 'INFO'));
                   } else if (typeof jsonData.instance === 'object' && jsonData.instance !== null && jsonData.instance.id !== '********') {
-                    addLogEntry(parseAndFormatLogLine(`收到单个实例初始数据: ${jsonData.instance.id.substring(0,8)}...`, logCounterRef.current++, 'INFO'), 'INFO');
+                    addLogEntry(parseAndFormatLogLine(`收到单个实例初始数据: ${jsonData.instance.id.substring(0,8)}...`, logCounterRef.current++, 'INFO'));
                   }
               } else if (jsonData.type === 'create' && jsonData.instance && jsonData.instance.id !== '********') {
-                  addLogEntry(parseAndFormatLogLine(`实例已创建: ${jsonData.instance.id.substring(0,8)}...`, logCounterRef.current++, 'INFO'), 'INFO');
+                  addLogEntry(parseAndFormatLogLine(`实例已创建: ${jsonData.instance.id.substring(0,8)}...`, logCounterRef.current++, 'INFO'));
               } else if (jsonData.type === 'update' && jsonData.instance && jsonData.instance.id !== '********') {
-                  addLogEntry(parseAndFormatLogLine(`实例已更新: ${jsonData.instance.id.substring(0,8)}... 状态: ${jsonData.instance.status}`, logCounterRef.current++, 'INFO'), 'INFO');
+                  addLogEntry(parseAndFormatLogLine(`实例已更新: ${jsonData.instance.id.substring(0,8)}... 状态: ${jsonData.instance.status}`, logCounterRef.current++, 'INFO'));
               } else if (jsonData.type === 'delete' && jsonData.instance && jsonData.instance.id !== '********') {
-                  addLogEntry(parseAndFormatLogLine(`实例已删除: ${jsonData.instance.id.substring(0,8)}...`, logCounterRef.current++, 'INFO'), 'INFO');
+                  addLogEntry(parseAndFormatLogLine(`实例已删除: ${jsonData.instance.id.substring(0,8)}...`, logCounterRef.current++, 'INFO'));
               } else if (eventInstanceId !== '********') { // Only warn if not for API key
-                addLogEntry(parseAndFormatLogLine(`未识别的 'instance' 事件数据类型: ${jsonData.type}. Data: ${JSON.stringify(jsonData).substring(0,100)}...`, logCounterRef.current++, 'WARN'), 'WARN');
+                addLogEntry(parseAndFormatLogLine(`未识别的 'instance' 事件数据类型: ${jsonData.type}. Data: ${JSON.stringify(jsonData).substring(0,100)}...`, logCounterRef.current++, 'WARN'));
               }
 
             } catch (e: any) {
                  if (instance.id !== '********') {
-                    addLogEntry(parseAndFormatLogLine(`解析 'instance' 事件数据错误: ${e.message}. Data snippet: ${eventData.substring(0,100)}...`, logCounterRef.current++, 'ERROR'), 'ERROR');
+                    addLogEntry(parseAndFormatLogLine(`解析 'instance' 事件数据错误: ${e.message}. Data snippet: ${eventData.substring(0,100)}...`, logCounterRef.current++, 'ERROR'));
                  }
             }
           } else if (eventData && eventName !== 'instance' && instance.id !== '********') { 
-             addLogEntry(parseAndFormatLogLine(`收到事件 "${eventName}" (预期 "instance"). Data: ${eventData.substring(0, 50)}...`, logCounterRef.current++, 'WARN'), 'WARN');
+             addLogEntry(parseAndFormatLogLine(`收到事件 "${eventName}" (预期 "instance"). Data: ${eventData.substring(0, 50)}...`, logCounterRef.current++, 'WARN'));
           }
         }
       }
@@ -430,7 +427,7 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
           className="items-center whitespace-nowrap text-xs font-sans"
         >
           {instance.type === 'server' ? <ServerIcon size={12} className="mr-1" /> : <SmartphoneIcon size={12} className="mr-1" />}
-          {instance.type === 'server' ? '服务端' : '客户端'}
+          {instance.type === 'server' ? '出口(s)' : '入口(c)'}
         </Badge>
       ),
       icon: isApiKeyInstance ? <KeyRound className="h-4 w-4 text-muted-foreground" /> : (instance.type === 'server' ? <ServerIcon className="h-4 w-4 text-muted-foreground" /> : <SmartphoneIcon className="h-4 w-4 text-muted-foreground" />)
@@ -505,6 +502,8 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
         return 'text-blue-500 dark:text-blue-400';
       case 'DEBUG':
         return 'text-purple-500 dark:text-purple-400';
+      case 'EVENT':
+        return 'text-teal-500 dark:text-teal-400';
       default:
         return 'text-muted-foreground';
     }
@@ -521,6 +520,8 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
         return <InfoIcon className="h-3.5 w-3.5 mr-1" />;
       case 'DEBUG':
         return <Bug className="h-3.5 w-3.5 mr-1" />;
+      case 'EVENT':
+        return <FileText className="h-3.5 w-3.5 mr-1" />; // Changed icon for EVENT
       default: // UNKNOWN
         return <HelpCircle className="h-3.5 w-3.5 mr-1" />;
     }

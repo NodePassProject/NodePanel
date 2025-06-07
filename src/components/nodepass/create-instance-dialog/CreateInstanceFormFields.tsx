@@ -40,7 +40,7 @@ export function CreateInstanceFormFields({
 }: CreateInstanceFormFieldsProps) {
 
   const masterLogLevelDisplay = activeApiConfig?.masterDefaultLogLevel && activeApiConfig.masterDefaultLogLevel !== 'master'
-    ? activeApiConfig.masterDefaultLogLevel.toUpperCase()
+    ? activeApiConfig.masterDefaultLogLevel.charAt(0).toUpperCase() + activeApiConfig.masterDefaultLogLevel.slice(1)
     : '主控配置';
 
   const effectiveTlsModeDisplay = activeApiConfig?.masterDefaultTlsMode && activeApiConfig.masterDefaultTlsMode !== 'master'
@@ -295,7 +295,7 @@ export function CreateInstanceFormFields({
                   <SelectItem value="info" className="font-sans">Info</SelectItem>
                   <SelectItem value="warn" className="font-sans">Warn</SelectItem>
                   <SelectItem value="error" className="font-sans">Error</SelectItem>
-                  <SelectItem value="fatal" className="font-sans">Fatal</SelectItem>
+                  <SelectItem value="event" className="font-sans">Event</SelectItem>
                 </SelectContent>
               </Select>
               <FormDescription className="font-sans text-xs">
