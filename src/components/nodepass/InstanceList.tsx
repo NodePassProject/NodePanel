@@ -44,7 +44,8 @@ function formatBytes(bytes: number) {
 // Helper to format host for URL (e.g., add brackets for IPv6)
 function formatHostForDisplay(host: string | null | undefined): string {
   if (!host) return '未知主机';
-  if (host.includes(':') && !host.startsWith('[')) {
+  // Check if it's an IPv6 address and doesn't already have brackets
+  if (host.includes(':') && !host.startsWith('[') && !host.endsWith(']')) {
     return `[${host}]`;
   }
   return host;
@@ -52,7 +53,7 @@ function formatHostForDisplay(host: string | null | undefined): string {
 
 // Helper to check for wildcard hostnames (0.0.0.0, [::], ::)
 const isWildcardHost = (host: string | null | undefined): boolean => {
-    if (!host) return false; 
+    if (!host) return false;
     const lowerHost = host.toLowerCase();
     return lowerHost === '0.0.0.0' || lowerHost === '[::]' || lowerHost === '::';
 };
@@ -64,7 +65,7 @@ interface InstanceListProps {
   apiRoot: string | null;
   apiToken: string | null;
   activeApiConfig: NamedApiConfig | null;
-  apiConfigsList: NamedApiConfig[]; // Added to determine other masters
+  apiConfigsList: NamedApiConfig[];
   onLog?: (message: string, type: AppLogEntry['type']) => void;
 }
 
@@ -169,7 +170,7 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
     (instance.id !== '********' && instance.type.toLowerCase().includes(searchTerm.toLowerCase())) ||
     (instance.id === '********' && ('api key'.includes(searchTerm.toLowerCase()) || '密钥'.includes(searchTerm.toLowerCase()) || (apiName && apiName.toLowerCase().includes(searchTerm.toLowerCase())) ))
   );
-  
+
   const deletableInstances = useMemo(() => filteredInstances?.filter(inst => inst.id !== '********') || [], [filteredInstances]);
 
   const apiKeyInstance = filteredInstances?.find(inst => inst.id === '********');
@@ -250,7 +251,7 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
 
   const renderInstanceRow = (instance: Instance) => {
     const parsedUrl = instance.id !== '********' ? parseNodePassUrlForTopology(instance.url) : null;
-    
+
     let displayTargetTunnelContent: React.ReactNode = "N/A";
     let copyTitle = "目标/隧道地址";
     let stringToCopy = "";
@@ -288,55 +289,43 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
             </span>
         );
     } else if (instance.type === 'client' && parsedUrl && activeApiConfig) {
-        const clientUrlTunnelHost = extractHostname(parsedUrl.tunnelAddress || '');
-        const clientUrlTunnelPort = extractPort(parsedUrl.tunnelAddress || '');
+        const clientMasterApiHost = extractHostname(activeApiConfig.apiUrl);
 
-        const isSingleEnded = isWildcardHost(clientUrlTunnelHost);
+        // Check if the client instance was created as a single-ended forwarder
+        // A single-ended client's tunnelAddress in its NodePass URL is typically like "[::]:<local_port>" or "0.0.0.0:<local_port>"
+        const isSingleEnded = parsedUrl.tunnelAddress && (parsedUrl.tunnelAddress.startsWith('[::]:') || parsedUrl.tunnelAddress.startsWith('0.0.0.0:'));
 
         if (isSingleEnded) {
-            const clientMasterHost = extractHostname(activeApiConfig.apiUrl);
-            const clientListeningPort = clientUrlTunnelPort;
-            if (clientMasterHost && clientListeningPort) {
-                stringToCopy = `${formatHostForDisplay(clientMasterHost)}:${clientListeningPort}`;
-                copyTitle = "入口(c)本地监听 (单端)";
+            const clientLocalListeningPort = extractPort(parsedUrl.tunnelAddress || ''); // Port it listens on locally
+            if (clientMasterApiHost && clientLocalListeningPort) {
+                stringToCopy = `${formatHostForDisplay(clientMasterApiHost)}:${clientLocalListeningPort}`;
+                copyTitle = `入口(c)本地监听 (单端模式, 主控: ${activeApiConfig.name})`;
             } else {
-                stringToCopy = `${formatHostForDisplay(clientUrlTunnelHost)}:${clientListeningPort || '未知端口'}`;
-                copyTitle = "入口(c)本地监听 (单端, 主控地址未知)";
+                // Fallback if master host is somehow unavailable, but local port is known
+                stringToCopy = `${parsedUrl.tunnelAddress || '[::]:????'}`;
+                copyTitle = `入口(c)本地监听 (单端模式, 主控地址或端口解析失败)`;
             }
-        } else {
-            // Normal client or cross-API client
-            const clientLocalForwardTarget = parsedUrl.targetAddress;
-            const clientLocalForwardPort = extractPort(clientLocalForwardTarget);
-            
-            // Check if the client is tunneling to a server on a different master
-            let serverMasterApiHost: string | null = null;
-            if (clientUrlTunnelHost) {
-                const serverMasterConfig = apiConfigsList.find(config => {
-                    const configApiHost = extractHostname(config.apiUrl);
-                    return configApiHost && configApiHost.toLowerCase() === clientUrlTunnelHost.toLowerCase() && config.id !== activeApiConfig.id;
-                });
-                if (serverMasterConfig) {
-                    serverMasterApiHost = extractHostname(serverMasterConfig.apiUrl);
-                }
+        } else { // Normal client (not single-ended)
+            const clientLocalForwardPort = extractPort(parsedUrl.targetAddress || ''); // Port it forwards to locally (on its own machine)
+            if (clientMasterApiHost && clientLocalForwardPort) {
+                stringToCopy = `${formatHostForDisplay(clientMasterApiHost)}:${clientLocalForwardPort}`;
+                copyTitle = `入口(c)本地转发 (主控: ${activeApiConfig.name})`;
+            } else if (clientLocalForwardPort) {
+                 // Fallback if master host is somehow unavailable, but local port is known
+                stringToCopy = `127.0.0.1:${clientLocalForwardPort}`; // Default to localhost if master host is not found
+                copyTitle = `入口(c)本地转发 (主控地址未知)`;
             }
-
-            if (serverMasterApiHost && clientLocalForwardPort) { // Cross-API tunnel
-                stringToCopy = `${formatHostForDisplay(serverMasterApiHost)}:${clientLocalForwardPort}`;
-                copyTitle = `入口(c)本地转发 (目标主控: ${serverMasterApiHost})`;
-            } else { // Normal client (same master or unknown external)
-                const displayHost = (!clientLocalForwardTarget || isWildcardHost(extractHostname(clientLocalForwardTarget)) || extractHostname(clientLocalForwardTarget)?.toLowerCase() === 'localhost') 
-                                    ? '127.0.0.1' 
-                                    : formatHostForDisplay(extractHostname(clientLocalForwardTarget));
-                const effectivePort = clientLocalForwardPort || (clientUrlTunnelPort ? (parseInt(clientUrlTunnelPort, 10) + 1).toString() : "未知");
-                stringToCopy = `${displayHost}:${effectivePort}`;
-                copyTitle = "入口(c)本地转发";
+             else {
+                // Fallback if even local forward port cannot be determined
+                stringToCopy = parsedUrl.targetAddress || "N/A (解析目标失败)";
+                copyTitle = "入口(c)本地转发目标";
             }
         }
         displayTargetTunnelContent = (
            <span
             className="font-mono text-xs cursor-pointer hover:text-primary transition-colors duration-150"
             title={`点击复制: ${stringToCopy}`}
-            onClick={(e) => { e.stopPropagation(); handleCopyToClipboard(stringToCopy, copyTitle); }}
+            onClick={(e) => { e.stopPropagation(); if(stringToCopy && !stringToCopy.startsWith("N/A")) {handleCopyToClipboard(stringToCopy, copyTitle); }}}
            >
              {stringToCopy}
            </span>
@@ -382,7 +371,7 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
           ) : (
             <InstanceStatusBadge status={instance.status} />
           )
-        }</TableCell><TableCell 
+        }</TableCell><TableCell
           className="truncate max-w-[200px] text-xs font-mono cursor-pointer hover:text-primary transition-colors duration-150"
           title={copyTitle}
           onClick={(e) => {
@@ -439,7 +428,7 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
     if (isLoadingInstances && !instancesError) {
       return renderSkeletons();
     }
-    
+
     if (filteredInstances && filteredInstances.length > 0) {
       if (apiKeyInstance) {
         rowsToRender.push(renderInstanceRow(apiKeyInstance));
@@ -448,7 +437,7 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
         rowsToRender.push(...otherInstances.map(instance => renderInstanceRow(instance)));
       }
     }
-    
+
     if (rowsToRender.length > 0) {
       return rowsToRender;
     }
@@ -585,3 +574,4 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
   );
 }
     
+
