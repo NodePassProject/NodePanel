@@ -150,7 +150,7 @@ export function CreateInstanceFormFields({
             <FormItem>
               <FormLabel className="font-sans">
                 {instanceType === '出口(s)' ? '出口(s)隧道监听地址' :
-                 (autoCreateServer ? '出口(s)隧道监听端口' : '连接的出口(s)隧道地址')}
+                 (autoCreateServer ? '出口(s)隧道端口' : '连接的出口(s)隧道地址')}
               </FormLabel>
               <FormControl>
                 <Input
@@ -159,7 +159,7 @@ export function CreateInstanceFormFields({
                     instanceType === "出口(s)"
                       ? "例: 0.0.0.0:10101"
                       : (autoCreateServer
-                          ? "例: 10101 (主机默认为 [::])" 
+                          ? "例: 10101 (主机将固定为 [::])" 
                           : "例: your.server.com:10101")
                   }
                   {...field}
@@ -169,7 +169,7 @@ export function CreateInstanceFormFields({
                 {instanceType === "出口(s)"
                   ? "出口(s)在此地址监听控制连接。"
                   : (autoCreateServer
-                      ? "自动创建的出口(s)将在此端口监听 (主机默认为 [::])。"
+                      ? "自动创建的出口(s)将在此端口监听 (主机固定为 [::])。"
                       : "入口(c)连接此出口(s)地址的控制通道。")}
               </FormDescription>
               {externalApiSuggestion && (

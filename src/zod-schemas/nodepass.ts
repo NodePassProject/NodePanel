@@ -8,7 +8,7 @@ export const createInstanceFormSchema = z.object({
   }),
   autoCreateServer: z.optional(z.boolean()),
   serverApiId: z.optional(z.string()),
-  tunnelAddress: z.string().min(1, "隧道地址是必需的。").regex(/^(?:\[[0-9a-fA-F:]+\]|[0-9a-zA-Z.-]+):[0-9]+$/, "隧道地址格式无效 (例: host:port 或 [ipv6]:port)"),
+  tunnelAddress: z.string().min(1, "隧道地址/端口是必需的。"), // Base validation, refined in superRefine
   targetAddress: z.string().optional(),
   logLevel: z.enum(["master", "debug", "info", "warn", "error", "event"], {
     required_error: "日志级别是必需的。",
@@ -17,6 +17,25 @@ export const createInstanceFormSchema = z.object({
   certPath: z.optional(z.string()),
   keyPath: z.optional(z.string()),
 }).superRefine((data, ctx) => {
+  // TunnelAddress validation based on context
+  if (data.instanceType === "入口(c)" && data.autoCreateServer) {
+    if (!/^[0-9]+$/.test(data.tunnelAddress)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "出口(s)隧道端口格式无效 (例: 10101)",
+        path: ["tunnelAddress"],
+      });
+    }
+  } else { // For "出口(s)" or "入口(c)" without autoCreateServer
+    if (!/^(?:\[[0-9a-fA-F:]+\]|[0-9a-zA-Z.-]+):[0-9]+$/.test(data.tunnelAddress)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "隧道地址格式无效 (例: host:port 或 [ipv6]:port)",
+        path: ["tunnelAddress"],
+      });
+    }
+  }
+
   // TargetAddress validation
   if (data.instanceType === "出口(s)" && (!data.targetAddress || data.targetAddress.trim() === "")) {
     ctx.addIssue({
@@ -84,14 +103,10 @@ export const createInstanceFormSchema = z.object({
 // Type for the create form values
 export type CreateInstanceFormValues = z.infer<typeof createInstanceFormSchema>;
 
-// modifyInstanceFormSchema and ModifyInstanceFormValues removed
-
 // This schema is for the API request, which still expects a single URL for creating
 export const createInstanceApiSchema = z.object({
   url: z.string().min(1, "URL是必需的。").url("无效的URL格式。例: scheme://host:port/host:port"),
 });
-
-// modifyInstanceConfigApiSchema removed
 
 export const updateInstanceSchema = z.object({
   action: z.enum(["start", "stop", "restart"]),

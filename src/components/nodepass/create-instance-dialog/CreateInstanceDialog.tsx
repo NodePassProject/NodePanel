@@ -266,29 +266,21 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
     let clientInstanceUrl = '';
     let serverInstanceUrlForAutoCreate: string | null = null;
 
+    // formTunnelInput will contain just the port if autoCreateServer is true for 入口(c),
+    // otherwise it's a full host:port string.
     const formTunnelInput = values.tunnelAddress; 
-    const formTargetAddress = values.targetAddress;
-
-    const portFromTunnelInput = extractPort(formTunnelInput);
-    
-    if (values.instanceType === "入口(c)" && values.autoCreateServer && !portFromTunnelInput) {
-        toast({ title: "错误", description: "为自动创建的出口(s)指定隧道监听端口是必需的。", variant: "destructive" });
-        onLog?.('创建实例失败: 未能从出口(s)隧道监听端口输入中提取有效端口。', 'ERROR');
-        return;
-    }
-     if (values.instanceType === "出口(s)" && !portFromTunnelInput) {
-        toast({ title: "错误", description: "无法从出口(s)隧道监听地址中提取有效端口。", variant: "destructive" });
-        onLog?.('创建实例失败: 无法从出口(s)隧道监听地址中提取有效端口。', 'ERROR');
-        return;
-    }
-
+    const formTargetAddress = values.targetAddress; // This is server's target if auto-creating, client's local if not.
 
     if (values.instanceType === '入口(c)') {
         if (values.autoCreateServer) {
             // --- 1. 准备【出口(s)】参数 ---
-            const serverListenHost_ForDefinition = '[::]'; 
-            const serverListenPort_ForDefinition = portFromTunnelInput!; 
+            const serverListenHost_ForDefinition = '[::]'; // Host is fixed to [::]
+            const serverListenPort_ForDefinition = formTunnelInput; // This is just the port string
 
+            if (!/^[0-9]+$/.test(serverListenPort_ForDefinition)) {
+                toast({ title: "错误", description: "出口(s)隧道端口格式无效。", variant: "destructive" }); return;
+            }
+            
             const serverActualTargetAddress = formTargetAddress; 
             if (!serverActualTargetAddress) {
                 toast({ title: "错误", description: "自动创建出口(s)时，其转发目标地址是必需的。", variant: "destructive" }); return;
@@ -307,7 +299,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
 
             serverInstanceUrlForAutoCreate = buildUrlFromFormValues({
                 instanceType: '出口(s)',
-                tunnelAddress: `${serverListenHost_ForDefinition}:${serverListenPort_ForDefinition}`,
+                tunnelAddress: `${serverListenHost_ForDefinition}:${serverListenPort_ForDefinition}`, // Construct full address
                 targetAddress: serverActualTargetAddress,
                 logLevel: values.logLevel,
                 tlsMode: values.tlsMode,
@@ -321,14 +313,11 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
             if (!clientConnectToServerHost) {
                  toast({ title: "错误", description: `无法从出口(s)主控 "${serverMasterConfig.name}" API URL提取主机名。`, variant: "destructive" }); return;
             }
-            const clientConnectToServerPort = serverListenPort_ForDefinition; 
+            const clientConnectToServerPort = serverListenPort_ForDefinition; // Port is the same
 
             const clientConnectToFullTunnelAddr = `${formatHostForUrl(clientConnectToServerHost)}:${clientConnectToServerPort}`;
             
-            // Client's local forward target address defaults to [::]:(server_port+1)
-            // The form's `values.targetAddress` is for the SERVER's target in this auto-create mode.
             const clientActualLocalForwardTargetAddress = `${formatHostForUrl('[::]')}:${(parseInt(serverListenPort_ForDefinition, 10) + 1).toString()}`;
-
 
             clientInstanceUrl = buildUrlFromFormValues({
                 instanceType: '入口(c)',
@@ -339,13 +328,13 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
             onLog?.(`准备创建入口(c)实例于 "${activeApiConfig.name}": ${clientInstanceUrl}`, 'INFO');
 
         } else { // 入口(c) connecting to an existing server
-            const clientRemoteFullAddress = formTunnelInput; 
+            const clientRemoteFullAddress = formTunnelInput; // This should be host:port
             const clientRemotePort = extractPort(clientRemoteFullAddress);
             if (!clientRemotePort) {
                 toast({ title: "错误", description: "无法从连接的出口(s)隧道地址提取端口。", variant: "destructive" }); return;
             }
-            const clientLocalForwardPortCalculated = (parseInt(clientRemotePort, 10) + 1).toString();
-            const clientLocalForwardTargetAddress = values.targetAddress || `${formatHostForUrl('[::]')}:${clientLocalForwardPortCalculated}`;
+            
+            const clientLocalForwardTargetAddress = values.targetAddress || `${formatHostForUrl('[::]')}:${(parseInt(clientRemotePort, 10) + 1).toString()}`;
 
             clientInstanceUrl = buildUrlFromFormValues({
                 instanceType: '入口(c)',
@@ -357,9 +346,12 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
         }
 
     } else { // 出口(s) instance
-        const serverListenHost_ForDefinition = extractHostname(formTunnelInput) || '0.0.0.0'; 
-        const serverListenPort_ForDefinition = portFromTunnelInput!; 
-
+        const serverListenFullAddress = formTunnelInput; // This is host:port
+        const serverListenPort = extractPort(serverListenFullAddress);
+         if (!serverListenPort) {
+            toast({ title: "错误", description: "无法从出口(s)隧道监听地址中提取有效端口。", variant: "destructive" }); return;
+        }
+        
         const serverActualTargetAddress = formTargetAddress;
         if (!serverActualTargetAddress) {
              toast({ title: "错误", description: "创建出口(s)时，目标地址 (业务数据) 是必需的。", variant: "destructive" }); return;
@@ -367,7 +359,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
 
         clientInstanceUrl = buildUrlFromFormValues({
             instanceType: '出口(s)',
-            tunnelAddress: `${formatHostForUrl(serverListenHost_ForDefinition)}:${serverListenPort_ForDefinition}`,
+            tunnelAddress: serverListenFullAddress, // Pass full address
             targetAddress: serverActualTargetAddress,
             logLevel: values.logLevel,
             tlsMode: values.tlsMode,
@@ -376,7 +368,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
         }, activeApiConfig);
         onLog?.(`准备创建出口(s)实例于 "${activeApiConfig.name}": ${clientInstanceUrl}`, 'INFO');
     }
-
+    
     try {
       let serverCreationOk = true;
       if (serverInstanceUrlForAutoCreate) {
@@ -396,15 +388,15 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
               useApiToken: serverTargetApiToken,
             });
           } catch (e) {
-            serverCreationOk = false;
+            serverCreationOk = false; 
           }
         }
       }
 
-      if (clientInstanceUrl && serverCreationOk) {
+      if (clientInstanceUrl && serverCreationOk) { 
         await createInstanceMutation.mutateAsync({
             data: { url: clientInstanceUrl },
-            useApiRoot: clientMasterApiRoot,
+            useApiRoot: clientMasterApiRoot, 
             useApiToken: clientMasterApiToken,
          });
       } else if (!clientInstanceUrl) {
@@ -412,7 +404,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
         toast({ title: "内部错误", description: "主实例URL未能构建。", variant: "destructive" });
         return;
       }
-
+      
       if (!createInstanceMutation.isError && serverCreationOk) {
          form.reset();
          onOpenChange(false);
@@ -422,7 +414,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
        onLog?.(`创建实例序列中发生意外错误: ${error.message}`, 'ERROR');
     }
   }
-
+  
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
@@ -435,7 +427,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
             为当前主控 “{apiName || 'N/A'}” 配置新实例。
           </DialogDescription>
         </DialogHeader>
-
+        
         <CreateInstanceFormFields
             form={form}
             instanceType={instanceType as "入口(c)" | "出口(s)"}
@@ -470,4 +462,3 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
     </Dialog>
   );
 }
-
