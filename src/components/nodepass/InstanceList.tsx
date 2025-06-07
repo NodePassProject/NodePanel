@@ -26,7 +26,7 @@ import { Badge } from '@/components/ui/badge';
 import type { NamedApiConfig } from '@/hooks/use-api-key';
 import type { AppLogEntry } from './EventLog';
 import { extractHostname, extractPort, parseNodePassUrlForTopology } from '@/app/topology/lib/topology-utils';
-import { formatHostForUrl } from '@/components/nodepass/create-instance-dialog/utils';
+import { formatHostForUrl } from '@/components/nodepass/create-instance-dialog/utils'; // Corrected import path
 import { Checkbox } from '@/components/ui/checkbox';
 import { Button } from '@/components/ui/button';
 import { BulkDeleteInstancesDialog } from './BulkDeleteInstancesDialog';
@@ -213,12 +213,12 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
   const renderSkeletons = () => {
     return Array.from({ length: 3 }).map((_, i) => (
       <TableRow key={`skeleton-${i}`}>
-        <TableCell className="w-10"><Skeleton className="h-4 w-4" /></TableCell> {/* Checkbox skeleton */}
+        <TableCell className="w-10"><Skeleton className="h-4 w-4" /></TableCell>
         <TableCell><Skeleton className="h-4 w-24" /></TableCell>
         <TableCell><Skeleton className="h-4 w-16" /></TableCell>
         <TableCell><Skeleton className="h-4 w-16" /></TableCell>
         <TableCell><Skeleton className="h-4 w-40" /></TableCell>
-        <TableCell>
+        <TableCell className="text-left">
           <div className="text-left">
             <Skeleton className="h-4 w-20 mb-1" />
             <Skeleton className="h-4 w-20" />
@@ -244,7 +244,7 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
             handleCopyToClipboard(instance.url, "API 密钥");
           }}
         >
-          {apiName ? `${apiName} (API 密钥)` : '主控 API 密钥'}
+          {apiName || '未命名主控'} (API 密钥)
         </span>
       );
     } else if (instance.type === 'server' && parsedUrl) {
@@ -267,7 +267,10 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
         let clientLocalForwardPort: string | null = null;
 
         if (parsedUrl.targetAddress) { 
-            clientLocalForwardPort = extractPort(parsedUrl.targetAddress);
+            const portFromTarget = extractPort(parsedUrl.targetAddress);
+            if (portFromTarget && /^\d+$/.test(portFromTarget)) {
+              clientLocalForwardPort = portFromTarget;
+            }
         }
         if (!clientLocalForwardPort && parsedUrl.tunnelAddress) {
             const serverTunnelPort = extractPort(parsedUrl.tunnelAddress);
@@ -300,22 +303,19 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
       <TableRow
         key={instance.id}
         className="text-foreground/90 hover:text-foreground"
-        onDoubleClick={() => instance.id !== '********' && setSelectedInstanceForDetails(instance)} // API Key instance non-detailed
+        onDoubleClick={() => instance.id !== '********' && setSelectedInstanceForDetails(instance)}
         data-state={selectedInstanceIds.has(instance.id) ? "selected" : ""}
-      >
-        <TableCell className="w-10">
-          {instance.id !== '********' && (
+      ><TableCell className="w-10">{
+          instance.id !== '********' && (
             <Checkbox
               checked={selectedInstanceIds.has(instance.id)}
               onCheckedChange={() => handleSelectInstance(instance.id)}
               aria-label={`选择实例 ${instance.id}`}
               disabled={isBulkDeleting}
             />
-          )}
-        </TableCell>
-        <TableCell className="font-medium font-mono text-xs max-w-[100px] truncate" title={instance.id}>{instance.id}</TableCell>
-        <TableCell>
-          {instance.id === '********' ? (
+          )
+        }</TableCell><TableCell className="font-medium font-mono text-xs max-w-[100px] truncate" title={instance.id}>{instance.id}</TableCell><TableCell>{
+          instance.id === '********' ? (
             <Badge variant="outline" className="border-yellow-500 text-yellow-600 items-center whitespace-nowrap text-xs py-0.5 px-1.5 font-sans">
               <KeyRound className="h-3 w-3 mr-1" />API 密钥
             </Badge>
@@ -327,24 +327,32 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
               {instance.type === 'server' ? <ServerIcon size={12} className="mr-1" /> : <SmartphoneIcon size={12} className="mr-1" />}
               {instance.type === 'server' ? '出口(s)' : '入口(c)'}
             </Badge>
-          )}
-        </TableCell>
-        <TableCell>
-          {instance.id === '********' ? (
+          )
+        }</TableCell><TableCell>{
+          instance.id === '********' ? (
             <Badge variant="outline" className="border-yellow-500 text-yellow-600 whitespace-nowrap font-sans text-xs py-0.5 px-1.5">
               <KeyRound className="mr-1 h-3.5 w-3.5" />
               监听中
             </Badge>
           ) : (
             <InstanceStatusBadge status={instance.status} />
-          )}
-        </TableCell>
-        <TableCell 
-          className="truncate max-w-[200px] text-xs font-mono"
-        >
-          {displayTargetTunnelContent}
-        </TableCell>
-        <TableCell className="text-left">
+          )
+        }</TableCell><TableCell 
+          className="truncate max-w-[200px] text-xs font-mono cursor-pointer hover:text-primary transition-colors duration-150"
+          title={typeof displayTargetTunnelContent === 'string' || (typeof displayTargetTunnelContent === 'object' && displayTargetTunnelContent && 'props' in displayTargetTunnelContent && typeof displayTargetTunnelContent.props.title === 'string') ? (displayTargetTunnelContent as any).props?.title || displayTargetTunnelContent : "点击复制"}
+          onClick={(e) => {
+            e.stopPropagation();
+            if (instance.id === '********') {
+                handleCopyToClipboard(instance.url, "API 密钥");
+            } else if (instance.type === 'server' && parsedUrl?.targetAddress) {
+                handleCopyToClipboard(parsedUrl.targetAddress, "出口(s)目标地址");
+            } else if (instance.type === 'client' && typeof displayTargetTunnelContent === 'object' && displayTargetTunnelContent && 'props' in displayTargetTunnelContent && (displayTargetTunnelContent as any).props.children) {
+                 handleCopyToClipboard((displayTargetTunnelContent as any).props.children as string, "入口(c)本地转发");
+            } else if (typeof displayTargetTunnelContent === 'string') {
+                handleCopyToClipboard(displayTargetTunnelContent, "目标/隧道地址");
+            }
+          }}
+        >{displayTargetTunnelContent}</TableCell><TableCell className="text-left">
           <div className="text-xs whitespace-nowrap font-mono">
             {instance.id === '********' ? (
               "N/A"
@@ -355,8 +363,7 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
               </>
             )}
           </div>
-        </TableCell>
-        <TableCell className="text-right">
+        </TableCell><TableCell className="text-right">
           <div className="flex justify-end items-center space-x-1">
             {instance.id !== '********' && (
               <InstanceControls
@@ -383,13 +390,13 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
               </button>
             )}
           </div>
-        </TableCell>
-      </TableRow>
+        </TableCell></TableRow>
     );
   }
 
   const getTableBodyContent = () => {
     const rowsToRender: React.ReactNode[] = [];
+
     if (isLoadingInstances && !instancesError) {
       return renderSkeletons();
     }
@@ -527,7 +534,7 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
       <BulkDeleteInstancesDialog
         selectedInstances={
           instances?.filter(inst => selectedInstanceIds.has(inst.id))
-            .map(inst => ({ id: inst.id, url: inst.url })) // Pass only necessary info
+            .map(inst => ({ id: inst.id, url: inst.url }))
           || []
         }
         open={isBulkDeleteDialogOpen}
