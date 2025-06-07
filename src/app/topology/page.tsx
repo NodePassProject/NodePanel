@@ -33,7 +33,7 @@ import { PropertiesDisplayPanel } from './components/PropertiesDisplayPanel';
 import type { NamedApiConfig } from '@/hooks/use-api-key';
 import { useToast } from '@/hooks/use-toast';
 import { Separator } from '@/components/ui/separator';
-import { Button } from '@/components/ui/button'; // Added for context menu items
+import { Button } from '@/components/ui/button'; 
 
 // Define our extended Node type
 export type NodeRole = 'M' | 'S' | 'C' | 'T' | 'U';
@@ -43,16 +43,16 @@ export interface CustomNodeData {
   label: string;
   role: NodeRole;
   masterSubRole?: MasterSubRole;
-  nodeType?: string; // e.g. 'masterRepresentation', 'componentNode'
-  masterId?: string; // For M nodes, stores the original NamedApiConfig ID
-  masterName?: string; // For M nodes, stores the original NamedApiConfig name
-  representedMasterId?: string; // For S/C nodes created from a master drag, stores the original NamedApiConfig ID
-  representedMasterName?: string; // For S/C nodes created from a master drag, stores the original NamedApiConfig name
+  nodeType?: string; 
+  masterId?: string; 
+  masterName?: string; 
+  representedMasterId?: string; 
+  representedMasterName?: string; 
   apiUrl?: string;
   defaultLogLevel?: string;
   defaultTlsMode?: string;
   isContainer?: boolean;
-  parentNode?: string; // ID of the parent 'M' node
+  parentNode?: string; 
   tunnelAddress?: string;
   targetAddress?: string;
   ipAddress?: string;
@@ -60,8 +60,8 @@ export interface CustomNodeData {
 }
 
 export interface Node extends ReactFlowNode<CustomNodeData> {
-  width?: number; // Explicitly define width for hit detection
-  height?: number; // Explicitly define height for hit detection
+  width?: number; 
+  height?: number; 
 }
 
 
@@ -96,7 +96,7 @@ interface ActualTopologyFlowWithStateProps {
   ) => void;
   onNodeContextMenu: (event: React.MouseEvent, node: Node) => void;
   onEdgeContextMenu: (event: React.MouseEvent, edge: Edge) => void;
-  onPaneClick: () => void; // To close context menu
+  onPaneClick: () => void; 
 }
 
 const ActualTopologyFlowWithState: React.FC<ActualTopologyFlowWithStateProps> = ({
@@ -187,9 +187,9 @@ const ActualTopologyFlowWithState: React.FC<ActualTopologyFlowWithStateProps> = 
         nodesConnectable={true}
         elementsSelectable={true}
         deleteKeyCode={['Backspace', 'Delete']}
-        panOnScroll={false}
+        panOnScroll={false} 
         zoomOnScroll={true}
-        panOnDrag={true} // Corrected from PanOnScrollMode.Free
+        panOnDrag={true}
         selectionOnDrag
         className="h-full w-full"
         nodeOrigin={[0.5, 0.5]}
@@ -237,15 +237,15 @@ const ToolbarWrapperComponent: React.FC<ToolbarWrapperComponentProps> = ({
   );
 };
 
-
-export default function TopologyPage() {
+// This component now contains the core logic and React Flow instance
+function TopologyEditorCore() {
   const [nodesInternal, setNodesInternal, onNodesChangeInternalWrapped] = useNodesState<Node>(initialNodes);
   const [edgesInternal, setEdgesInternal, onEdgesChangeInternalWrapped] = useEdgesState(initialEdges);
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
   const [nodeIdCounter, setNodeIdCounter] = useState(0);
   const { toast } = useToast();
   const reactFlowWrapperRef = useRef<HTMLDivElement>(null);
-  const { deleteElements } = useReactFlow();
+  const { deleteElements } = useReactFlow(); // This hook is now correctly placed
 
   const [contextMenu, setContextMenu] = useState<TopologyContextMenu | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -321,26 +321,23 @@ export default function TopologyPage() {
       const sourceMasterSubRole = sourceNode.data.masterSubRole;
       const targetMasterSubRole = targetNode.data.masterSubRole;
 
-
-      // Rule: S/C nodes within an M-container
       if ((sourceRole === 'S' || sourceRole === 'C') && sourceParentId) {
-        if (targetRole === 'S' || targetRole === 'C') { // S/C to S/C
+        if (targetRole === 'S' || targetRole === 'C') { 
           if (targetParentId !== sourceParentId) {
             toast({ title: '连接无效', description: `容器内的 ${sourceRole} 节点只能连接到同一主控容器内的 S 或 C 节点。`, variant: 'destructive' });
             return;
           }
-        } else if (targetRole === 'T') { // S/C to T
-          if (targetParentId) { // T must be external
+        } else if (targetRole === 'T') { 
+          if (targetParentId) { 
             toast({ title: '连接无效', description: `容器内的 ${sourceRole} 节点只能连接到外部的 T 节点。此 T 节点位于容器内。`, variant: 'destructive' });
             return;
           }
-        } else { // S/C to anything else (M, U)
+        } else { 
           toast({ title: '连接无效', description: `容器内的 ${sourceRole} 节点只能连接到同一容器内的 S/C 节点或外部的 T 节点。`, variant: 'destructive' });
           return;
         }
       }
       
-      // Rule: User (U) connections
       if (sourceRole === 'U' && targetRole !== 'M') {
         toast({ title: '连接无效', description: '用户 (U) 只能连接到主控 (M)。', variant: 'destructive' });
         return;
@@ -350,7 +347,6 @@ export default function TopologyPage() {
         return;
       }
       
-      // Rule: M to M connections
       if (sourceRole === 'M' && targetRole === 'M') {
         if (sourceMasterSubRole === 'client-role' && targetMasterSubRole !== 'server-role') {
             toast({ title: '连接无效', description: '客户端角色的主控 (M) 只能连接到服务端角色的主控 (M)。', variant: 'destructive' });
@@ -383,7 +379,7 @@ export default function TopologyPage() {
 
   const onSelectionChange = useCallback(({ nodes: selectedNodesList }: { nodes: Node[], edges: Edge[] }) => {
     setSelectedNode(selectedNodesList.length === 1 ? selectedNodesList[0] : null);
-    if (selectedNodesList.length !== 1) { // Close menu if selection changes away from a single node
+    if (selectedNodesList.length !== 1) { 
       setContextMenu(null);
     }
   }, []);
@@ -418,7 +414,6 @@ export default function TopologyPage() {
   
   const onPaneClick = useCallback(() => {
     setContextMenu(null);
-    // setSelectedNode(null); // Optionally clear selection on pane click
   }, [setContextMenu]);
 
   useEffect(() => {
@@ -443,7 +438,7 @@ export default function TopologyPage() {
  const handleNodeDroppedOnCanvas = useCallback((
     type: DraggableNodeType | 'master',
     position: { x: number; y: number },
-    draggedData?: NamedApiConfig // This is the NamedApiConfig if type is 'master'
+    draggedData?: NamedApiConfig 
   ) => {
     const newCounter = nodeIdCounter + 1;
     setNodeIdCounter(newCounter);
@@ -456,7 +451,6 @@ export default function TopologyPage() {
       const existingMContainer = nodesInternal.find(n => n.data.role === 'M' && n.data.isContainer);
 
       if (existingMContainer) {
-        // If an M-container already exists, create an 'S' node inside it, representing the dragged master
         newNode = {
           id: `s-from-master-${masterConfig.id.substring(0,8)}-${newCounter}`,
           type: 'default',
@@ -494,7 +488,6 @@ export default function TopologyPage() {
         toast({ title: "服务端节点已添加", description: `“${masterConfig.name}” 已作为服务端节点添加到主控容器 “${existingMContainer.data.label}”。` });
 
       } else {
-        // First master drag, create the M-container
         newNode = {
           id: `master-${masterConfig.id.substring(0,8)}-${newCounter}`,
           type: 'default', 
@@ -528,7 +521,7 @@ export default function TopologyPage() {
         };
         toast({ title: "主控容器已添加", description: `已添加主控 “${masterConfig.name || `M-${newCounter}`}" 为容器。` });
       }
-    } else if (type !== 'master') { // Handle S, C, T, U component nodes
+    } else if (type !== 'master') { 
       const nodeRole = type.toUpperCase() as NodeRole; 
       let labelPrefix = '';
       let nodeStyle: React.CSSProperties = {
@@ -664,112 +657,120 @@ export default function TopologyPage() {
     setContextMenu(null);
   };
 
-
   return (
-    <AppLayout>
-      <ReactFlowProvider>
-        <div className="flex flex-col flex-grow h-full relative"> {/* Added relative for context menu positioning */}
-          <div className="flex flex-row flex-grow h-full overflow-hidden">
-            <div className="w-60 flex-shrink-0 flex flex-col border-r bg-muted/30 p-2">
-              <div className="flex flex-col h-full bg-background rounded-lg shadow-md border">
-                <div className="flex flex-col h-1/2 p-3">
-                  <h2 className="text-base font-semibold font-title mb-1">主控列表 (M)</h2>
-                  <p className="text-xs text-muted-foreground font-sans mb-2">拖拽主控到画布。</p>
-                  <div className="flex-grow overflow-y-auto pr-1">
-                     <MastersPalette />
-                  </div>
-                </div>
-
-                <Separator className="my-0" /> 
-
-                <div className="flex flex-col h-1/2 p-3"> 
-                  <h2 className="text-base font-semibold font-title mb-1">组件 (S, C, T, U)</h2>
-                  <p className="text-xs text-muted-foreground font-sans mb-2">拖拽组件到画布或主控容器。</p>
-                  <div className="flex-grow overflow-y-auto pr-1">
-                    <ComponentsPalette />
-                  </div>
-                </div>
-                
-                <Separator className="my-0" /> 
-
-                <div className="flex flex-col flex-grow min-h-0 p-3">
-                  <h2 className="text-base font-semibold font-title mb-1">节点属性</h2>
-                  <p className="text-xs text-muted-foreground font-sans mb-2">
-                    {selectedNode ? `选中: ${selectedNode.data.label || selectedNode.id}` : '点击节点查看属性。'}
-                  </p>
-                  <div className="flex-grow overflow-y-hidden"> 
-                    <PropertiesDisplayPanel selectedNode={selectedNode} />
-                  </div>
-                </div>
+    <div className="flex flex-col flex-grow h-full relative"> {/* Added relative for context menu positioning */}
+      <div className="flex flex-row flex-grow h-full overflow-hidden">
+        <div className="w-60 flex-shrink-0 flex flex-col border-r bg-muted/30 p-2">
+          <div className="flex flex-col h-full bg-background rounded-lg shadow-md border">
+            <div className="flex flex-col h-1/2 p-3">
+              <h2 className="text-base font-semibold font-title mb-1">主控列表 (M)</h2>
+              <p className="text-xs text-muted-foreground font-sans mb-2">拖拽主控到画布。</p>
+              <div className="flex-grow overflow-y-auto pr-1">
+                 <MastersPalette />
               </div>
             </div>
 
-            <div className="flex-grow flex flex-col overflow-hidden p-2">
-              <div className="flex-grow relative">
-                <div className="absolute inset-0">
-                  <ActualTopologyFlowWithState
-                    nodes={nodesInternal}
-                    edges={edgesInternal}
-                    onNodesChange={onNodesChange}
-                    onEdgesChange={onEdgesChange}
-                    onConnect={onConnect}
-                    onSelectionChange={onSelectionChange}
-                    reactFlowWrapperRef={reactFlowWrapperRef}
-                    onCenterView={handleCenterViewCallback}
-                    onFormatLayout={handleFormatLayoutCallback}
-                    onClearCanvas={handleClearCanvasCallback}
-                    onSubmitTopology={handleSubmitTopologyCallback}
-                    canSubmit={nodesInternal.length > 0 || edgesInternal.length > 0}
-                    onNodeDropOnCanvas={handleNodeDroppedOnCanvas}
-                    onNodeContextMenu={onNodeContextMenu}
-                    onEdgeContextMenu={onEdgeContextMenu}
-                    onPaneClick={onPaneClick}
-                  />
-                </div>
+            <Separator className="my-0" /> 
+
+            <div className="flex flex-col h-1/2 p-3"> 
+              <h2 className="text-base font-semibold font-title mb-1">组件 (S, C, T, U)</h2>
+              <p className="text-xs text-muted-foreground font-sans mb-2">拖拽组件到画布或主控容器。</p>
+              <div className="flex-grow overflow-y-auto pr-1">
+                <ComponentsPalette />
+              </div>
+            </div>
+            
+            <Separator className="my-0" /> 
+
+            <div className="flex flex-col flex-grow min-h-0 p-3">
+              <h2 className="text-base font-semibold font-title mb-1">节点属性</h2>
+              <p className="text-xs text-muted-foreground font-sans mb-2">
+                {selectedNode ? `选中: ${selectedNode.data.label || selectedNode.id}` : '点击节点查看属性。'}
+              </p>
+              <div className="flex-grow overflow-y-hidden"> 
+                <PropertiesDisplayPanel selectedNode={selectedNode} />
               </div>
             </div>
           </div>
-          {contextMenu && (
-            <div
-              ref={menuRef}
-              style={{ top: contextMenu.top, left: contextMenu.left }}
-              className="absolute z-[100] bg-popover border border-border rounded-md shadow-xl p-1.5 text-popover-foreground text-xs min-w-[150px]"
-            >
-              {contextMenu.type === 'node' && (
-                <>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="w-full justify-start px-2 py-1 h-auto text-xs font-sans"
-                    onClick={() => handleModifyNodeProperties(contextMenu.data as Node)}
-                  >
-                    修改属性
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="w-full justify-start px-2 py-1 h-auto text-xs font-sans text-destructive hover:text-destructive"
-                    onClick={() => handleDeleteNode(contextMenu.data as Node)}
-                  >
-                    删除角色
-                  </Button>
-                </>
-              )}
-              {contextMenu.type === 'edge' && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="w-full justify-start px-2 py-1 h-auto text-xs font-sans text-destructive hover:text-destructive"
-                  onClick={() => handleDeleteEdge(contextMenu.data as Edge)}
-                >
-                  删除链路
-                </Button>
-              )}
+        </div>
+
+        <div className="flex-grow flex flex-col overflow-hidden p-2">
+          <div className="flex-grow relative">
+            <div className="absolute inset-0">
+              <ActualTopologyFlowWithState
+                nodes={nodesInternal}
+                edges={edgesInternal}
+                onNodesChange={onNodesChange}
+                onEdgesChange={onEdgesChange}
+                onConnect={onConnect}
+                onSelectionChange={onSelectionChange}
+                reactFlowWrapperRef={reactFlowWrapperRef}
+                onCenterView={handleCenterViewCallback}
+                onFormatLayout={handleFormatLayoutCallback}
+                onClearCanvas={handleClearCanvasCallback}
+                onSubmitTopology={handleSubmitTopologyCallback}
+                canSubmit={nodesInternal.length > 0 || edgesInternal.length > 0}
+                onNodeDropOnCanvas={handleNodeDroppedOnCanvas}
+                onNodeContextMenu={onNodeContextMenu}
+                onEdgeContextMenu={onEdgeContextMenu}
+                onPaneClick={onPaneClick}
+              />
             </div>
+          </div>
+        </div>
+      </div>
+      {contextMenu && (
+        <div
+          ref={menuRef}
+          style={{ top: contextMenu.top, left: contextMenu.left }}
+          className="absolute z-[100] bg-popover border border-border rounded-md shadow-xl p-1.5 text-popover-foreground text-xs min-w-[150px]"
+        >
+          {contextMenu.type === 'node' && (
+            <>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="w-full justify-start px-2 py-1 h-auto text-xs font-sans"
+                onClick={() => handleModifyNodeProperties(contextMenu.data as Node)}
+              >
+                修改属性
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="w-full justify-start px-2 py-1 h-auto text-xs font-sans text-destructive hover:text-destructive"
+                onClick={() => handleDeleteNode(contextMenu.data as Node)}
+              >
+                删除角色
+              </Button>
+            </>
+          )}
+          {contextMenu.type === 'edge' && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="w-full justify-start px-2 py-1 h-auto text-xs font-sans text-destructive hover:text-destructive"
+              onClick={() => handleDeleteEdge(contextMenu.data as Edge)}
+            >
+              删除链路
+            </Button>
           )}
         </div>
+      )}
+    </div>
+  );
+}
+
+// The page component that will be exported
+export default function TopologyPage() {
+  return (
+    <AppLayout>
+      <ReactFlowProvider>
+        <TopologyEditorCore />
       </ReactFlowProvider>
     </AppLayout>
   );
 }
+    
+
     
