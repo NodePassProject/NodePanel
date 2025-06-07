@@ -23,28 +23,27 @@ export function TopologyToolbar({
   canSubmit,
 }: TopologyToolbarProps) {
   return (
-    <div className="flex flex-col space-y-2 items-stretch"> {/* Vertical layout, buttons stretch */}
-      <Button onClick={onAddNode} size="sm" variant="outline" className="font-sans justify-start">
+    <div className="flex flex-row flex-wrap gap-2 items-center">
+      <Button onClick={onAddNode} size="sm" variant="outline" className="font-sans">
         <PlusCircle className="mr-2 h-4 w-4" />
         添加节点
       </Button>
-      <Button onClick={onCenterView} size="sm" variant="outline" className="font-sans justify-start">
+      <Button onClick={onCenterView} size="sm" variant="outline" className="font-sans">
         <LocateFixed className="mr-2 h-4 w-4" />
         居中视图
       </Button>
-      <Button onClick={onFormatLayout} size="sm" variant="outline" className="font-sans justify-start">
+      <Button onClick={onFormatLayout} size="sm" variant="outline" className="font-sans">
         <LayoutDashboard className="mr-2 h-4 w-4" />
         格式化布局
       </Button>
-      <Button onClick={onClearCanvas} size="sm" variant="destructive" className="font-sans justify-start">
-        <Trash2 className="mr-2 h-4 w-4" />
-        清空画布
-      </Button>
-      <Button onClick={onSubmitTopology} size="sm" variant="default" className="font-sans justify-start" disabled={!canSubmit}>
+      <Button onClick={onSubmitTopology} size="sm" variant="default" className="font-sans" disabled={!canSubmit}>
         <Send className="mr-2 h-4 w-4" />
         提交拓扑
+      </Button>
+      <Button onClick={onClearCanvas} size="sm" variant="destructive" className="font-sans ml-auto"> {/* ml-auto to push to right if space allows */}
+        <Trash2 className="mr-2 h-4 w-4" />
+        清空画布
       </Button>
     </div>
   );
 }
-
