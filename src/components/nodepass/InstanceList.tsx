@@ -25,7 +25,9 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import type { NamedApiConfig } from '@/hooks/use-api-key';
 import type { AppLogEntry } from './EventLog';
-import { parseNodePassUrlForTopology } from '@/app/topology/lib/topology-utils';
+import { extractHostname, extractPort, parseNodePassUrlForTopology } from '@/app/topology/lib/topology-utils';
+import { formatHostForUrl } from '@/components/nodepass/create-instance-dialog/utils';
+
 
 function formatBytes(bytes: number) {
   if (bytes === 0) return '0 B';
@@ -162,13 +164,30 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
 
   const renderInstanceRow = (instance: Instance) => {
     const parsedUrl = instance.id !== '********' ? parseNodePassUrlForTopology(instance.url) : null;
+    
     let displayTargetTunnel = "N/A";
     if (parsedUrl) {
-        if (instance.type === 'server') {
-            displayTargetTunnel = parsedUrl.targetAddress || "N/A";
-        } else if (instance.type === 'client') {
-            displayTargetTunnel = parsedUrl.tunnelAddress || "N/A";
+      if (instance.type === 'server') {
+        displayTargetTunnel = parsedUrl.targetAddress || "N/A";
+      } else if (instance.type === 'client') {
+        const clientConfiguredServerHost = parsedUrl.tunnelAddress ? extractHostname(parsedUrl.tunnelAddress) : 'N/A';
+        
+        let clientLocalForwardPort: string | null = null;
+        if (parsedUrl.targetAddress) { // Primary source for client's local forward port
+          clientLocalForwardPort = extractPort(parsedUrl.targetAddress);
         }
+        if (!clientLocalForwardPort && parsedUrl.tunnelAddress) { // Fallback
+          const serverTunnelPort = extractPort(parsedUrl.tunnelAddress);
+          if (serverTunnelPort && /^\d+$/.test(serverTunnelPort)) {
+            clientLocalForwardPort = (parseInt(serverTunnelPort, 10) + 1).toString();
+          }
+        }
+        const finalClientLocalForwardPort = clientLocalForwardPort || "N/A";
+
+        displayTargetTunnel = clientConfiguredServerHost !== 'N/A' && finalClientLocalForwardPort !== 'N/A' 
+          ? `${formatHostForUrl(clientConfiguredServerHost)}:${finalClientLocalForwardPort}`
+          : "N/A";
+      }
     }
 
     return (
@@ -233,8 +252,8 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
             {instance.id === '********' ? (apiName ? `${apiName} (API 密钥)`: '主控 API 密钥') : instance.url}
           </span>
         </TableCell>
-        <TableCell>
-          <div className="text-left text-xs whitespace-nowrap font-mono">
+        <TableCell className="text-left">
+          <div className="text-xs whitespace-nowrap font-mono">
             {instance.id === '********' ? (
               "N/A"
             ) : (
@@ -280,17 +299,21 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
     if (isLoadingInstances) {
       return renderSkeletons();
     }
+    
+    const rowsToRender: React.ReactNode[] = [];
     if (filteredInstances && filteredInstances.length > 0) {
-      const rows = [];
       if (apiKeyInstance) {
-        rows.push(renderInstanceRow(apiKeyInstance));
+        rowsToRender.push(renderInstanceRow(apiKeyInstance));
       }
       if (otherInstances) {
-        rows.push(...otherInstances.map(instance => renderInstanceRow(instance)));
+        rowsToRender.push(...otherInstances.map(instance => renderInstanceRow(instance)));
       }
-      return rows;
     }
-    // If not loading and no filtered instances
+    
+    if (rowsToRender.length > 0) {
+      return rowsToRender;
+    }
+
     let message = "加载中或无可用实例数据。";
     if (activeApiConfig) {
         if (instances && instances.length === 0) {
@@ -381,3 +404,4 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
   );
 }
 
+    
