@@ -20,7 +20,7 @@ import ReactFlow, {
 import 'reactflow/dist/style.css'; // Essential for ReactFlow styles
 
 import { AppLayout } from '@/components/layout/AppLayout';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { TopologyToolbar } from './components/TopologyToolbar';
 import { MastersPalette } from './components/MastersPalette';
 import type { NamedApiConfig } from '@/hooks/use-api-key';
@@ -63,13 +63,13 @@ function FlowCanvas() {
     setNodes((nds) => nds.concat(newNode));
   }, [nodeIdCounter, setNodes, setNodeIdCounter]);
 
-  const handleAddMasterNode = useCallback((masterConfig: NamedApiConfig) => {
+  const handleAddMasterNodeFromPalette = useCallback((masterConfig: NamedApiConfig) => {
     const newCounter = nodeIdCounter + 1;
     setNodeIdCounter(newCounter);
-    const newNodeId = `master-node-${masterConfig.id}-${newCounter}`;
+    const newNodeId = `master-node-${masterConfig.id}-${newCounter}`; // More unique ID
     const newNode: Node = {
       id: newNodeId,
-      type: 'default', // Could be a custom type later e.g. 'masterType'
+      type: 'default', 
       data: { 
         label: `主控: ${masterConfig.name}`,
         nodeType: 'masterRepresentation', // Custom property to identify these nodes
@@ -77,10 +77,10 @@ function FlowCanvas() {
         masterName: masterConfig.name,
       },
       position: {
-        x: Math.random() * 200 + 20, // Position them slightly to the left
+        x: Math.random() * 200 + 20, 
         y: Math.random() * 150 + 20,
       },
-      style: { borderColor: '#facc15', borderWidth: 2, background: '#fef9c3' }, // Yellowish
+      style: { borderColor: 'hsl(var(--primary))', borderWidth: 2, background: 'hsl(var(--primary)/10)' }, 
       sourcePosition: Position.Right,
       targetPosition: Position.Left,
     };
@@ -99,9 +99,9 @@ function FlowCanvas() {
   const handleCenterView = useCallback(() => {
     const masterNodes = nodes.filter(node => node.data?.nodeType === 'masterRepresentation');
     if (masterNodes.length > 0) {
-      // Center on the first master node found
-      reactFlowInstance.fitView({ nodes: [{id: masterNodes[0].id}], duration: 300, padding: 0.3 });
-       toast({ title: "视图已居中", description: `聚焦于主控 "${masterNodes[0].data.label}".`});
+      const firstMasterNode = masterNodes[0];
+      reactFlowInstance.fitView({ nodes: [{id: firstMasterNode.id}], duration: 300, padding: 0.3 });
+      toast({ title: "视图已居中", description: `聚焦于主控 "${firstMasterNode.data.label}".`});
     } else if (nodes.length > 0) {
       reactFlowInstance.fitView({duration: 300, padding: 0.1});
       toast({ title: "视图已适应所有节点"});
@@ -125,58 +125,60 @@ function FlowCanvas() {
 
   return (
     <AppLayout>
-      <div className="flex flex-col h-full w-full gap-4" data-testid="topology-page-container">
-        {/* Top Toolbar */}
-        <Card className="shrink-0">
-          <CardContent className="p-3">
+      <div className="flex flex-col h-full w-full gap-4 md:flex-row" data-testid="topology-page-container">
+        
+        {/* Sidebar: Tools and Masters Palette */}
+        <Card className="w-full md:w-72 shrink-0 flex flex-col">
+          <CardHeader className="pb-2 pt-4">
+            <CardTitle className="text-lg font-title">工具区</CardTitle>
+          </CardHeader>
+          <CardContent className="py-2">
             <TopologyToolbar
               onAddNode={handleAddGenericNode}
               onCenterView={handleCenterView}
               onFormatLayout={handleFormatLayout}
               onClearCanvas={handleClearCanvas}
               onSubmitTopology={handleSubmitTopology}
-              canSubmit={nodes.length > 0} // Example: enable submit if there are nodes
+              canSubmit={nodes.length > 0} 
             />
+          </CardContent>
+          
+          <div className="my-2 border-t border-border mx-4"></div>
+
+          <CardHeader className="pb-2 pt-2">
+            <CardTitle className="text-lg font-title">主控列表</CardTitle>
+            <CardDescription className="font-sans text-xs">点击主控将其添加到画布。</CardDescription>
+          </CardHeader>
+          <CardContent className="flex-grow py-2 min-h-0">
+            <MastersPalette onAddMasterNode={handleAddMasterNodeFromPalette} />
           </CardContent>
         </Card>
 
-        <div className="flex flex-grow gap-4 min-h-0"> {/* Ensure this flex container can shrink */}
-          {/* Sidebar: Tools and Nodes Area */}
-          <Card className="w-72 shrink-0 flex flex-col">
-            <CardHeader className="pb-2 pt-4">
-              <CardTitle className="text-lg font-title">主控列表</CardTitle>
-            </CardHeader>
-            <CardContent className="flex-grow py-2 min-h-0"> {/* flex-grow allows this content to take remaining space, min-h-0 for scroll */}
-              <MastersPalette onAddMasterNode={handleAddMasterNode} />
-            </CardContent>
-          </Card>
-
-          {/* Canvas Area */}
-          <Card className="flex-grow overflow-hidden">
-            <CardContent className="p-0 h-full w-full">
-                <ReactFlow
-                  nodes={nodes}
-                  edges={edges}
-                  onNodesChange={onNodesChange}
-                  onEdgesChange={onEdgesChange}
-                  onConnect={onConnect}
-                  fitView
-                  nodesDraggable={true}
-                  nodesConnectable={true}
-                  elementsSelectable={true}
-                  deleteKeyCode={['Backspace', 'Delete']}
-                  panOnScroll
-                  selectionOnDrag
-                  panOnDrag={[0, 1, 2]}
-                  className="h-full w-full"
-                >
-                  <Controls />
-                  <MiniMap nodeStrokeWidth={3} zoomable pannable />
-                  <Background variant="dots" gap={12} size={1} />
-                </ReactFlow>
-            </CardContent>
-          </Card>
-        </div>
+        {/* Canvas Area */}
+        <Card className="flex-grow overflow-hidden h-[calc(100vh-var(--header-height)-var(--footer-height)-10rem)] md:h-auto">
+          <CardContent className="p-0 h-full w-full">
+              <ReactFlow
+                nodes={nodes}
+                edges={edges}
+                onNodesChange={onNodesChange}
+                onEdgesChange={onEdgesChange}
+                onConnect={onConnect}
+                fitView
+                nodesDraggable={true}
+                nodesConnectable={true}
+                elementsSelectable={true}
+                deleteKeyCode={['Backspace', 'Delete']}
+                panOnScroll
+                selectionOnDrag
+                panOnDrag={[0, 1, 2]}
+                className="h-full w-full"
+              >
+                <Controls />
+                <MiniMap nodeStrokeWidth={3} zoomable pannable />
+                <Background variant="dots" gap={12} size={1} />
+              </ReactFlow>
+          </CardContent>
+        </Card>
       </div>
     </AppLayout>
   );
