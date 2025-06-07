@@ -106,7 +106,6 @@ const ActualTopologyFlowWithState: React.FC<ActualTopologyFlowWithStateProps> = 
         onMasterNodeDropOnCanvas(config, position);
       } catch (e) {
         console.error("Failed to parse dragged master config:", e);
-        // Optionally show a toast error to the user
       }
     }
   };
@@ -124,7 +123,6 @@ const ActualTopologyFlowWithState: React.FC<ActualTopologyFlowWithStateProps> = 
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
-        onSelectionChange={onSelectionChange}
         fitView
         nodesDraggable={true}
         nodesConnectable={true}
@@ -187,7 +185,7 @@ export default function TopologyPage() {
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
   const [nodeIdCounter, setNodeIdCounter] = useState(0);
   const { toast } = useToast();
-  const reactFlowWrapperRef = useRef<HTMLDivElement>(null); // This ref is for the div *containing* ReactFlow
+  const reactFlowWrapperRef = useRef<HTMLDivElement>(null); 
 
   const onNodesChange: OnNodesChange = useCallback(
     (changes) => setNodesInternal((nds) => applyNodeChanges(changes, nds)),
@@ -200,9 +198,82 @@ export default function TopologyPage() {
   );
 
   const onConnect = useCallback(
-    (params: Connection | Edge) =>
-      setEdgesInternal((eds) => addEdge({ ...params, animated: true, type: 'smoothstep', markerEnd: { type: MarkerType.ArrowClosed } }, eds)),
-    [setEdgesInternal]
+    (params: Connection | Edge) => {
+      // 1. Prevent self-loops
+      if (params.source === params.target) {
+        toast({
+          title: '连接无效',
+          description: '节点不能连接到自身。',
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      // 2. Prevent duplicate/overlapping edges (A->B or B->A)
+      const existingEdge = edgesInternal.find(
+        (edge) =>
+          (edge.source === params.source && edge.target === params.target) ||
+          (edge.source === params.target && edge.target === params.source)
+      );
+      if (existingEdge) {
+        toast({
+          title: '连接无效',
+          description: '这些节点之间已经存在连接。',
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      // 3. Prevent cycles
+      // A cycle is formed if there's an existing path from params.target back to params.source
+      const checkForPath = (
+        startNodeId: string,
+        endNodeId: string,
+        currentGraphEdges: Edge[],
+        visitedInCurrentPath: Set<string> = new Set() // visitedInCurrentPath is for the current DFS path
+      ): boolean => {
+        if (startNodeId === endNodeId) {
+          return true; // Path found
+        }
+        visitedInCurrentPath.add(startNodeId);
+
+        const outgoingEdges = currentGraphEdges.filter((edge) => edge.source === startNodeId);
+
+        for (const edge of outgoingEdges) {
+          const neighborNodeId = edge.target;
+          if (!visitedInCurrentPath.has(neighborNodeId)) { // Avoid re-visiting nodes in the same DFS path
+            if (checkForPath(neighborNodeId, endNodeId, currentGraphEdges, visitedInCurrentPath)) {
+              return true;
+            }
+          }
+        }
+        visitedInCurrentPath.delete(startNodeId); // Backtrack: remove from current path when returning
+        return false;
+      };
+
+      if (params.source && params.target && checkForPath(params.target, params.source, edgesInternal)) {
+        toast({
+          title: '连接无效',
+          description: '此连接将创建一个循环。',
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      // If all checks pass, add the edge
+      setEdgesInternal((eds) =>
+        addEdge(
+          {
+            ...params,
+            animated: true,
+            type: 'smoothstep',
+            markerEnd: { type: MarkerType.ArrowClosed },
+          },
+          eds
+        )
+      );
+    },
+    [edgesInternal, setEdgesInternal, toast]
   );
 
   const onSelectionChange = useCallback(({ nodes: selectedNodesList }: { nodes: Node[], edges: Edge[] }) => {
@@ -212,7 +283,7 @@ export default function TopologyPage() {
 
   const handleMasterNodeDroppedOnCanvas = useCallback((masterConfig: NamedApiConfig, position: { x: number; y: number }) => {
     const masterNodeData: Omit<Node, 'id' | 'position'> = {
-      type: 'default', // Or a custom type if you have one for masters
+      type: 'default', 
       data: {
         label: `主控: ${masterConfig.name}`,
         nodeType: 'masterRepresentation',
@@ -309,8 +380,8 @@ export default function TopologyPage() {
 
             {/* Right Canvas Area */}
             <div className="flex-grow flex flex-col overflow-hidden p-2">
-              <div className="flex-grow relative"> {/* Ensure this parent is relative for absolute positioning */}
-                <div className="absolute inset-0"> {/* This div now takes the full space of its relative parent */}
+              <div className="flex-grow relative"> 
+                <div className="absolute inset-0"> 
                   <ActualTopologyFlowWithState
                     nodes={nodesInternal}
                     edges={edgesInternal}
