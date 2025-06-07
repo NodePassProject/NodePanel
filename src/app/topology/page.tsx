@@ -1,7 +1,7 @@
 
 'use client';
 
-import React, { useCallback, useState, useEffect, useMemo } from 'react';
+import React, { useCallback, useState, useEffect } from 'react';
 import ReactFlow, {
   ReactFlowProvider,
   useNodesState,
@@ -27,7 +27,7 @@ import { PropertiesDisplayPanel } from './components/PropertiesDisplayPanel';
 import type { NamedApiConfig } from '@/hooks/use-api-key';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
-import { Settings, ListTree, InfoIcon as Info } from 'lucide-react'; // Renamed Info from lucide-react to avoid conflict
+import { Settings, ListTree, Info as InfoIcon } from 'lucide-react'; // Renamed Info from lucide-react
 
 import {
   Popover,
@@ -71,14 +71,17 @@ function TopologyFlow() {
     setNodeIdCounter(newCounter);
     const newNodeId = `node-${newCounter}`;
     const newNodeData = { label: `新节点 ${newCounter}` };
+    
+    // Ensure viewport dimensions are valid before using them
+    const viewport = reactFlowInstance.getViewport();
+    const posX = viewport.width && viewport.width > 0 ? Math.random() * viewport.width / 2 + 50 : 100;
+    const posY = viewport.height && viewport.height > 0 ? Math.random() * viewport.height / 2 + 50 : 100;
+
     const newNode: Node = {
       id: newNodeId,
       type: 'default',
       data: newNodeData,
-      position: {
-        x: Math.random() * reactFlowInstance.getViewport().width / 2 + 50,
-        y: Math.random() * reactFlowInstance.getViewport().height / 2 + 50,
-      },
+      position: { x: posX, y: posY },
       sourcePosition: Position.Right,
       targetPosition: Position.Left,
     };
@@ -90,19 +93,21 @@ function TopologyFlow() {
     const newCounter = nodeIdCounter + 1;
     setNodeIdCounter(newCounter);
     const newNodeId = `master-node-${masterConfig.id}-${newCounter}`;
+
+    const viewport = reactFlowInstance.getViewport();
+    const posX = viewport.width && viewport.width > 0 ? Math.random() * viewport.width / 2 + 20 : 80;
+    const posY = viewport.height && viewport.height > 0 ? Math.random() * viewport.height / 2 + 20 : 80;
+    
     const newNode: Node = {
       id: newNodeId,
-      type: 'default',
+      type: 'default', // Consider a custom type 'masterNode' later for specific styling/logic
       data: {
         label: `主控: ${masterConfig.name}`,
-        nodeType: 'masterRepresentation',
+        nodeType: 'masterRepresentation', // Used to identify master nodes
         masterId: masterConfig.id,
         masterName: masterConfig.name,
       },
-      position: {
-        x: Math.random() * reactFlowInstance.getViewport().width / 2 + 20,
-        y: Math.random() * reactFlowInstance.getViewport().height / 2 + 20,
-      },
+      position: { x: posX, y: posY },
       style: { borderColor: 'hsl(var(--primary))', borderWidth: 2, background: 'hsl(var(--primary)/10)' },
       sourcePosition: Position.Right,
       targetPosition: Position.Left,
@@ -148,17 +153,17 @@ function TopologyFlow() {
     setIsToolbarPopoverOpen(false);
   }, [nodes, edges, toast]);
 
-  const onSelectionChange = useCallback((params: { nodes: Node[], edges: Edge[] }) => {
-    if (params.nodes.length === 1) {
-      setSelectedNode(params.nodes[0]);
-      if (!isPropertiesSheetOpen) { // Automatically open properties panel if a node is selected and panel is closed
-        // setIsPropertiesSheetOpen(true); // This can be annoying, let user click
-      }
+  const onSelectionChange = useCallback(({ nodes: selectedNodesList, edges: selectedEdgesList }: { nodes: Node[], edges: Edge[] }) => {
+    if (selectedNodesList.length === 1) {
+      setSelectedNode(selectedNodesList[0]);
+      // Optionally auto-open properties panel:
+      // if (!isPropertiesSheetOpen) setIsPropertiesSheetOpen(true);
     } else {
       setSelectedNode(null);
-      // setIsPropertiesSheetOpen(false); // Optionally close if no node is selected
+      // Optionally auto-close properties panel:
+      // if (isPropertiesSheetOpen) setIsPropertiesSheetOpen(false);
     }
-  }, [isPropertiesSheetOpen]);
+  }, []);
 
   useEffect(() => {
     // Close properties panel if the selected node is deleted
@@ -187,8 +192,8 @@ function TopologyFlow() {
         panOnDrag={[PanOnScrollMode.Free, PanOnScrollMode.Right, PanOnScrollMode.Left]}
         className="h-full w-full"
       >
-        <Controls className="react-flow__controls_custom_position_BR" />
-        <MiniMap nodeStrokeWidth={3} zoomable pannable className="react-flow__minimap_custom_position_BL" />
+        <Controls style={{ bottom: 10, right: 10, left: 'auto', top: 'auto' }} />
+        <MiniMap nodeStrokeWidth={3} zoomable pannable style={{ bottom: 10, left: 10, right: 'auto', top: 'auto' }} />
         <Background variant="dots" gap={16} size={1} />
       </ReactFlow>
 
@@ -232,7 +237,7 @@ function TopologyFlow() {
           <SheetHeader className="p-4 border-b">
             <SheetTitle className="font-title text-lg">主控列表</SheetTitle>
             <SheetDescription className="font-sans text-xs">
-              点击或拖拽主控将其添加到画布。
+              点击主控将其添加到画布。
             </SheetDescription>
           </SheetHeader>
           <div className="p-4 flex-grow overflow-y-auto">
@@ -251,7 +256,7 @@ function TopologyFlow() {
               className="absolute right-4 top-1/2 -translate-y-1/2 z-10 shadow-md rounded-full bg-background/80 backdrop-blur-sm hover:bg-background"
               aria-label="打开属性面板"
             >
-              <Info className="h-5 w-5" />
+              <InfoIcon className="h-5 w-5" />
             </Button>
           </SheetTrigger>
           <SheetContent side="right" className="w-80 p-0 flex flex-col">
@@ -260,21 +265,7 @@ function TopologyFlow() {
         </Sheet>
       )}
       
-      <style jsx global>{`
-        .react-flow__controls_custom_position_BR {
-          bottom: 10px !important;
-          right: 10px !important;
-          left: auto !important;
-          top: auto !important;
-          transform: none !important;
-        }
-        .react-flow__minimap_custom_position_BL {
-          bottom: 10px !important;
-          left: 10px !important;
-          right: auto !important;
-          top: auto !important;
-        }
-      `}</style>
+      {/* Removed the global style block for custom positioning */}
     </div>
   );
 }
