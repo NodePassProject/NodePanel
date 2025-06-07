@@ -33,6 +33,7 @@ import { PropertiesDisplayPanel } from './components/PropertiesDisplayPanel';
 import type { NamedApiConfig } from '@/hooks/use-api-key';
 import { useToast } from '@/hooks/use-toast';
 import { Separator } from '@/components/ui/separator';
+import { Button } from '@/components/ui/button'; // Added for context menu items
 
 // Define our extended Node type
 export type NodeRole = 'M' | 'S' | 'C' | 'T' | 'U';
@@ -67,6 +68,14 @@ export interface Node extends ReactFlowNode<CustomNodeData> {
 const initialNodes: Node[] = [];
 const initialEdges: Edge[] = [];
 
+interface TopologyContextMenu {
+  id: string;
+  type: 'node' | 'edge';
+  top: number;
+  left: number;
+  data: Node | Edge;
+}
+
 interface ActualTopologyFlowWithStateProps {
   nodes: Node[];
   edges: Edge[];
@@ -85,6 +94,9 @@ interface ActualTopologyFlowWithStateProps {
     position: { x: number; y: number },
     draggedData?: NamedApiConfig // For masters
   ) => void;
+  onNodeContextMenu: (event: React.MouseEvent, node: Node) => void;
+  onEdgeContextMenu: (event: React.MouseEvent, edge: Edge) => void;
+  onPaneClick: () => void; // To close context menu
 }
 
 const ActualTopologyFlowWithState: React.FC<ActualTopologyFlowWithStateProps> = ({
@@ -101,6 +113,9 @@ const ActualTopologyFlowWithState: React.FC<ActualTopologyFlowWithStateProps> = 
   onSubmitTopology,
   canSubmit,
   onNodeDropOnCanvas,
+  onNodeContextMenu,
+  onEdgeContextMenu,
+  onPaneClick,
 }) => {
   const { resolvedTheme } = useTheme();
   const [isClient, setIsClient] = useState(false);
@@ -163,6 +178,10 @@ const ActualTopologyFlowWithState: React.FC<ActualTopologyFlowWithStateProps> = 
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
+        onSelectionChange={onSelectionChange}
+        onNodeContextMenu={onNodeContextMenu}
+        onEdgeContextMenu={onEdgeContextMenu}
+        onPaneClick={onPaneClick}
         fitView
         nodesDraggable={true}
         nodesConnectable={true}
@@ -170,7 +189,7 @@ const ActualTopologyFlowWithState: React.FC<ActualTopologyFlowWithStateProps> = 
         deleteKeyCode={['Backspace', 'Delete']}
         panOnScroll={false}
         zoomOnScroll={true}
-        panOnDrag={true}
+        panOnDrag={true} // Corrected from PanOnScrollMode.Free
         selectionOnDrag
         className="h-full w-full"
         nodeOrigin={[0.5, 0.5]}
@@ -226,6 +245,11 @@ export default function TopologyPage() {
   const [nodeIdCounter, setNodeIdCounter] = useState(0);
   const { toast } = useToast();
   const reactFlowWrapperRef = useRef<HTMLDivElement>(null);
+  const { deleteElements } = useReactFlow();
+
+  const [contextMenu, setContextMenu] = useState<TopologyContextMenu | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
 
   const getNodeById = useCallback((id: string): Node | undefined => {
     return nodesInternal.find(n => n.id === id);
@@ -294,6 +318,9 @@ export default function TopologyPage() {
       const targetRole = targetNode.data.role;
       const sourceParentId = sourceNode.data.parentNode;
       const targetParentId = targetNode.data.parentNode;
+      const sourceMasterSubRole = sourceNode.data.masterSubRole;
+      const targetMasterSubRole = targetNode.data.masterSubRole;
+
 
       // Rule: S/C nodes within an M-container
       if ((sourceRole === 'S' || sourceRole === 'C') && sourceParentId) {
@@ -325,17 +352,18 @@ export default function TopologyPage() {
       
       // Rule: M to M connections
       if (sourceRole === 'M' && targetRole === 'M') {
-        const sourceSubRole = sourceNode.data.masterSubRole;
-        const targetSubRole = targetNode.data.masterSubRole;
-
-        if (sourceSubRole === 'client-role' && targetSubRole !== 'server-role') {
+        if (sourceMasterSubRole === 'client-role' && targetMasterSubRole !== 'server-role') {
             toast({ title: '连接无效', description: '客户端角色的主控 (M) 只能连接到服务端角色的主控 (M)。', variant: 'destructive' });
             return;
         }
-        if (sourceSubRole === 'server-role') { // Server role M cannot initiate connection
+        if (sourceMasterSubRole === 'server-role') { 
             toast({ title: '连接无效', description: '服务端角色的主控 (M) 不能主动连接其他主控。请从客户端角色的主控发起连接。', variant: 'destructive' });
             return;
         }
+         if (sourceMasterSubRole === 'generic' || targetMasterSubRole === 'generic') {
+           toast({ title: '连接无效', description: '通用角色的主控 (M) 之间不允许直接连接，请先定义其角色 (客户端/服务端)。', variant: 'destructive'});
+           return;
+         }
       }
 
       setEdgesInternal((eds) =>
@@ -355,7 +383,61 @@ export default function TopologyPage() {
 
   const onSelectionChange = useCallback(({ nodes: selectedNodesList }: { nodes: Node[], edges: Edge[] }) => {
     setSelectedNode(selectedNodesList.length === 1 ? selectedNodesList[0] : null);
+    if (selectedNodesList.length !== 1) { // Close menu if selection changes away from a single node
+      setContextMenu(null);
+    }
   }, []);
+
+  const onNodeContextMenu = useCallback(
+    (event: React.MouseEvent, node: Node) => {
+      event.preventDefault();
+      setContextMenu({
+        id: node.id,
+        type: 'node',
+        top: event.clientY,
+        left: event.clientX,
+        data: node,
+      });
+    },
+    [setContextMenu]
+  );
+
+  const onEdgeContextMenu = useCallback(
+    (event: React.MouseEvent, edge: Edge) => {
+      event.preventDefault();
+      setContextMenu({
+        id: edge.id,
+        type: 'edge',
+        top: event.clientY,
+        left: event.clientX,
+        data: edge,
+      });
+    },
+    [setContextMenu]
+  );
+  
+  const onPaneClick = useCallback(() => {
+    setContextMenu(null);
+    // setSelectedNode(null); // Optionally clear selection on pane click
+  }, [setContextMenu]);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as HTMLElement)) {
+        setContextMenu(null);
+      }
+    };
+
+    if (contextMenu) {
+      document.addEventListener('mousedown', handleClickOutside);
+    } else {
+      document.removeEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [contextMenu]);
 
 
  const handleNodeDroppedOnCanvas = useCallback((
@@ -376,23 +458,22 @@ export default function TopologyPage() {
       if (existingMContainer) {
         // If an M-container already exists, create an 'S' node inside it, representing the dragged master
         newNode = {
-          id: `s-from-master-${masterConfig.id}-${newCounter}`,
+          id: `s-from-master-${masterConfig.id.substring(0,8)}-${newCounter}`,
           type: 'default',
           position: {
-            x: position.x - existingMContainer.position.x, // Relative position
-            y: position.y - existingMContainer.position.y, // Relative position
+            x: position.x - existingMContainer.position.x, 
+            y: position.y - existingMContainer.position.y, 
           },
           parentNode: existingMContainer.id,
           extent: 'parent',
           data: {
-            label: `${masterConfig.name} (服务端)`,
+            label: `${masterConfig.name || `S-${newCounter}`} (服务端)`,
             role: 'S',
             parentNode: existingMContainer.id,
             representedMasterId: masterConfig.id,
             representedMasterName: masterConfig.name,
-            defaultLogLevel: masterConfig.masterDefaultLogLevel, // Carry over defaults
+            defaultLogLevel: masterConfig.masterDefaultLogLevel, 
             defaultTlsMode: masterConfig.masterDefaultTlsMode,
-            // Other S-specific defaults can be set here
           },
           style: { 
             borderWidth: 1.5,
@@ -405,6 +486,8 @@ export default function TopologyPage() {
             padding: '4px 6px', 
             fontSize: '0.65rem',
           },
+          width: 90,
+          height: 45,
           sourcePosition: Position.Right,
           targetPosition: Position.Left,
         };
@@ -413,7 +496,7 @@ export default function TopologyPage() {
       } else {
         // First master drag, create the M-container
         newNode = {
-          id: `master-${masterConfig.id}-${newCounter}`,
+          id: `master-${masterConfig.id.substring(0,8)}-${newCounter}`,
           type: 'default', 
           position,
           data: {
@@ -521,12 +604,14 @@ export default function TopologyPage() {
         style: finalStyle,
         parentNode: parentNodeFound?.id, 
         extent: parentNodeFound ? 'parent' : undefined,
+        width: parentNodeFound ? 90 : undefined,
+        height: parentNodeFound ? 45 : undefined,
         sourcePosition: Position.Right,
         targetPosition: Position.Left,
       };
       toast({ title: `${labelPrefix} 节点已添加`, description: `已添加 ${labelPrefix} (${nodeRole}) 到画布${parentNodeFound ? ` (于主控 “${parentNodeFound.data.label}”)` : ''}。` });
     } else {
-      return; // Should not happen if type is 'master' but draggedData is missing, or other unknown type
+      return; 
     }
     setNodesInternal((nds) => nds.concat(newNode));
   }, [nodeIdCounter, setNodesInternal, toast, nodesInternal]);
@@ -537,11 +622,13 @@ export default function TopologyPage() {
     setEdgesInternal([]);
     setNodeIdCounter(0);
     setSelectedNode(null);
+    setContextMenu(null);
     toast({ title: "画布已清空" });
   }, [setNodesInternal, setEdgesInternal, setNodeIdCounter, toast]);
 
   const handleCenterViewCallback = useCallback((instance: ReturnType<typeof useReactFlow> | null) => {
     if (!instance) return;
+    setContextMenu(null);
     if (nodesInternal.length > 0) {
       instance.fitView({ duration: 300, padding: 0.2 });
     } else {
@@ -550,18 +637,38 @@ export default function TopologyPage() {
   }, [nodesInternal, toast]);
 
   const handleFormatLayoutCallback = useCallback(() => {
+    setContextMenu(null);
     toast({ title: "格式化布局", description: "此功能待实现。" });
   }, [toast]);
 
   const handleSubmitTopologyCallback = useCallback(() => {
+    setContextMenu(null);
     toast({ title: "提交拓扑", description: "此功能待实现。" });
   }, [toast]);
+
+  const handleModifyNodeProperties = (node: Node) => {
+    toast({ title: `修改 ${node.data.label || node.id} 属性 (待实现)` });
+    setContextMenu(null);
+  };
+
+  const handleDeleteNode = (nodeToDelete: Node) => {
+    deleteElements({ nodes: [nodeToDelete] });
+    toast({ title: `节点 "${nodeToDelete.data.label || nodeToDelete.id}" 已删除` });
+    if(selectedNode?.id === nodeToDelete.id) setSelectedNode(null);
+    setContextMenu(null);
+  };
+
+  const handleDeleteEdge = (edgeToDelete: Edge) => {
+    deleteElements({ edges: [edgeToDelete] });
+    toast({ title: "链路已删除" });
+    setContextMenu(null);
+  };
 
 
   return (
     <AppLayout>
       <ReactFlowProvider>
-        <div className="flex flex-col flex-grow h-full">
+        <div className="flex flex-col flex-grow h-full relative"> {/* Added relative for context menu positioning */}
           <div className="flex flex-row flex-grow h-full overflow-hidden">
             <div className="w-60 flex-shrink-0 flex flex-col border-r bg-muted/30 p-2">
               <div className="flex flex-col h-full bg-background rounded-lg shadow-md border">
@@ -614,11 +721,52 @@ export default function TopologyPage() {
                     onSubmitTopology={handleSubmitTopologyCallback}
                     canSubmit={nodesInternal.length > 0 || edgesInternal.length > 0}
                     onNodeDropOnCanvas={handleNodeDroppedOnCanvas}
+                    onNodeContextMenu={onNodeContextMenu}
+                    onEdgeContextMenu={onEdgeContextMenu}
+                    onPaneClick={onPaneClick}
                   />
                 </div>
               </div>
             </div>
           </div>
+          {contextMenu && (
+            <div
+              ref={menuRef}
+              style={{ top: contextMenu.top, left: contextMenu.left }}
+              className="absolute z-[100] bg-popover border border-border rounded-md shadow-xl p-1.5 text-popover-foreground text-xs min-w-[150px]"
+            >
+              {contextMenu.type === 'node' && (
+                <>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="w-full justify-start px-2 py-1 h-auto text-xs font-sans"
+                    onClick={() => handleModifyNodeProperties(contextMenu.data as Node)}
+                  >
+                    修改属性
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="w-full justify-start px-2 py-1 h-auto text-xs font-sans text-destructive hover:text-destructive"
+                    onClick={() => handleDeleteNode(contextMenu.data as Node)}
+                  >
+                    删除角色
+                  </Button>
+                </>
+              )}
+              {contextMenu.type === 'edge' && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="w-full justify-start px-2 py-1 h-auto text-xs font-sans text-destructive hover:text-destructive"
+                  onClick={() => handleDeleteEdge(contextMenu.data as Edge)}
+                >
+                  删除链路
+                </Button>
+              )}
+            </div>
+          )}
         </div>
       </ReactFlowProvider>
     </AppLayout>
