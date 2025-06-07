@@ -27,7 +27,7 @@ import { PropertiesDisplayPanel } from './components/PropertiesDisplayPanel';
 import type { NamedApiConfig } from '@/hooks/use-api-key';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
-import { Settings, ListTree, Info as InfoIcon } from 'lucide-react'; // Renamed Info from lucide-react
+import { Settings, ListTree, Info as InfoIcon, PlusCircle } from 'lucide-react';
 
 import {
   Popover,
@@ -42,6 +42,7 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
+import { Card } from '@/components/ui/card'; // Used for consistency in Popover/Sheet content
 
 const initialNodes: Node[] = [];
 const initialEdges: Edge[] = [];
@@ -54,7 +55,6 @@ function TopologyFlow() {
   const reactFlowInstance = useReactFlow();
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
 
-  // State for dynamic panel visibility
   const [isToolbarPopoverOpen, setIsToolbarPopoverOpen] = useState(false);
   const [isMastersSheetOpen, setIsMastersSheetOpen] = useState(false);
   const [isPropertiesSheetOpen, setIsPropertiesSheetOpen] = useState(false);
@@ -72,7 +72,6 @@ function TopologyFlow() {
     const newNodeId = `node-${newCounter}`;
     const newNodeData = { label: `新节点 ${newCounter}` };
     
-    // Ensure viewport dimensions are valid before using them
     const viewport = reactFlowInstance.getViewport();
     const posX = viewport.width && viewport.width > 0 ? Math.random() * viewport.width / 2 + 50 : 100;
     const posY = viewport.height && viewport.height > 0 ? Math.random() * viewport.height / 2 + 50 : 100;
@@ -100,10 +99,10 @@ function TopologyFlow() {
     
     const newNode: Node = {
       id: newNodeId,
-      type: 'default', // Consider a custom type 'masterNode' later for specific styling/logic
+      type: 'default',
       data: {
         label: `主控: ${masterConfig.name}`,
-        nodeType: 'masterRepresentation', // Used to identify master nodes
+        nodeType: 'masterRepresentation',
         masterId: masterConfig.id,
         masterName: masterConfig.name,
       },
@@ -114,7 +113,7 @@ function TopologyFlow() {
     };
     setNodes((nds) => nds.concat(newNode));
     toast({ title: "主控节点已添加", description: `添加主控 "${masterConfig.name}" 到画布.` });
-    setIsMastersSheetOpen(false); // Close palette after adding
+    setIsMastersSheetOpen(false);
   }, [nodeIdCounter, setNodes, setNodeIdCounter, toast, reactFlowInstance]);
 
   const handleClearCanvas = useCallback(() => {
@@ -153,20 +152,15 @@ function TopologyFlow() {
     setIsToolbarPopoverOpen(false);
   }, [nodes, edges, toast]);
 
-  const onSelectionChange = useCallback(({ nodes: selectedNodesList, edges: selectedEdgesList }: { nodes: Node[], edges: Edge[] }) => {
+  const onSelectionChange = useCallback(({ nodes: selectedNodesList }: { nodes: Node[], edges: Edge[] }) => {
     if (selectedNodesList.length === 1) {
       setSelectedNode(selectedNodesList[0]);
-      // Optionally auto-open properties panel:
-      // if (!isPropertiesSheetOpen) setIsPropertiesSheetOpen(true);
     } else {
       setSelectedNode(null);
-      // Optionally auto-close properties panel:
-      // if (isPropertiesSheetOpen) setIsPropertiesSheetOpen(false);
     }
   }, []);
 
   useEffect(() => {
-    // Close properties panel if the selected node is deleted
     if (selectedNode && !nodes.find(n => n.id === selectedNode.id)) {
       setSelectedNode(null);
       setIsPropertiesSheetOpen(false);
@@ -190,14 +184,13 @@ function TopologyFlow() {
         panOnScroll
         selectionOnDrag
         panOnDrag={[PanOnScrollMode.Free, PanOnScrollMode.Right, PanOnScrollMode.Left]}
-        className="h-full w-full"
+        className="h-full w-full bg-background"
       >
         <Controls style={{ bottom: 10, right: 10, left: 'auto', top: 'auto' }} />
         <MiniMap nodeStrokeWidth={3} zoomable pannable style={{ bottom: 10, left: 10, right: 'auto', top: 'auto' }} />
         <Background variant="dots" gap={16} size={1} />
       </ReactFlow>
 
-      {/* Toolbar Popover Trigger */}
       <Popover open={isToolbarPopoverOpen} onOpenChange={setIsToolbarPopoverOpen}>
         <PopoverTrigger asChild>
           <Button
@@ -209,7 +202,7 @@ function TopologyFlow() {
             <Settings className="h-5 w-5" />
           </Button>
         </PopoverTrigger>
-        <PopoverContent className="w-auto p-2" side="bottom" align="start">
+        <PopoverContent className="p-2" side="bottom" align="start">
           <TopologyToolbar
             onAddNode={handleAddGenericNode}
             onCenterView={handleCenterView}
@@ -221,7 +214,6 @@ function TopologyFlow() {
         </PopoverContent>
       </Popover>
 
-      {/* Masters Palette Sheet Trigger */}
       <Sheet open={isMastersSheetOpen} onOpenChange={setIsMastersSheetOpen}>
         <SheetTrigger asChild>
           <Button
@@ -246,7 +238,6 @@ function TopologyFlow() {
         </SheetContent>
       </Sheet>
 
-      {/* Properties Panel Sheet Trigger - Only visible if a node is selected */}
       {selectedNode && (
         <Sheet open={isPropertiesSheetOpen} onOpenChange={setIsPropertiesSheetOpen}>
           <SheetTrigger asChild>
@@ -264,8 +255,6 @@ function TopologyFlow() {
           </SheetContent>
         </Sheet>
       )}
-      
-      {/* Removed the global style block for custom positioning */}
     </div>
   );
 }
@@ -273,9 +262,11 @@ function TopologyFlow() {
 export default function TopologyPageContainer() {
   return (
     <AppLayout>
-      <ReactFlowProvider>
-        <TopologyFlow />
-      </ReactFlowProvider>
+      <div className="flex-grow h-full w-full"> {/* Ensure this container also takes full height */}
+        <ReactFlowProvider>
+          <TopologyFlow />
+        </ReactFlowProvider>
+      </div>
     </AppLayout>
   );
 }
