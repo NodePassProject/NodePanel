@@ -144,16 +144,18 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
   const renderSkeletons = () => {
     return Array.from({ length: 3 }).map((_, i) => (
       <TableRow key={`skeleton-${i}`}>
-        <TableCell><Skeleton className="h-4 w-24" /></TableCell> {/* ID */}
-        <TableCell><Skeleton className="h-4 w-16" /></TableCell> {/* 类型 */}
-        <TableCell><Skeleton className="h-4 w-16" /></TableCell> {/* 状态 */}
-        <TableCell><Skeleton className="h-4 w-40" /></TableCell> {/* 目标/隧道地址 */}
-        <TableCell><Skeleton className="h-4 w-40" /></TableCell> {/* URL / 密钥 */}
-        <TableCell> {/* 流量 */}
-          <Skeleton className="h-4 w-24 mb-1" />
-          <Skeleton className="h-4 w-24" />
+        <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+        <TableCell><Skeleton className="h-4 w-16" /></TableCell>
+        <TableCell><Skeleton className="h-4 w-16" /></TableCell>
+        <TableCell><Skeleton className="h-4 w-40" /></TableCell>
+        <TableCell><Skeleton className="h-4 w-40" /></TableCell>
+        <TableCell>
+          <div className="text-left">
+            <Skeleton className="h-4 w-20 mb-1" />
+            <Skeleton className="h-4 w-20" />
+          </div>
         </TableCell>
-        <TableCell><Skeleton className="h-4 w-16" /></TableCell> {/* 操作 */}
+        <TableCell><Skeleton className="h-4 w-16" /></TableCell>
       </TableRow>
     ));
   };
@@ -176,11 +178,11 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
         onDoubleClick={() => setSelectedInstanceForDetails(instance)}
       >
         <TableCell className="font-medium font-mono text-xs max-w-[100px] truncate" title={instance.id}>{instance.id}</TableCell>
-          <TableCell>
+        <TableCell>
           {instance.id === '********' ? (
-              <Badge variant="outline" className="border-yellow-500 text-yellow-600 items-center whitespace-nowrap text-xs py-0.5 px-1.5 font-sans">
+            <Badge variant="outline" className="border-yellow-500 text-yellow-600 items-center whitespace-nowrap text-xs py-0.5 px-1.5 font-sans">
               <KeyRound className="h-3 w-3 mr-1" />API 密钥
-              </Badge>
+            </Badge>
           ) : (
             <Badge
               variant={instance.type === 'server' ? 'default' : 'accent'}
@@ -220,26 +222,28 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
         <TableCell
           className="truncate max-w-[200px] text-xs font-mono"
         >
-            <span
-              className="cursor-pointer hover:text-primary transition-colors duration-150"
-              title={instance.id === '********' ? `点击复制主控 "${apiName || '当前主控'}" 的 API 密钥` : `点击复制: ${instance.url}`}
-              onClick={(e) => {
-                e.stopPropagation();
-                handleCopyToClipboard(instance.url, instance.id === '********' ? 'API 密钥' : 'URL');
-              }}
-            >
-              {instance.id === '********' ? (apiName ? `${apiName} (API 密钥)`: '主控 API 密钥') : instance.url}
-            </span>
+          <span
+            className="cursor-pointer hover:text-primary transition-colors duration-150"
+            title={instance.id === '********' ? `点击复制主控 "${apiName || '当前主控'}" 的 API 密钥` : `点击复制: ${instance.url}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              handleCopyToClipboard(instance.url, instance.id === '********' ? 'API 密钥' : 'URL');
+            }}
+          >
+            {instance.id === '********' ? (apiName ? `${apiName} (API 密钥)`: '主控 API 密钥') : instance.url}
+          </span>
         </TableCell>
-        <TableCell className="text-left text-xs whitespace-nowrap font-mono">
-          {instance.id === '********' ? (
-            "N/A"
-          ) : (
-            <div>
-              <div>TCP: {formatBytes(instance.tcprx)} / {formatBytes(instance.tcptx)}</div>
-              <div>UDP: {formatBytes(instance.udprx)} / {formatBytes(instance.udptx)}</div>
-            </div>
-          )}
+        <TableCell>
+          <div className="text-left text-xs whitespace-nowrap font-mono">
+            {instance.id === '********' ? (
+              "N/A"
+            ) : (
+              <>
+                <div>TCP: {formatBytes(instance.tcprx)} / {formatBytes(instance.tcptx)}</div>
+                <div>UDP: {formatBytes(instance.udprx)} / {formatBytes(instance.udptx)}</div>
+              </>
+            )}
+          </div>
         </TableCell>
         <TableCell className="text-right">
           <div className="flex justify-end items-center space-x-1">
@@ -258,21 +262,54 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
                 <Eye className="h-4 w-4" />
             </button>
             {instance.id !== '********' && (
-              <>
-                <button
-                    className="p-2 rounded-md hover:bg-destructive/10 text-destructive"
-                    onClick={() => setSelectedInstanceForDelete(instance)}
-                    aria-label="删除"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </button>
-              </>
+              <button
+                  className="p-2 rounded-md hover:bg-destructive/10 text-destructive"
+                  onClick={() => setSelectedInstanceForDelete(instance)}
+                  aria-label="删除"
+              >
+                <Trash2 className="h-4 w-4" />
+              </button>
             )}
           </div>
         </TableCell>
       </TableRow>
     );
   }
+
+  const getTableBodyContent = () => {
+    if (isLoadingInstances) {
+      return renderSkeletons();
+    }
+    if (filteredInstances && filteredInstances.length > 0) {
+      const rows = [];
+      if (apiKeyInstance) {
+        rows.push(renderInstanceRow(apiKeyInstance));
+      }
+      if (otherInstances) {
+        rows.push(...otherInstances.map(instance => renderInstanceRow(instance)));
+      }
+      return rows;
+    }
+    // If not loading and no filtered instances
+    let message = "加载中或无可用实例数据。";
+    if (activeApiConfig) {
+        if (instances && instances.length === 0) {
+            message = `主控 "${activeApiConfig.name}" 下无实例。`;
+        } else if (searchTerm) {
+            message = `在 "${activeApiConfig.name}" 中未找到与 "${searchTerm}" 匹配的实例。`;
+        }
+    } else {
+        message = "请选择活动主控以查看实例。";
+    }
+    return (
+      <TableRow>
+        <TableCell colSpan={7} className="text-center h-24 font-sans">
+          {message}
+        </TableCell>
+      </TableRow>
+    );
+  };
+
 
   return (
     <Card className="shadow-lg mt-6">
@@ -319,28 +356,7 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
               </TableRow>
             </TableHeader>
             <TableBody>
-              {isLoadingInstances ? renderSkeletons() :
-                filteredInstances && filteredInstances.length > 0 ? (
-                  <>
-                    {apiKeyInstance && renderInstanceRow(apiKeyInstance)}
-                    {otherInstances?.map(instance => renderInstanceRow(instance))}
-                  </>
-              ) : (
-                <TableRow>
-                  <TableCell colSpan={7} className="text-center h-24 font-sans">
-                    {isLoadingInstances
-                      ? "加载中..."
-                      : !activeApiConfig
-                        ? "请选择活动主控以查看实例。"
-                        : searchTerm && (!filteredInstances || filteredInstances.length === 0)
-                          ? `在 "${activeApiConfig.name}" 中未找到与 "${searchTerm}" 匹配的实例。`
-                          : instances && instances.length === 0
-                            ? `主控 "${activeApiConfig.name}" 下无实例。`
-                            : "加载中或无可用实例数据。"
-                    }
-                  </TableCell>
-                </TableRow>
-              )}
+              {getTableBodyContent()}
             </TableBody>
           </Table>
         </div>
@@ -364,3 +380,4 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
     </Card>
   );
 }
+
