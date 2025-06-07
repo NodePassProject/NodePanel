@@ -98,51 +98,68 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
   }, [open, form]);
 
  useEffect(() => {
+    // This effect handles cascading changes when primary mode selectors change.
     if (instanceType === "入口(c)") {
         if (isSingleEndedForwardWatched) {
-            // When single-ended is on, autoCreateServer should be off
-            if (autoCreateServerWatched) {
+            // If single-ended is ON, autoCreateServer must be OFF.
+            if (form.getValues("autoCreateServer") !== false) {
                  form.setValue("autoCreateServer", false, { shouldDirty: true });
             }
         }
-        if (!form.formState.dirtyFields.tlsMode) form.setValue("tlsMode", "master");
-        if (!form.formState.dirtyFields.certPath) form.setValue("certPath", '');
-        if (!form.formState.dirtyFields.keyPath) form.setValue("keyPath", '');
-    } else if (instanceType === "出口(s)") {
-        if (form.getValues("tlsMode") !== '2') {
-            if (!form.formState.dirtyFields.certPath) form.setValue("certPath", '');
-            if (!form.formState.dirtyFields.keyPath) form.setValue("keyPath", '');
+        // Ensure TLS related fields (certPath, keyPath) are cleared if TLS mode is not '2',
+        // but only if the user hasn't explicitly dirtied them.
+        // This section is tricky because `tlsMode` itself might be 'master'.
+        // The primary concern is to clear cert/key if tlsMode becomes non-'2'.
+        const currentTlsMode = form.getValues("tlsMode");
+        if (currentTlsMode !== '2') {
+            if (form.getValues("certPath") !== '') form.setValue("certPath", '');
+            if (form.getValues("keyPath") !== '') form.setValue("keyPath", '');
         }
-        if (!form.formState.dirtyFields.isSingleEndedForward) form.setValue("isSingleEndedForward", false);
-        if (!form.formState.dirtyFields.autoCreateServer) form.setValue("autoCreateServer", false);
-        if (!form.formState.dirtyFields.serverApiId) form.setValue("serverApiId", undefined);
-        if (!form.formState.dirtyFields.serverTargetAddressForAutoCreate) form.setValue("serverTargetAddressForAutoCreate", '');
+    } else if (instanceType === "出口(s)") { // Server type
+        // Reset client-specific flags to their defaults for server
+        if (form.getValues("isSingleEndedForward") !== false) form.setValue("isSingleEndedForward", false);
+        if (form.getValues("autoCreateServer") !== false) form.setValue("autoCreateServer", false);
+        if (form.getValues("serverApiId") !== undefined) form.setValue("serverApiId", undefined);
+        if (form.getValues("serverTargetAddressForAutoCreate") !== '') form.setValue("serverTargetAddressForAutoCreate", '');
+
+        // Clear cert/key paths if TLS mode is not '2'
+        if (form.getValues("tlsMode") !== '2') {
+            if (form.getValues("certPath") !== '') form.setValue("certPath", '');
+            if (form.getValues("keyPath") !== '') form.setValue("keyPath", '');
+        }
     }
-  }, [instanceType, form, isSingleEndedForwardWatched, autoCreateServerWatched]);
+  }, [instanceType, form, isSingleEndedForwardWatched, autoCreateServerWatched]); // Dependency array is correct for this logic.
 
   useEffect(() => {
-    if (instanceType === "入口(c)" && autoCreateServerWatched && !isSingleEndedForwardWatched) { // autoCreate only if NOT single-ended
+    // This effect manages the serverApiId and serverTargetAddressForAutoCreate fields
+    // when in "入口(c)" mode and "autoCreateServer" is toggled.
+    if (instanceType === "入口(c)" && autoCreateServerWatched && !isSingleEndedForwardWatched) {
       const otherMasters = apiConfigsList.filter(c => c.id !== activeApiConfig?.id);
       if (otherMasters.length > 0) {
         const currentServerApiId = form.getValues("serverApiId");
+        // If no serverApiId is selected, or the current one is not in otherMasters, pick the first one.
         if (!currentServerApiId || !otherMasters.some(m => m.id === currentServerApiId)) {
           form.setValue("serverApiId", otherMasters[0].id, { shouldValidate: true, shouldDirty: true });
         }
       } else {
+        // No other masters available, so clear serverApiId
         form.setValue("serverApiId", undefined, { shouldValidate: true, shouldDirty: true });
       }
+       // Ensure serverTargetAddressForAutoCreate has a chance to be filled if not already dirty
        if (!form.formState.dirtyFields.serverTargetAddressForAutoCreate) {
-         form.setValue("serverTargetAddressForAutoCreate", "", {shouldDirty: true});
+         form.setValue("serverTargetAddressForAutoCreate", "", {shouldDirty: true}); // Keep as empty string for user input
        }
 
     } else if (instanceType === "入口(c)" && (!autoCreateServerWatched || isSingleEndedForwardWatched) ) {
-       if (!form.formState.dirtyFields.serverApiId) form.setValue("serverApiId", undefined);
-       if (!form.formState.dirtyFields.serverTargetAddressForAutoCreate) form.setValue("serverTargetAddressForAutoCreate", '');
+       // If not auto-creating server, or if single-ended, these fields should be cleared/reset.
+       if (form.getValues("serverApiId") !== undefined) form.setValue("serverApiId", undefined);
+       if (form.getValues("serverTargetAddressForAutoCreate") !== '') form.setValue("serverTargetAddressForAutoCreate", '');
     }
   }, [instanceType, autoCreateServerWatched, isSingleEndedForwardWatched, apiConfigsList, activeApiConfig, form]);
 
 
   useEffect(() => {
+    // This effect manages the external API suggestion.
     if (instanceType === '入口(c)' && tunnelAddressValue && !autoCreateServerWatched && !isSingleEndedForwardWatched) {
       const clientTunnelHost = extractHostname(tunnelAddressValue);
       if (!clientTunnelHost) {
@@ -356,7 +373,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
                 tunnelAddress: clientConnectToFullTunnelAddr,
                 targetAddress: clientFullLocalForwardTargetAddress,
                 logLevel: values.logLevel,
-                tlsMode: values.tlsMode, // TLS mode for client's connection TO THE AUTO-CREATED SERVER
+                tlsMode: values.tlsMode, 
                 certPath: values.tlsMode === '2' ? values.certPath : '',
                 keyPath: values.tlsMode === '2' ? values.keyPath : '',
             }, activeApiConfig);
@@ -383,7 +400,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
                 tunnelAddress: clientRemoteFullAddress,
                 targetAddress: clientFullLocalForwardTargetAddress,
                 logLevel: values.logLevel,
-                tlsMode: values.tlsMode, // TLS mode for client's connection TO THE EXISTING SERVER
+                tlsMode: values.tlsMode, 
                 certPath: values.tlsMode === '2' ? values.certPath : '',
                 keyPath: values.tlsMode === '2' ? values.keyPath : '',
             }, activeApiConfig);
@@ -446,7 +463,10 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
         return;
       }
       
-      if (!createInstanceMutation.isError && serverCreationOk) {
+      // Only reset and close if all operations (or the single operation) were not errored out by mutation's onError
+      const wasAnyMutationInErrorState = createInstanceMutation.isError; // Check status after all async calls
+
+      if (!wasAnyMutationInErrorState && serverCreationOk) {
          form.reset();
          onOpenChange(false);
       }
@@ -517,4 +537,6 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
     </Dialog>
   );
 }
+    
+
     
