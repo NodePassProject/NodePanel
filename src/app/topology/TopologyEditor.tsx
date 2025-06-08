@@ -15,7 +15,7 @@ import {
 } from 'reactflow';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Server, DatabaseZap, Cable, UserCircle2 as User, Globe, Cog, ListTree, Puzzle, Info as InfoIcon } from 'lucide-react';
-import { v4 as uuidv4 } from 'uuid'; // Added import
+import { v4 as uuidv4 } from 'uuid';
 
 import { TopologyCanvasWrapper } from './TopologyCanvas';
 import { MastersPalette } from './components/MastersPalette';
@@ -27,7 +27,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Separator } from '@/components/ui/separator';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { nodePassApi, type Instance as ApiInstanceType } from '@/lib/api';
+import { nodePassApi, type Instance as ApiInstanceType, getEventsUrl } from '@/lib/api';
 import { buildUrlFromFormValues, type BuildUrlParams } from '@/components/nodepass/create-instance-dialog/utils';
 import { extractPort, extractHostname, formatHostForDisplay, isWildcardHostname, formatHostForUrl, parseNodePassUrl } from '@/lib/url-utils';
 import { SubmitTopologyConfirmationDialog, type InstanceUrlConfigWithName } from './components/SubmitTopologyConfirmationDialog';
@@ -66,13 +66,16 @@ export function TopologyEditor() {
   const [contextMenu, setContextMenu] = useState<TopologyContextMenu | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const editorContainerRef = useRef<HTMLDivElement>(null);
-  const { apiConfigsList, getApiConfigById, getApiRootUrl, getToken } = useApiConfig();
+  const { apiConfigsList, getApiConfigById, getApiRootUrl, getToken, activeApiConfig } = useApiConfig();
   const queryClient = useQueryClient();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSubmitConfirmOpen, setIsSubmitConfirmOpen] = useState(false);
   const [instancesForConfirmation, setInstancesForConfirmation] = useState<InstanceUrlConfigWithName[]>([]);
   const [isEditNodeDialogOpen, setIsEditNodeDialogOpen] = useState(false);
   const [editingNodeContext, setEditingNodeContext] = useState<{ node: Node; hasS: boolean } | null>(null);
+  
+  const sseHandshakeAbortControllerRef = useRef<AbortController | null>(null);
+  const handshakeLogRegex = /Event\s+Tunnel\s+handshaked:.*?in\s+(\d+)\s*ms/i;
 
 
   const getNodeById = useCallback((id: string): Node | undefined => nodesInternal.find((n) => n.id === id), [nodesInternal]);
@@ -188,7 +191,7 @@ export function TopologyEditor() {
 
       const newEdge = {
         ...params,
-        id: `edge-${uuidv4()}`, // Ensure unique ID for new edges on connect
+        id: `edge-${uuidv4()}`, 
         animated: true,
         style: { strokeDasharray: '5 5' },
         type: isInternalConnection ? 'step' : 'smoothstep',
@@ -323,10 +326,7 @@ export function TopologyEditor() {
                   width: CARD_NODE_WIDTH, height: CARD_NODE_HEIGHT,
               };
               newNodesList.push(sNode);
-
-              // This side effect needs to be handled carefully.
-              // It's better to collect all node changes and edge changes and apply them once.
-              // For now, ensuring edge ID uniqueness.
+              
               let tempEdgesFromNodeUpdate: Edge[] = [];
               const updatedNodesViaSetState = nodesInternal.map(n => {
                 if (n.data.parentNode === parentMContainer.id && n.data.isDefaultClient && n.data.isSingleEndedForwardC) {
@@ -357,7 +357,7 @@ export function TopologyEditor() {
                 return n;
               });
               const didUpdateDefaultClient = updatedNodesViaSetState.some((n, i) => n.id !== nodesInternal[i]?.id || JSON.stringify(n.data) !== JSON.stringify(nodesInternal[i]?.data));
-              if(!didUpdateDefaultClient){ // if default C wasn't single-ended or didn't exist
+              if(!didUpdateDefaultClient){ 
                  const normalDefaultClient = nodesInternal.find(n => n.data.parentNode === parentMContainer.id && n.data.isDefaultClient && !n.data.isSingleEndedForwardC);
                  if (normalDefaultClient) {
                     tempEdgesFromNodeUpdate.push({
@@ -445,7 +445,7 @@ export function TopologyEditor() {
               return;
           }
 
-          const newNodeId = `${nodeRole.toLowerCase()}-${++currentCounter}`;
+          const newNodeId = `${nodeRole.toLowerCase()}-${uuidv4().substring(0,8)}`; // Ensure unique ID for new nodes
           const newNodeData: CustomNodeData = {
              label: labelPrefix, role: nodeRole, icon,
              logLevel: 'master',
@@ -777,6 +777,90 @@ export function TopologyEditor() {
     setIsSubmitConfirmOpen(true);
   }, [prepareInstancesForSubmission, toast, setNodesInternal]);
 
+  const listenForHandshakeViaSSE = useCallback(async (
+    masterForSse: NamedApiConfig,
+    signal: AbortSignal
+  ) => {
+    const sseApiRoot = getApiRootUrl(masterForSse.id);
+    const sseApiToken = getToken(masterForSse.id);
+
+    if (!sseApiRoot || !sseApiToken) {
+        toast({ title: "SSE 错误", description: `无法监听握手: 主控 ${masterForSse.name} 的API配置无效。`, variant: "destructive" });
+        return;
+    }
+
+    const eventsSSEUrl = getEventsUrl(sseApiRoot);
+    if (!eventsSSEUrl) return;
+
+    try {
+        const response = await fetch(eventsSSEUrl, {
+            method: 'GET',
+            headers: { 'X-API-Key': sseApiToken, 'Accept': 'text/event-stream', 'Cache-Control': 'no-cache' },
+            signal,
+        });
+
+        if (!response.ok || !response.body) {
+            const errorText = response.statusText || `HTTP error ${response.status}`;
+            throw new Error(errorText);
+        }
+        
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        // eslint-disable-next-line no-constant-condition
+        while (true) {
+            if (signal.aborted) break;
+            const { value, done } = await reader.read();
+            if (signal.aborted || done) break;
+
+            buffer += decoder.decode(value, { stream: true });
+            const messageBlocks = buffer.split('\n\n');
+            buffer = messageBlocks.pop() || '';
+
+            for (const block of messageBlocks) {
+                if (block.trim() === '') continue;
+                let eventName = 'message';
+                let eventDataStr = '';
+                const lines = block.split('\n');
+                for (const line of lines) {
+                    if (line.startsWith('event:')) eventName = line.substring('event:'.length).trim();
+                    else if (line.startsWith('data:')) eventDataStr += line.substring('data:'.length).trimStart();
+                }
+
+                if (eventName === 'instance' && eventDataStr) {
+                    try {
+                        const jsonData = JSON.parse(eventDataStr);
+                        if (jsonData.type === 'log' && typeof jsonData.logs === 'string') {
+                            const match = jsonData.logs.match(handshakeLogRegex);
+                            if (match && match[1]) {
+                                const latency = match[1];
+                                toast({ title: "隧道握手成功", description: `延迟: ${latency}ms` });
+                                if (sseHandshakeAbortControllerRef.current && !sseHandshakeAbortControllerRef.current.signal.aborted) {
+                                  sseHandshakeAbortControllerRef.current.abort("Handshake detected");
+                                }
+                                return; // Stop listening
+                            }
+                        }
+                    } catch (e) {
+                        console.warn("SSE: Error parsing instance event data:", e, "Raw data:", eventDataStr);
+                    }
+                }
+            }
+        }
+    } catch (error: any) {
+        if (error.name !== 'AbortError') {
+            console.error("SSE: Handshake listener error:", error);
+            toast({ title: "SSE 监听错误", description: `监听隧道握手时出错: ${error.message}`, variant: "destructive" });
+        }
+    } finally {
+         if (sseHandshakeAbortControllerRef.current && sseHandshakeAbortControllerRef.current.signal === signal && !signal.aborted) {
+            sseHandshakeAbortControllerRef.current.abort("Listener function completed or errored");
+        }
+    }
+  }, [getApiRootUrl, getToken, toast, handshakeLogRegex]);
+
+
   const executeActualSubmission = useCallback(async () => {
     setIsSubmitting(true);
     setIsSubmitConfirmOpen(false);
@@ -795,15 +879,48 @@ export function TopologyEditor() {
 
     try {
         await Promise.allSettled(submissionPromises);
-        toast({ title: '拓扑提交处理完毕', description: '检查各节点状态。'});
+        toast({ title: '拓扑提交处理完毕', description: '检查各节点状态。开始监听隧道握手...' });
+
+        if (activeApiConfig) {
+          if (sseHandshakeAbortControllerRef.current) {
+            sseHandshakeAbortControllerRef.current.abort("New submission handshake listener starting");
+          }
+          const newAbortController = new AbortController();
+          sseHandshakeAbortControllerRef.current = newAbortController;
+          
+          listenForHandshakeViaSSE(activeApiConfig, newAbortController.signal);
+
+          setTimeout(() => {
+            if (newAbortController && !newAbortController.signal.aborted) {
+              newAbortController.abort("Handshake listener timeout");
+              console.log("Handshake listener timed out.");
+              if (sseHandshakeAbortControllerRef.current === newAbortController) {
+                  sseHandshakeAbortControllerRef.current = null;
+              }
+            }
+          }, 25000); // 25-second timeout for handshake log
+        }
+
     } catch (e) {
         console.error("拓扑提交出错:", e);
         toast({ title: '拓扑提交过程中发生意外错误', variant: 'destructive' });
     } finally {
         setIsSubmitting(false);
-        setInstancesForConfirmation([]);
+        // Do not clear instancesForConfirmation here, SSE listener might still need it or its length.
+        // setInstancesForConfirmation([]); // This line was removed
     }
-  }, [instancesForConfirmation, getApiRootUrl, getToken, toast, createInstanceMutation, setNodesInternal]);
+  }, [instancesForConfirmation, getApiRootUrl, getToken, toast, createInstanceMutation, setNodesInternal, activeApiConfig, listenForHandshakeViaSSE]);
+  
+  useEffect(() => {
+    // Cleanup SSE connection on component unmount
+    return () => {
+        if (sseHandshakeAbortControllerRef.current && !sseHandshakeAbortControllerRef.current.signal.aborted) {
+            sseHandshakeAbortControllerRef.current.abort("Component unmounting");
+            sseHandshakeAbortControllerRef.current = null;
+        }
+    };
+  }, []);
+
 
   const handleOpenEditNodeDialog = (node: Node) => {
     let hasS = false;
@@ -992,6 +1109,7 @@ const handleRenderMasterInstancesOnCanvas = useCallback(async (masterId: string)
             style: { ...nodeStyles.m.base, minWidth: DEFAULT_MASTER_NODE_WIDTH, minHeight: MIN_MASTER_NODE_HEIGHT },
         };
         newRenderedNodes.push(m1ContainerNode);
+        let yPosForNextMContainer = m1ContainerNode.position.y; 
 
         const uGlobalNodeId = `u-global-${m1Config.id.substring(0, 5)}-${++currentIdCounter}`;
         newRenderedNodes.push({
@@ -1003,20 +1121,20 @@ const handleRenderMasterInstancesOnCanvas = useCallback(async (masterId: string)
 
         const landingNodesMap = new Map<string, Node>();
         let tNodeYOffset = m1ContainerNode.position.y;
-        const tNodeXOffsetBase = m1ContainerNode.position.x + DEFAULT_MASTER_NODE_WIDTH + 100;
+        const tNodeXOffsetBase = m1ContainerNode.position.x + DEFAULT_MASTER_NODE_WIDTH + 100; // Initial base for T nodes
 
         const internalClientNodes: Node[] = [];
         const internalServerNodes: Node[] = [];
-        const representedServerNodesMap = new Map<string, Node>(); // key: masterId-instanceId
-        const pairedServerInstanceIds = new Set<string>(); // IDs of M1 servers already paired with an M1 client
+        const representedServerNodesMap = new Map<string, Node>(); 
+        const pairedServerInstanceIds = new Set<string>(); 
+        const processedMasters = new Set<string>([m1Config.id]);
 
 
         let internalNodeYOffset = 40;
         const internalNodeXOffsetC = 20;
-        const internalNodeXOffsetSBase = internalNodeXOffsetC + CARD_NODE_WIDTH + 40;
+        let internalNodeXOffsetSBase = internalNodeXOffsetC + CARD_NODE_WIDTH + 40;
 
 
-        // Phase 1: Create all internal C and S nodes for M1
         for (const inst of m1ValidInstances) {
             const parsedUrl = parseNodePassUrl(inst.url);
             const commonNodeData: Partial<CustomNodeData> = {
@@ -1025,7 +1143,7 @@ const handleRenderMasterInstancesOnCanvas = useCallback(async (masterId: string)
                 tunnelAddress: parsedUrl.tunnelAddress || '',
                 targetAddress: parsedUrl.targetAddress || '',
                 logLevel: parsedUrl.logLevel || 'master',
-                tlsMode: parsedUrl.tlsMode || 'master',
+                tlsMode: parsedUrl.tlsMode || parsedUrl.scheme === 'client' ? '0' : 'master', // Client defaults to 0 if not specified
                 parentNode: m1ContainerNodeId,
             };
 
@@ -1038,19 +1156,18 @@ const handleRenderMasterInstancesOnCanvas = useCallback(async (masterId: string)
                     data: {
                         ...commonNodeData,
                         label: `入口(c): ${inst.id.substring(0, 5)}..`, role: 'C', icon: DatabaseZap,
-                        isSingleEndedForwardC: parsedUrl.scheme === 'client' && isWildcardHostname(extractHostname(parsedUrl.tunnelAddress)),
+                        isSingleEndedForwardC: parsedUrl.scheme === 'client' && isWildcardHostname(extractHostname(parsedUrl.tunnelAddress || "")),
                     } as CustomNodeData,
                     width: CARD_NODE_WIDTH, height: CARD_NODE_HEIGHT,
                 };
                 internalClientNodes.push(clientNode);
                 newRenderedNodes.push(clientNode);
-                newRenderedEdges.push({ id: `edge-${uuidv4()}`, source: uGlobalNodeId, target: clientNodeId, type: 'smoothstep', markerEnd: { type: MarkerType.ArrowClosed } });
                 internalNodeYOffset += CARD_NODE_HEIGHT + 15;
             } else if (inst.type === 'server') {
                 const serverNodeId = `s-${inst.id.substring(0, 8)}-${++currentIdCounter}`;
                 const serverNode: Node = {
                     id: serverNodeId, type: 'cardNode',
-                     position: { x: internalNodeXOffsetSBase, y: internalNodeYOffset - (internalClientNodes.length * (CARD_NODE_HEIGHT + 15)) }, // Align with potential clients or start fresh
+                    position: { x: internalNodeXOffsetSBase, y: internalNodeYOffset - (internalClientNodes.length * (CARD_NODE_HEIGHT + 15)) }, 
                     parentNode: m1ContainerNodeId, extent: 'parent',
                     data: {
                         ...commonNodeData,
@@ -1060,16 +1177,17 @@ const handleRenderMasterInstancesOnCanvas = useCallback(async (masterId: string)
                 };
                 internalServerNodes.push(serverNode);
                 newRenderedNodes.push(serverNode);
-                internalNodeYOffset += CARD_NODE_HEIGHT + 15;
+                internalNodeYOffset += CARD_NODE_HEIGHT + 15; 
             }
         }
+        
         const m1ContainerData = newRenderedNodes.find(n => n.id === m1ContainerNodeId)?.data;
         if (m1ContainerData) m1ContainerData.renderedChildCount = internalClientNodes.length + internalServerNodes.length;
 
 
-        // Phase 2: Process M1's clients for connections
         for (const cNode of internalClientNodes) {
             const parsedClientUrl = parseNodePassUrl(cNode.data.originalInstanceUrl!);
+            newRenderedEdges.push({ id: `edge-${uuidv4()}`, source: uGlobalNodeId, target: cNode.id, type: 'smoothstep', markerEnd: { type: MarkerType.ArrowClosed } });
 
             if (cNode.data.isSingleEndedForwardC && parsedClientUrl.targetAddress) {
                 let tNode = landingNodesMap.get(parsedClientUrl.targetAddress);
@@ -1077,26 +1195,23 @@ const handleRenderMasterInstancesOnCanvas = useCallback(async (masterId: string)
                     const tNodeId = `t-${parsedClientUrl.targetAddress.replace(/[^a-zA-Z0-9]/g, '')}-${++currentIdCounter}`;
                     tNode = {
                         id: tNodeId, type: 'cardNode',
-                        position: { x: tNodeXOffsetBase, y: tNodeYOffset },
+                        position: { x: 0, y: 0 }, // Actual position set later
                         data: { label: `远程 @ ${parsedClientUrl.targetAddress}`, role: 'T', icon: Globe, targetAddress: parsedClientUrl.targetAddress },
                         width: CARD_NODE_WIDTH, height: CARD_NODE_HEIGHT,
                     };
                     newRenderedNodes.push(tNode);
                     landingNodesMap.set(parsedClientUrl.targetAddress, tNode);
-                    tNodeYOffset += CARD_NODE_HEIGHT + 30;
                 }
                 newRenderedEdges.push({ id: `edge-${uuidv4()}`, source: cNode.id, target: tNode.id, type: 'smoothstep', markerEnd: { type: MarkerType.ArrowClosed } });
-            } else if (parsedClientUrl.tunnelAddress) { // Client connects to a server
+            } else if (parsedClientUrl.tunnelAddress) { 
                 const clientConnectsToHost = extractHostname(parsedClientUrl.tunnelAddress);
                 const clientConnectsToPort = extractPort(parsedClientUrl.tunnelAddress);
 
-                // Attempt to find local server on M1 first
                 const sOnM1Node = internalServerNodes.find(sInternalNode => {
                     const parsedLocalServerUrl = parseNodePassUrl(sInternalNode.data.originalInstanceUrl!);
                     const localServerListenHost = extractHostname(parsedLocalServerUrl.tunnelAddress || "");
                     const localServerListenPort = extractPort(parsedLocalServerUrl.tunnelAddress || "");
                     if (clientConnectsToPort !== localServerListenPort) return false;
-
                     const m1ApiHost = extractHostname(m1Config.apiUrl);
                     return (clientConnectsToHost === localServerListenHost ||
                            (isWildcardHostname(localServerListenHost) && (clientConnectsToHost === m1ApiHost || clientConnectsToHost === 'localhost' || clientConnectsToHost === '127.0.0.1' || clientConnectsToHost === '[::1]')) ||
@@ -1106,7 +1221,7 @@ const handleRenderMasterInstancesOnCanvas = useCallback(async (masterId: string)
                 if (sOnM1Node) {
                     newRenderedEdges.push({ id: `edge-${uuidv4()}`, source: cNode.id, target: sOnM1Node.id, type: 'step', markerEnd: { type: MarkerType.ArrowClosed } });
                     pairedServerInstanceIds.add(sOnM1Node.data.originalInstanceId!);
-                } else if (clientConnectsToHost && clientConnectsToPort) { // Try to find on other configured masters
+                } else if (clientConnectsToHost && clientConnectsToPort) { 
                     const targetM2Config = apiConfigsList.find(conf => conf.id !== m1Config.id && extractHostname(conf.apiUrl) === clientConnectsToHost);
                     if (targetM2Config) {
                         const m2ApiRoot = getApiRootUrl(targetM2Config.id);
@@ -1129,10 +1244,10 @@ const handleRenderMasterInstancesOnCanvas = useCallback(async (masterId: string)
                                     if (!representativeSNode) {
                                         const parsedServerOnM2Url = parseNodePassUrl(sOnM2InstanceData.url);
                                         const sNodeId = `s-repr-${sOnM2InstanceData.id.substring(0, 8)}-${++currentIdCounter}`;
-                                        const repSNodeYPos = internalNodeYOffset;
+                                        const repSNodeYPos = internalNodeYOffset; 
                                         representativeSNode = {
                                             id: sNodeId, type: 'cardNode',
-                                            position: { x: internalNodeXOffsetSBase, y: repSNodeYPos },
+                                            position: { x: internalNodeXOffsetSBase, y: repSNodeYPos }, 
                                             parentNode: m1ContainerNodeId, extent: 'parent',
                                             data: {
                                                 label: `出口(s) @ ${targetM2Config.name.substring(0,10)}..`, role: 'S', icon: Server,
@@ -1146,41 +1261,40 @@ const handleRenderMasterInstancesOnCanvas = useCallback(async (masterId: string)
                                         };
                                         newRenderedNodes.push(representativeSNode);
                                         representedServerNodesMap.set(representativeSNodeKey, representativeSNode);
-                                        internalNodeYOffset += CARD_NODE_HEIGHT + 15; // Only increment if new repr. S created
+                                        internalNodeYOffset += CARD_NODE_HEIGHT + 15;
                                         if(m1ContainerData) m1ContainerData.renderedChildCount = (m1ContainerData.renderedChildCount || 0) + 1;
+                                        internalNodeXOffsetSBase = Math.max(internalNodeXOffsetSBase, representativeSNode.position.x + CARD_NODE_WIDTH + 20);
                                     }
                                     newRenderedEdges.push({ id: `edge-${uuidv4()}`, source: cNode.id, target: representativeSNode.id, type: 'step', markerEnd: { type: MarkerType.ArrowClosed } });
-                                } else { // Server not found on M2, treat as generic external T
-                                    let tNode = landingNodesMap.get(parsedClientUrl.tunnelAddress!); // Add ! as this branch implies tunnelAddress exists
+                                } else { 
+                                    let tNode = landingNodesMap.get(parsedClientUrl.tunnelAddress!); 
                                     if (!tNode) {
                                         const tNodeId = `t-ext-${(parsedClientUrl.tunnelAddress!).replace(/[^a-zA-Z0-9]/g, '')}-${++currentIdCounter}`;
                                         tNode = {
                                             id: tNodeId, type: 'cardNode',
-                                            position: { x: tNodeXOffsetBase, y: tNodeYOffset },
+                                            position: { x: 0, y: 0 }, // Actual position set later
                                             data: { label: `外部出口(s) @ ${parsedClientUrl.tunnelAddress}`, role: 'T', icon: Globe, targetAddress: parsedClientUrl.tunnelAddress },
                                             width: CARD_NODE_WIDTH, height: CARD_NODE_HEIGHT,
                                         };
                                         newRenderedNodes.push(tNode);
-                                        landingNodesMap.set(parsedClientUrl.tunnelAddress!, tNode); // Add !
-                                        tNodeYOffset += CARD_NODE_HEIGHT + 30;
+                                        landingNodesMap.set(parsedClientUrl.tunnelAddress!, tNode); 
                                     }
                                     newRenderedEdges.push({ id: `edge-${uuidv4()}`, source: cNode.id, target: tNode.id, type: 'smoothstep', markerEnd: { type: MarkerType.ArrowClosed } });
                                 }
                             } catch (e: any) { console.error("Error fetching/processing M2 instances", e); }
                         }
-                    } else { // Not a known master, treat as generic external T
-                        let tNode = landingNodesMap.get(parsedClientUrl.tunnelAddress!); // Add !
+                    } else { 
+                        let tNode = landingNodesMap.get(parsedClientUrl.tunnelAddress!); 
                         if (!tNode) {
                             const tNodeId = `t-ext-${(parsedClientUrl.tunnelAddress!).replace(/[^a-zA-Z0-9]/g, '')}-${++currentIdCounter}`;
                             tNode = {
                                 id: tNodeId, type: 'cardNode',
-                                position: { x: tNodeXOffsetBase, y: tNodeYOffset },
+                                position: { x: 0, y: 0 }, // Actual position set later
                                 data: { label: `外部出口(s) @ ${parsedClientUrl.tunnelAddress}`, role: 'T', icon: Globe, targetAddress: parsedClientUrl.tunnelAddress },
                                 width: CARD_NODE_WIDTH, height: CARD_NODE_HEIGHT,
                             };
                             newRenderedNodes.push(tNode);
-                            landingNodesMap.set(parsedClientUrl.tunnelAddress!, tNode); // Add !
-                            tNodeYOffset += CARD_NODE_HEIGHT + 30;
+                            landingNodesMap.set(parsedClientUrl.tunnelAddress!, tNode); 
                         }
                         newRenderedEdges.push({ id: `edge-${uuidv4()}`, source: cNode.id, target: tNode.id, type: 'smoothstep', markerEnd: { type: MarkerType.ArrowClosed } });
                     }
@@ -1188,7 +1302,6 @@ const handleRenderMasterInstancesOnCanvas = useCallback(async (masterId: string)
             }
         }
 
-        // Phase 3: Connect M1's servers (local or representative) to their T nodes
         const allServerLikeNodes = internalServerNodes.concat(Array.from(representedServerNodesMap.values()));
         allServerLikeNodes.forEach(sNode => {
             const serverTargetAddr = sNode.data.targetAddress;
@@ -1198,18 +1311,15 @@ const handleRenderMasterInstancesOnCanvas = useCallback(async (masterId: string)
                     const tNodeId = `t-${serverTargetAddr.replace(/[^a-zA-Z0-9]/g, '')}-${++currentIdCounter}`;
                     tNode = {
                         id: tNodeId, type: 'cardNode',
-                        position: { x: tNodeXOffsetBase, y: tNodeYOffset },
+                        position: { x: 0, y: 0 }, // Actual position set later
                         data: { label: `服务 @ ${serverTargetAddr}`, role: 'T', icon: Globe, targetAddress: serverTargetAddr },
                         width: CARD_NODE_WIDTH, height: CARD_NODE_HEIGHT,
                     };
                     newRenderedNodes.push(tNode);
                     landingNodesMap.set(serverTargetAddr, tNode);
-                    tNodeYOffset += CARD_NODE_HEIGHT + 30;
                 }
                 newRenderedEdges.push({ id: `edge-${uuidv4()}`, source: sNode.id, target: tNode.id, type: 'smoothstep', markerEnd: { type: MarkerType.ArrowClosed } });
             }
-             // Connect U node to S node if it's not connected from an internal C node already
-             // and it's a local server (not representative)
             if (!sNode.data.representedMasterId && !pairedServerInstanceIds.has(sNode.data.originalInstanceId!)) {
                  const isConnectedFromInternalClient = newRenderedEdges.some(edge => edge.target === sNode.id && internalClientNodes.some(cn => cn.id === edge.source));
                  if (!isConnectedFromInternalClient) {
@@ -1218,7 +1328,6 @@ const handleRenderMasterInstancesOnCanvas = useCallback(async (masterId: string)
             }
         });
 
-        // Update M1 container size
         const childNodesForM1 = newRenderedNodes.filter(n => n.parentNode === m1ContainerNodeId);
         let requiredHeight = MIN_MASTER_NODE_HEIGHT;
         let requiredWidth = DEFAULT_MASTER_NODE_WIDTH;
@@ -1226,8 +1335,8 @@ const handleRenderMasterInstancesOnCanvas = useCallback(async (masterId: string)
         if (childNodesForM1.length > 0) {
             const maxY = Math.max(...childNodesForM1.map(n => n.position.y + (n.height || CARD_NODE_HEIGHT)));
             const maxX = Math.max(...childNodesForM1.map(n => n.position.x + (n.width || CARD_NODE_WIDTH)));
-            requiredHeight = Math.max(maxY + 20, MIN_MASTER_NODE_HEIGHT);
-            requiredWidth = Math.max(maxX + 20, DEFAULT_MASTER_NODE_WIDTH);
+            requiredHeight = Math.max(maxY + 40, MIN_MASTER_NODE_HEIGHT);
+            requiredWidth = Math.max(maxX + 40, DEFAULT_MASTER_NODE_WIDTH, internalNodeXOffsetSBase + CARD_NODE_WIDTH + 20);
         }
 
         const m1NodeToUpdateIndex = newRenderedNodes.findIndex(n => n.id === m1ContainerNodeId);
@@ -1235,13 +1344,23 @@ const handleRenderMasterInstancesOnCanvas = useCallback(async (masterId: string)
             newRenderedNodes[m1NodeToUpdateIndex].height = requiredHeight;
             newRenderedNodes[m1NodeToUpdateIndex].style = { ...newRenderedNodes[m1NodeToUpdateIndex].style, height: requiredHeight, width: requiredWidth };
             newRenderedNodes[m1NodeToUpdateIndex].width = requiredWidth;
+        }
 
-            // Adjust T node X based on final M1 width
-             newRenderedNodes.forEach(n => {
-                if (n.data.role === 'T' && n.position.x === tNodeXOffsetBase) {
-                    n.position.x = m1ContainerNode.position.x + requiredWidth + 100;
-                }
-             });
+        const masterNode = newRenderedNodes[m1NodeToUpdateIndex];
+        const currentMasterNodeWidth = masterNode?.width ?? requiredWidth;
+        
+        tNodeYOffset = masterNode.position.y;
+        landingNodesMap.forEach(tNode => {
+            const tNodeIndex = newRenderedNodes.findIndex(n => n.id === tNode.id);
+            if (tNodeIndex !== -1) {
+                newRenderedNodes[tNodeIndex].position = { x: masterNode.position.x + currentMasterNodeWidth + 150, y: tNodeYOffset };
+                tNodeYOffset += CARD_NODE_HEIGHT + 30;
+            }
+        });
+        
+        const uNodeGlobalToUpdateIndex = newRenderedNodes.findIndex(n => n.id === uGlobalNodeId);
+        if (uNodeGlobalToUpdateIndex !== -1) {
+           newRenderedNodes[uNodeGlobalToUpdateIndex].position.y = masterNode.position.y + (requiredHeight / 2) - (CARD_NODE_HEIGHT / 2);
         }
 
 
@@ -1351,3 +1470,4 @@ const handleRenderMasterInstancesOnCanvas = useCallback(async (masterId: string)
   );
 }
     
+
