@@ -20,11 +20,12 @@ export interface CustomNodeData {
   isContainer?: boolean; // True for M-nodes that can contain other nodes
   parentNode?: string; // ID of the parent M-node if this node is inside a container
   isDefaultClient?: boolean; // For the default C-node inside an M-container
+  isSingleEndedForwardC?: boolean; // For C-nodes, if true, it's in single-ended forwarding mode
   apiUrl?: string; // For M-nodes, copied from NamedApiConfig for reference
   defaultLogLevel?: string; // For M-nodes, copied from NamedApiConfig
   defaultTlsMode?: string; // For M-nodes, copied from NamedApiConfig
-  tunnelAddress?: string; // For S (listen), C (connect to S), M (client-role, connects to remote S)
-  targetAddress?: string; // For S (forward to), C (local forward from), T (forward to), M (client-role, local service)
+  tunnelAddress?: string; // For S (listen), C (connect to S or local listen if single-ended), M (client-role, connects to remote S)
+  targetAddress?: string; // For S (forward to), C (local forward from or remote target if single-ended), T (forward to), M (client-role, local service)
   submissionStatus?: 'pending' | 'success' | 'error';
   submissionMessage?: string;
   logLevel?: string; // Instance-specific log level
@@ -51,3 +52,4 @@ export interface TopologyContextMenu {
   left: number;
   data: Node | import('reactflow').Edge; // Use import('reactflow').Edge to avoid direct Edge type here
 }
+

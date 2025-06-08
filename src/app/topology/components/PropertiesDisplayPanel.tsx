@@ -2,7 +2,7 @@
 "use client";
 
 import React from 'react';
-import type { Node, CustomNodeData } from '../page'; // Adjusted import for our Node type
+import type { Node, CustomNodeData } from '../topologyTypes'; // Adjusted import for our Node type
 
 interface PropertiesDisplayPanelProps {
   selectedNode: Node | null;
@@ -47,6 +47,12 @@ export function PropertiesDisplayPanel({ selectedNode }: PropertiesDisplayPanelP
           <span className="ml-1">{data.nodeType}</span>
         </div>
       )}
+      {data.role === 'C' && data.isSingleEndedForwardC !== undefined && (
+        <div>
+          <strong className="text-muted-foreground">单端转发模式:</strong>
+          <span className="ml-1">{data.isSingleEndedForwardC ? '是' : '否'}</span>
+        </div>
+      )}
       {data.masterId && ( // For M nodes representing a master config
          <div>
           <strong className="text-muted-foreground">源主控ID:</strong>
@@ -77,24 +83,29 @@ export function PropertiesDisplayPanel({ selectedNode }: PropertiesDisplayPanelP
           <span className="ml-1">{data.isContainer ? '是' : '否'}</span>
         </div>
       )}
-       {/* Display other relevant properties based on role */}
       {data.role === 'M' && data.masterName && ( 
         <div>
           <strong className="text-muted-foreground">源主控名称:</strong>
           <span className="ml-1">{data.masterName}</span>
         </div>
       )}
-      {(data.role === 'S' || data.role === 'C') && data.tunnelAddress && (
+      {(data.role === 'S' || (data.role === 'C' && !data.isSingleEndedForwardC)) && data.tunnelAddress && ( // Normal C or S
         <div>
           <strong className="text-muted-foreground">隧道地址:</strong>
           <span className="ml-1 font-mono break-all">{data.tunnelAddress}</span>
         </div>
       )}
-      { (data.role === 'S' || data.role === 'C' || data.role === 'T' || (data.role === 'M' && data.masterSubRole === 'client-role')) && data.targetAddress && (
+      {data.role === 'C' && data.isSingleEndedForwardC && data.tunnelAddress && ( // Single-ended C
+        <div>
+          <strong className="text-muted-foreground">本地监听地址:</strong>
+          <span className="ml-1 font-mono break-all">{data.tunnelAddress}</span>
+        </div>
+      )}
+
+      { (data.role === 'S' || data.role === 'T' || (data.role === 'M' && data.masterSubRole === 'client-role')) && data.targetAddress && (
         <div>
           <strong className="text-muted-foreground">
             {data.role === 'S' ? '出口(s)转发地址:' : 
-             data.role === 'C' ? '入口(c)本地转发:' : 
              data.role === 'T' ? '落地端转发地址:' : 
              (data.role === 'M' && data.masterSubRole === 'client-role') ? 'M(客户)本地服务:' : 
              '目标地址:' 
@@ -103,9 +114,39 @@ export function PropertiesDisplayPanel({ selectedNode }: PropertiesDisplayPanelP
           <span className="ml-1 font-mono break-all">{data.targetAddress}</span>
         </div>
       )}
-      {/* Deprecated T-node ipAddress/port display removed, using targetAddress now */}
+       {data.role === 'C' && data.targetAddress && (
+        <div>
+          <strong className="text-muted-foreground">
+            {data.isSingleEndedForwardC ? '远程目标地址:' : '入口(c)本地转发:'}
+          </strong>
+          <span className="ml-1 font-mono break-all">{data.targetAddress}</span>
+        </div>
+      )}
+      {data.logLevel && (
+        <div>
+          <strong className="text-muted-foreground">日志级别:</strong>
+          <span className="ml-1">{data.logLevel}</span>
+        </div>
+      )}
+      {data.tlsMode && (data.role === 'S' || (data.role === 'C' && data.isSingleEndedForwardC) || (data.role === 'M' && data.masterSubRole === 'client-role')) && (
+         <div>
+          <strong className="text-muted-foreground">TLS 模式:</strong>
+          <span className="ml-1">{data.tlsMode}</span>
+        </div>
+      )}
+       {data.tlsMode === '2' && (data.role === 'S' || (data.role === 'C' && data.isSingleEndedForwardC) || (data.role === 'M' && data.masterSubRole === 'client-role')) && data.certPath && (
+         <div>
+          <strong className="text-muted-foreground">证书路径:</strong>
+          <span className="ml-1 font-mono break-all">{data.certPath}</span>
+        </div>
+      )}
+       {data.tlsMode === '2' && (data.role === 'S' || (data.role === 'C' && data.isSingleEndedForwardC) || (data.role === 'M' && data.masterSubRole === 'client-role')) && data.keyPath && (
+         <div>
+          <strong className="text-muted-foreground">密钥路径:</strong>
+          <span className="ml-1 font-mono break-all">{data.keyPath}</span>
+        </div>
+      )}
     </div>
   );
 }
     
-
