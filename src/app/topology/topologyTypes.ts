@@ -37,6 +37,10 @@ export interface CustomNodeData {
   remoteMasterIdForTunnel?: string;
   remoteServerListenAddress?: string;
   remoteServerForwardAddress?: string;
+
+  // For nodes rendered from existing instances
+  originalInstanceId?: string;
+  originalInstanceUrl?: string;
 }
 
 // Our custom Node type extending React Flow's Node

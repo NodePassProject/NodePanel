@@ -13,8 +13,8 @@ import {
   type OnNodesChange,
   type OnEdgesChange,
 } from 'reactflow';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Server, DatabaseZap, Cable, User, ListTree, Puzzle, Info as InfoIcon } from 'lucide-react'; // Added ListTree, Puzzle, InfoIcon
+import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query'; // Added useQuery
+import { Server, DatabaseZap, Cable, User, ListTree, Puzzle, Info as InfoIcon, Cog } from 'lucide-react'; // Added Cog
 
 import { TopologyCanvasWrapper } from './TopologyCanvas';
 import { MastersPalette } from './components/MastersPalette';
@@ -25,10 +25,10 @@ import { useApiConfig } from '@/hooks/use-api-key';
 import { useToast } from '@/hooks/use-toast';
 import { Separator } from '@/components/ui/separator';
 import { Button } from '@/components/ui/button';
-import { ScrollArea } from '@/components/ui/scroll-area'; // Added ScrollArea
-import { nodePassApi } from '@/lib/api';
+import { ScrollArea } from '@/components/ui/scroll-area'; 
+import { nodePassApi, type Instance as ApiInstanceType } from '@/lib/api'; // Added ApiInstanceType
 import { buildUrlFromFormValues, type BuildUrlParams } from '@/components/nodepass/create-instance-dialog/utils';
-import { extractPort, extractHostname, formatHostForDisplay, isWildcardHostname, formatHostForUrl } from '@/lib/url-utils';
+import { extractPort, extractHostname, formatHostForDisplay, isWildcardHostname, formatHostForUrl, parseNodePassUrl } from '@/lib/url-utils';
 import { SubmitTopologyConfirmationDialog, type InstanceUrlConfigWithName } from './components/SubmitTopologyConfirmationDialog';
 import { EditTopologyNodeDialog } from './components/EditTopologyNodeDialog';
 
@@ -54,7 +54,7 @@ export function TopologyEditor() {
   const [nodeIdCounter, setNodeIdCounter] = useState(0);
   const { toast } = useToast();
   const reactFlowWrapperRef = useRef<HTMLDivElement>(null);
-  const { deleteElements, fitView } = useReactFlow();
+  const { deleteElements, fitView, getViewport, setViewport } = useReactFlow(); // Added getViewport, setViewport
   const [contextMenu, setContextMenu] = useState<TopologyContextMenu | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const editorContainerRef = useRef<HTMLDivElement>(null);
@@ -95,10 +95,12 @@ export function TopologyEditor() {
       const submittedInstanceInfo = instancesForConfirmation.find(inst => inst.nodeId === variables.originalNodeId && inst.url === variables.data.url);
       if (submittedInstanceInfo) {
         queryClient.invalidateQueries({ queryKey: ['instances', submittedInstanceInfo.masterId]});
+        queryClient.invalidateQueries({ queryKey: ['masterInstancesCount', submittedInstanceInfo.masterId]});
       } else {
          const masterIdForInvalidation = getNodeById(variables.originalNodeId)?.data.masterId;
          if (masterIdForInvalidation) {
            queryClient.invalidateQueries({ queryKey: ['instances', masterIdForInvalidation]});
+           queryClient.invalidateQueries({ queryKey: ['masterInstancesCount', masterIdForInvalidation]});
          }
       }
       queryClient.invalidateQueries({ queryKey: ['allInstancesForTopologyPage']});
@@ -719,7 +721,7 @@ export function TopologyEditor() {
     
     const editedNode = newNodes[nodeIndex];
 
-    const isForwardingSourceNode = editedNode.data.role === 'S' || editedNode.data.role === 'C' || (editedNode.data.role === 'M' && editedNode.data.masterSubRole === 'client-role');
+    const isForwardingSourceNode = editedNode.data.role === 'S' || (editedNode.data.role === 'C' && !editedNode.data.isSingleEndedForwardC) || (editedNode.data.role === 'M' && editedNode.data.masterSubRole === 'client-role');
     
     if (isForwardingSourceNode) {
         edgesInternal.forEach(edge => {
@@ -737,10 +739,10 @@ export function TopologyEditor() {
                 }
             }
         });
-    } else if (editedNode.data.role === 'T') {
+    } else if (editedNode.data.role === 'T') { // Landing node itself was edited
         edgesInternal.forEach(edge => {
-            if (edge.target === editedNode.id) {
-                const sourceNodeIndex = newNodes.findIndex(n => n.id === edge.source && (n.data.role === 'S' || n.data.role === 'C' || (n.data.role === 'M' && n.data.masterSubRole === 'client-role')));
+            if (edge.target === editedNode.id) { // Find incoming connections
+                const sourceNodeIndex = newNodes.findIndex(n => n.id === edge.source && (n.data.role === 'S' || (n.data.role === 'C' && !n.data.isSingleEndedForwardC) || (n.data.role === 'M' && n.data.masterSubRole === 'client-role')));
                 if (sourceNodeIndex !== -1) {
                      const connectedSourceNodeOriginalData = nodesInternal.find(n => n.id === newNodes[sourceNodeIndex].id)?.data;
                     if (editedNode.data.targetAddress !== connectedSourceNodeOriginalData?.targetAddress) {
@@ -803,6 +805,159 @@ export function TopologyEditor() {
   const handleDeleteNode = (nodeToDelete: Node) => { deleteElements({ nodes: [nodeToDelete] }); toast({ title: `节点 "${nodeToDelete.data.label || nodeToDelete.id}" 已删除` }); if (selectedNode?.id === nodeToDelete.id) setSelectedNode(null); setContextMenu(null); };
   const handleDeleteEdge = (edgeToDelete: Edge) => { deleteElements({ edges: [edgeToDelete] }); toast({ title: '链路已删除' }); setContextMenu(null); };
 
+  const handleRenderMasterInstancesOnCanvas = useCallback(async (masterId: string) => {
+    const masterConfig = getApiConfigById(masterId);
+    if (!masterConfig) {
+      toast({ title: "错误", description: "无法找到选定主控的配置。", variant: "destructive" });
+      return;
+    }
+    const apiR = getApiRootUrl(masterId);
+    const apiT = getToken(masterId);
+    if (!apiR || !apiT) {
+      toast({ title: "错误", description: `主控 "${masterConfig.name}" 的API配置不完整。`, variant: "destructive" });
+      return;
+    }
+
+    setNodesInternal([]);
+    setEdgesInternal([]);
+    setSelectedNode(null);
+    setNodeIdCounter(0);
+    let currentIdCounter = 0;
+
+    toast({ title: `正在加载主控 ${masterConfig.name} 的实例...`});
+
+    try {
+      const fetchedInstances: ApiInstanceType[] = await nodePassApi.getInstances(apiR, apiT);
+      
+      const newRenderedNodes: Node[] = [];
+      const newRenderedEdges: Edge[] = [];
+
+      // Create the main Master (M) node for this master
+      const mNodeId = `master-${masterConfig.id.substring(0,8)}-${++currentIdCounter}`;
+      const mNodeWidth = Math.max(300, fetchedInstances.length * (CARD_NODE_WIDTH / 2 + 20)); // Dynamic width
+      const mNodeHeight = 200;
+
+      newRenderedNodes.push({
+        id: mNodeId,
+        type: 'masterNode',
+        position: { x: 100, y: 100 }, // Initial position, layout will adjust
+        data: {
+          label: `主控: ${masterConfig.name}`,
+          role: 'M',
+          icon: Cog,
+          isContainer: true,
+          masterId: masterConfig.id,
+          masterName: masterConfig.name,
+          apiUrl: masterConfig.apiUrl,
+          defaultLogLevel: masterConfig.masterDefaultLogLevel,
+          defaultTlsMode: masterConfig.masterDefaultTlsMode,
+          masterSubRole: "server-role", // Default to server-role when rendering its own instances
+        },
+        style: { ...nodeStyles.m.base, width: mNodeWidth, height: mNodeHeight },
+        width: mNodeWidth,
+        height: mNodeHeight,
+      });
+
+      const instanceNodesMap = new Map<string, Node>();
+
+      // Create nodes for each instance
+      fetchedInstances.forEach((instance, index) => {
+        if (instance.id === '********') return; // Skip API key special instance
+
+        const parsedUrl = parseNodePassUrl(instance.url);
+        const nodeRole = instance.type === 'server' ? 'S' : 'C';
+        const nodeIcon = instance.type === 'server' ? Server : DatabaseZap;
+        const instanceNodeId = `${nodeRole.toLowerCase()}-${instance.id.substring(0,8)}-${++currentIdCounter}`;
+        
+        const instanceNode: Node = {
+          id: instanceNodeId,
+          type: 'cardNode',
+          position: { x: 50 + (index % 4) * (CARD_NODE_WIDTH + 20) , y: 50 + Math.floor(index / 4) * (CARD_NODE_HEIGHT + 20) }, // Simple grid inside M
+          parentNode: mNodeId,
+          extent: 'parent',
+          data: {
+            label: `${nodeRole === 'S' ? '出口(s)' : '入口(c)'}: ${instance.id.substring(0,5)}...`,
+            role: nodeRole,
+            icon: nodeIcon,
+            parentNode: mNodeId,
+            tunnelAddress: parsedUrl.tunnelAddress || undefined,
+            targetAddress: parsedUrl.targetAddress || undefined,
+            logLevel: parsedUrl.logLevel || masterConfig.masterDefaultLogLevel || 'master',
+            tlsMode: parsedUrl.tlsMode || masterConfig.masterDefaultTlsMode || (nodeRole === 'S' ? 'master' : '0'),
+            certPath: parsedUrl.certPath || undefined,
+            keyPath: parsedUrl.keyPath || undefined,
+            originalInstanceId: instance.id, // Store original ID for reference
+            originalInstanceUrl: instance.url,
+            isSingleEndedForwardC: nodeRole === 'C' ? isWildcardHostname(extractHostname(parsedUrl.tunnelAddress || "")) : false,
+          },
+          width: CARD_NODE_WIDTH,
+          height: CARD_NODE_HEIGHT,
+        };
+        newRenderedNodes.push(instanceNode);
+        instanceNodesMap.set(instance.id, instanceNode);
+      });
+
+      // Infer connections
+      newRenderedNodes.forEach(node => {
+        if (node.data.role === 'C' && node.data.originalInstanceUrl) {
+          const clientParsedUrl = parseNodePassUrl(node.data.originalInstanceUrl);
+          if (clientParsedUrl.tunnelAddress) {
+            // Find server node that this client connects to
+            newRenderedNodes.forEach(potentialServerNode => {
+              if (potentialServerNode.data.role === 'S' && potentialServerNode.data.originalInstanceUrl) {
+                const serverParsedUrl = parseNodePassUrl(potentialServerNode.data.originalInstanceUrl);
+                // Matching logic: client's tunnelAddress (server's FQDN:port) should match server's listen address
+                // Server's listen address is its own tunnelAddress in its URL definition
+                // This simplified matching assumes server listens on a specific host/port that client uses.
+                // For servers listening on 0.0.0.0 or [::], client would connect to master's IP + server's port.
+                
+                let serverEffectiveListenAddress = serverParsedUrl.tunnelAddress;
+                const serverListenHost = extractHostname(serverParsedUrl.tunnelAddress || "");
+
+                // If server listens on wildcard, client connects to master's host + server's port
+                if (serverListenHost && isWildcardHostname(serverListenHost)) {
+                    const masterApiHost = extractHostname(masterConfig.apiUrl);
+                    const serverPort = extractPort(serverParsedUrl.tunnelAddress || "");
+                    if (masterApiHost && serverPort) {
+                        serverEffectiveListenAddress = `${formatHostForUrl(masterApiHost)}:${serverPort}`;
+                    }
+                }
+
+                if (serverEffectiveListenAddress && clientParsedUrl.tunnelAddress.toLowerCase() === serverEffectiveListenAddress.toLowerCase()) {
+                  newRenderedEdges.push({
+                    id: `edge-${node.id}-${potentialServerNode.id}`,
+                    source: node.id,
+                    target: potentialServerNode.id,
+                    type: 'step',
+                    markerEnd: { type: MarkerType.ArrowClosed },
+                    animated: true,
+                  });
+                }
+              }
+            });
+          }
+        }
+      });
+      
+      setNodesInternal(newRenderedNodes);
+      setEdgesInternal(newRenderedEdges);
+      setNodeIdCounter(currentIdCounter);
+
+      setTimeout(() => {
+        fitView({ duration: 400, padding: 0.1 });
+      }, 100);
+
+      toast({ title: `主控 ${masterConfig.name} 的实例已渲染。`, description: `共 ${fetchedInstances.filter(i => i.id !== '********').length} 个实例。`});
+
+    } catch (error: any) {
+      console.error(`渲染主控 ${masterConfig.name} 实例失败:`, error);
+      toast({ title: `渲染主控 ${masterConfig.name} 实例失败`, description: error.message, variant: "destructive" });
+      setNodesInternal([]); // Clear canvas on error too
+      setEdgesInternal([]);
+    }
+  }, [getApiConfigById, getApiRootUrl, getToken, toast, setNodesInternal, setEdgesInternal, fitView, queryClient, nodeIdCounter]);
+
+
   return (
     <div ref={editorContainerRef} className="flex flex-col flex-grow h-full relative">
       <div className="flex flex-row flex-grow h-full overflow-hidden">
@@ -814,8 +969,8 @@ export function TopologyEditor() {
                 主控列表 (M)
               </h2>
               <p className="text-xs text-muted-foreground font-sans mb-2">拖拽主控到画布。</p>
-              <ScrollArea className="flex-grow pr-1 max-h-60"> {/* Limited height and scroll */}
-                <MastersPalette />
+              <ScrollArea className="flex-grow pr-1 max-h-60"> 
+                <MastersPalette onRenderMasterInstances={handleRenderMasterInstancesOnCanvas} />
               </ScrollArea>
             </div>
             <Separator className="my-0" />

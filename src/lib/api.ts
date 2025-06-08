@@ -1,5 +1,9 @@
 
-import type { Instance, CreateInstanceRequest, UpdateInstanceRequest } from '@/types/nodepass'; // ModifyInstanceConfigRequest removed
+import type { Instance as NodelessInstance, CreateInstanceRequest, UpdateInstanceRequest } from '@/types/nodepass'; // ModifyInstanceConfigRequest removed
+
+// Re-export Instance to avoid direct dependency on types/nodepass elsewhere if not needed.
+export type Instance = NodelessInstance;
+
 
 async function request<T>(
   fullRequestUrl: string,
@@ -91,3 +95,4 @@ export const getEventsUrl = (apiRootUrl: string | null): string => {
   if (!apiRootUrl) throw new Error("API 根地址 (apiRootUrl) 未配置，无法获取事件 URL。");
   return `${apiRootUrl}/v1/events`;
 };
+
