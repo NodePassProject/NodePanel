@@ -14,7 +14,7 @@ import {
   type OnEdgesChange,
 } from 'reactflow';
 import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query'; // Added useQuery
-import { Server, DatabaseZap, Cable, User, ListTree, Puzzle, Info as InfoIcon, Cog } from 'lucide-react'; // Added Cog
+import { Server, DatabaseZap, Cable, UserCircle2 as User, Globe, Cog, ListTree, Puzzle, Info as InfoIcon } from 'lucide-react'; // Updated Icons
 
 import { TopologyCanvasWrapper } from './TopologyCanvas';
 import { MastersPalette } from './components/MastersPalette';
@@ -145,10 +145,11 @@ export function TopologyEditor() {
         toast({ title: '连接无效', description: '用户端 (U) 节点不能被其他节点链接。', variant: 'destructive' });
         return;
       }
-      if (sourceNode.data.role === 'U' && targetNode.data.role !== 'M') {
-        toast({ title: '连接无效', description: '用户端 (U) 节点只能链接到主控 (M) 节点。', variant: 'destructive' });
+      if (sourceNode.data.role === 'U' && targetNode.data.role !== 'M' && targetNode.data.role !== 'C') {
+        toast({ title: '连接无效', description: '用户端 (U) 节点只能链接到主控 (M) 或 入口(c) 节点。', variant: 'destructive' });
         return;
       }
+
 
       if (sourceNode.data.role === 'T') {
         toast({ title: '连接无效', description: '落地 (T) 节点不能作为连接的起点。', variant: 'destructive' });
@@ -394,14 +395,14 @@ export function TopologyEditor() {
               newNodes.push({
                   id: uId, type: 'cardNode',
                   position: { x: position.x - CARD_NODE_WIDTH - 60, y: position.y + (mNodeHeight / 2) - (CARD_NODE_HEIGHT / 2) },
-                  data: { label: '用户端', role: 'U', icon: User },
+                  data: { label: '用户', role: 'U', icon: User },
                   width: CARD_NODE_WIDTH, height: CARD_NODE_HEIGHT,
               });
 
               newNodes.push({
                   id: tId, type: 'cardNode',
                   position: { x: position.x + mNodeWidth + 60, y: position.y + (mNodeHeight / 2) - (CARD_NODE_HEIGHT / 2) },
-                  data: { label: '落地', role: 'T', icon: Cable, targetAddress: '192.168.1.10:80' },
+                  data: { label: '落地', role: 'T', icon: Globe, targetAddress: '192.168.1.10:80' },
                   width: CARD_NODE_WIDTH, height: CARD_NODE_HEIGHT,
               });
 
@@ -421,8 +422,8 @@ export function TopologyEditor() {
           const { labelPrefix, icon, width, height } = {
               'S': { labelPrefix: '出口(s)', icon: Server, width: CARD_NODE_WIDTH, height: CARD_NODE_HEIGHT },
               'C': { labelPrefix: '入口(c)', icon: DatabaseZap, width: CARD_NODE_WIDTH, height: CARD_NODE_HEIGHT },
-              'T': { labelPrefix: '落地', icon: Cable, width: CARD_NODE_WIDTH, height: CARD_NODE_HEIGHT },
-              'U': { labelPrefix: '用户端', icon: User, width: CARD_NODE_WIDTH, height: CARD_NODE_HEIGHT },
+              'T': { labelPrefix: '落地', icon: Globe, width: CARD_NODE_WIDTH, height: CARD_NODE_HEIGHT },
+              'U': { labelPrefix: '用户', icon: User, width: CARD_NODE_WIDTH, height: CARD_NODE_HEIGHT },
           }[nodeRole]!;
 
           if ((nodeRole === 'S' || nodeRole === 'C') && !parentMContainer) {
@@ -839,7 +840,7 @@ export function TopologyEditor() {
                     const clientNode = newNodes[clientNodeIndex];
                     const effectiveServerMasterCfg = getEffectiveServerMasterConfig(editedNode.data, (id) => newNodes.find(n => n.id === id), getApiConfigById);
                     const newClientAddr = calculateClientTunnelAddressForServer(editedNode.data, effectiveServerMasterCfg);
-                    if (clientNode.data.tunnelAddress !== newClientAddr) {
+                     if (clientNode.data.tunnelAddress !== newClientAddr) {
                          newNodes[clientNodeIndex] = { ...clientNode, data: { ...clientNode.data, tunnelAddress: newClientAddr }};
                          toast({ title: `入口(c) ${clientNode.data.label} 的隧道地址已更新。` });
                     }
@@ -928,8 +929,7 @@ export function TopologyEditor() {
     setNodesInternal([]);
     setEdgesInternal([]);
     setSelectedNode(null);
-    setNodeIdCounter(0);
-    let currentIdCounter = 0;
+    let currentIdCounter = nodeIdCounter; // Use existing counter
 
     toast({ title: `正在加载主控 ${masterConfig.name} 的实例...`});
 
@@ -939,14 +939,19 @@ export function TopologyEditor() {
       const newRenderedNodes: Node[] = [];
       const newRenderedEdges: Edge[] = [];
 
+      // M Node
       const mNodeId = `master-${masterConfig.id.substring(0,8)}-${++currentIdCounter}`;
-      const mNodeWidth = Math.max(300, fetchedInstances.length * (CARD_NODE_WIDTH / 2 + 20));
-      const mNodeHeight = 200;
+      const instanceNodesPerRow = 4;
+      const mNodeMinWidth = 300;
+      const mNodeMinHeight = 200;
+      const mNodeWidth = Math.max(mNodeMinWidth, Math.min(fetchedInstances.length, instanceNodesPerRow) * (CARD_NODE_WIDTH + 20) + 40);
+      const mNodeHeight = Math.max(mNodeMinHeight, Math.ceil(fetchedInstances.length / instanceNodesPerRow) * (CARD_NODE_HEIGHT + 20) + 40);
+      const mNodePosition = { x: 250, y: 150 }; // Initial position, might be adjusted by fitView
 
-      newRenderedNodes.push({
+      const mNode: Node = {
         id: mNodeId,
         type: 'masterNode',
-        position: { x: 100, y: 100 },
+        position: mNodePosition,
         data: {
           label: `主控: ${masterConfig.name}`,
           role: 'M',
@@ -962,9 +967,12 @@ export function TopologyEditor() {
         style: { ...nodeStyles.m.base, width: mNodeWidth, height: mNodeHeight },
         width: mNodeWidth,
         height: mNodeHeight,
-      });
+      };
+      newRenderedNodes.push(mNode);
 
       const instanceNodesMap = new Map<string, Node>();
+      const clientNodes: Node[] = [];
+      const serverNodes: Node[] = [];
 
       fetchedInstances.forEach((instance, index) => {
         if (instance.id === '********') return;
@@ -977,7 +985,7 @@ export function TopologyEditor() {
         const instanceNode: Node = {
           id: instanceNodeId,
           type: 'cardNode',
-          position: { x: 50 + (index % 4) * (CARD_NODE_WIDTH + 20) , y: 50 + Math.floor(index / 4) * (CARD_NODE_HEIGHT + 20) },
+          position: { x: 20 + (index % instanceNodesPerRow) * (CARD_NODE_WIDTH + 15) , y: 20 + Math.floor(index / instanceNodesPerRow) * (CARD_NODE_HEIGHT + 15) },
           parentNode: mNodeId,
           extent: 'parent',
           data: {
@@ -993,53 +1001,126 @@ export function TopologyEditor() {
             keyPath: parsedUrl.keyPath || undefined,
             originalInstanceId: instance.id,
             originalInstanceUrl: instance.url,
-            isSingleEndedForwardC: nodeRole === 'C' ? (parsedUrl.tunnelAddress && isWildcardHostname(extractHostname(parsedUrl.tunnelAddress))) : false,
+            isSingleEndedForwardC: nodeRole === 'C' ? (parsedUrl.tunnelAddress && isWildcardHostname(extractHostname(parsedUrl.tunnelAddress || ""))) : false,
           },
           width: CARD_NODE_WIDTH,
           height: CARD_NODE_HEIGHT,
         };
         newRenderedNodes.push(instanceNode);
         instanceNodesMap.set(instance.id, instanceNode);
+        if (nodeRole === 'C') clientNodes.push(instanceNode);
+        if (nodeRole === 'S') serverNodes.push(instanceNode);
       });
 
-      newRenderedNodes.forEach(node => {
-        if (node.data.role === 'C' && node.data.originalInstanceUrl) {
-          const clientParsedUrl = parseNodePassUrl(node.data.originalInstanceUrl);
-          if (clientParsedUrl.tunnelAddress) {
-            newRenderedNodes.forEach(potentialServerNode => {
-              if (potentialServerNode.data.role === 'S' && potentialServerNode.data.originalInstanceUrl) {
-                const serverParsedUrl = parseNodePassUrl(potentialServerNode.data.originalInstanceUrl);
-                let serverEffectiveListenAddress = serverParsedUrl.tunnelAddress;
-                const serverListenHost = extractHostname(serverParsedUrl.tunnelAddress || "");
-                if (serverListenHost && isWildcardHostname(serverListenHost)) {
-                    const masterApiHost = extractHostname(masterConfig.apiUrl);
-                    const serverPort = extractPort(serverParsedUrl.tunnelAddress || "");
-                    if (masterApiHost && serverPort) {
-                        serverEffectiveListenAddress = `${formatHostForUrl(masterApiHost)}:${serverPort}`;
-                    }
+      // Infer C-S connections
+      clientNodes.forEach(cNode => {
+        if (cNode.data.isSingleEndedForwardC) return; // Single-ended clients don't connect to S nodes in this way
+        const clientParsedUrl = parseNodePassUrl(cNode.data.originalInstanceUrl!);
+        if (clientParsedUrl.tunnelAddress) {
+          serverNodes.forEach(sNode => {
+            const serverParsedUrl = parseNodePassUrl(sNode.data.originalInstanceUrl!);
+            let serverEffectiveListenAddress = serverParsedUrl.tunnelAddress;
+            const serverListenHost = extractHostname(serverParsedUrl.tunnelAddress || "");
+
+            if (serverListenHost && isWildcardHostname(serverListenHost)) {
+                const masterApiHost = extractHostname(masterConfig.apiUrl);
+                const serverPort = extractPort(serverParsedUrl.tunnelAddress || "");
+                if (masterApiHost && serverPort) {
+                    serverEffectiveListenAddress = `${formatHostForUrl(masterApiHost)}:${serverPort}`;
                 }
-                if (serverEffectiveListenAddress && clientParsedUrl.tunnelAddress.toLowerCase() === serverEffectiveListenAddress.toLowerCase()) {
-                  newRenderedEdges.push({
-                    id: `edge-${node.id}-${potentialServerNode.id}`,
-                    source: node.id,
-                    target: potentialServerNode.id,
-                    type: 'step',
-                    markerEnd: { type: MarkerType.ArrowClosed },
-                    animated: true,
-                  });
-                }
-              }
-            });
-          }
+            }
+            if (serverEffectiveListenAddress && clientParsedUrl.tunnelAddress.toLowerCase() === serverEffectiveListenAddress.toLowerCase()) {
+              newRenderedEdges.push({
+                id: `edge-${cNode.id}-${sNode.id}`,
+                source: cNode.id,
+                target: sNode.id,
+                type: 'step',
+                markerEnd: { type: MarkerType.ArrowClosed },
+                animated: true,
+              });
+            }
+          });
         }
       });
+
+      // Add U and T nodes
+      const landingNodesMap = new Map<string, Node>(); // To avoid duplicate T nodes for the same target
+      const userNodeVerticalOffset = 50;
+      const landingNodeVerticalOffset = 50;
+      let userNodeIndex = 0;
+      let landingNodeIndex = 0;
+
+      clientNodes.forEach(cNode => {
+        const uId = `u-for-${cNode.id}-${++currentIdCounter}`;
+        const userNode: Node = {
+          id: uId, type: 'cardNode',
+          position: { x: mNodePosition.x - CARD_NODE_WIDTH - 80, y: mNodePosition.y + userNodeIndex * (CARD_NODE_HEIGHT + 20) },
+          data: { label: '用户', role: 'U', icon: User },
+          width: CARD_NODE_WIDTH, height: CARD_NODE_HEIGHT,
+        };
+        newRenderedNodes.push(userNode);
+        newRenderedEdges.push({
+          id: `edge-${uId}-${cNode.id}`, source: uId, target: cNode.id, type: 'smoothstep',
+          markerEnd: { type: MarkerType.ArrowClosed }, animated: true, style: { strokeDasharray: '5 5' },
+        });
+        userNodeIndex++;
+
+        if (cNode.data.isSingleEndedForwardC && cNode.data.targetAddress) {
+          const targetAddrKey = cNode.data.targetAddress;
+          let tNode: Node;
+          if (landingNodesMap.has(targetAddrKey)) {
+            tNode = landingNodesMap.get(targetAddrKey)!;
+          } else {
+            const tId = `t-to-${targetAddrKey.replace(/[^a-zA-Z0-9]/g, '')}-${++currentIdCounter}`;
+            tNode = {
+              id: tId, type: 'cardNode',
+              position: { x: mNodePosition.x + mNodeWidth + 80, y: mNodePosition.y + landingNodeIndex * (CARD_NODE_HEIGHT + 20) },
+              data: { label: `落地: ${targetAddrKey.substring(0,15)}...`, role: 'T', icon: Globe, targetAddress: targetAddrKey },
+              width: CARD_NODE_WIDTH, height: CARD_NODE_HEIGHT,
+            };
+            newRenderedNodes.push(tNode);
+            landingNodesMap.set(targetAddrKey, tNode);
+            landingNodeIndex++;
+          }
+          newRenderedEdges.push({
+            id: `edge-${cNode.id}-${tNode.id}`, source: cNode.id, target: tNode.id, type: 'smoothstep',
+            markerEnd: { type: MarkerType.ArrowClosed }, animated: true, style: { strokeDasharray: '5 5' },
+          });
+        }
+      });
+
+      serverNodes.forEach(sNode => {
+        if (sNode.data.targetAddress) {
+          const targetAddrKey = sNode.data.targetAddress;
+          let tNode: Node;
+          if (landingNodesMap.has(targetAddrKey)) {
+            tNode = landingNodesMap.get(targetAddrKey)!;
+          } else {
+            const tId = `t-to-${targetAddrKey.replace(/[^a-zA-Z0-9]/g, '')}-${++currentIdCounter}`;
+             tNode = {
+              id: tId, type: 'cardNode',
+              position: { x: mNodePosition.x + mNodeWidth + 80, y: mNodePosition.y + landingNodeIndex * (CARD_NODE_HEIGHT + 20) },
+              data: { label: `落地: ${targetAddrKey.substring(0,15)}...`, role: 'T', icon: Globe, targetAddress: targetAddrKey },
+              width: CARD_NODE_WIDTH, height: CARD_NODE_HEIGHT,
+            };
+            newRenderedNodes.push(tNode);
+            landingNodesMap.set(targetAddrKey, tNode);
+            landingNodeIndex++;
+          }
+          newRenderedEdges.push({
+            id: `edge-${sNode.id}-${tNode.id}`, source: sNode.id, target: tNode.id, type: 'smoothstep',
+            markerEnd: { type: MarkerType.ArrowClosed }, animated: true, style: { strokeDasharray: '5 5' },
+          });
+        }
+      });
+
 
       setNodesInternal(newRenderedNodes);
       setEdgesInternal(newRenderedEdges);
       setNodeIdCounter(currentIdCounter);
 
       setTimeout(() => {
-        fitView({ duration: 400, padding: 0.1 });
+        fitView({ duration: 400, padding: 0.2 });
       }, 100);
 
       toast({ title: `主控 ${masterConfig.name} 的实例已渲染。`, description: `共 ${fetchedInstances.filter(i => i.id !== '********').length} 个实例。`});
@@ -1146,4 +1227,3 @@ export function TopologyEditor() {
     </div>
   );
 }
-
