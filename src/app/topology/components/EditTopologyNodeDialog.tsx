@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import type { Node, CustomNodeData, MasterSubRole } from '../page';
+import type { Node, CustomNodeData, MasterSubRole } from '../topologyTypes';
 import { extractHostname, extractPort, formatHostForDisplay } from '@/lib/url-utils';
 import { MASTER_TLS_MODE_DISPLAY_MAP } from '@/components/nodepass/create-instance-dialog/constants';
 import { useApiConfig, type NamedApiConfig } from '@/hooks/use-api-key';
@@ -59,7 +59,9 @@ const clientSchema = baseSchema.extend({
 });
 
 const landingSchema = baseSchema.extend({
-  targetAddressT: z.string().min(1, "流量转发地址不能为空。").regex(hostPortRegex, hostPortErrorMsg),
+  // targetAddressT is still in the schema for data consistency if set via sync,
+  // but the form field will be hidden for direct editing.
+  targetAddressT: z.string().min(1, "流量转发地址不能为空。").regex(hostPortRegex, hostPortErrorMsg).optional(),
 });
 
 type FormValues = z.infer<typeof masterSchema> | z.infer<typeof serverSchema> | z.infer<typeof clientSchema> | z.infer<typeof landingSchema>;
@@ -115,7 +117,8 @@ export function EditTopologyNodeDialog({ open, onOpenChange, node, onSave }: Edi
       } else if (role === 'T') {
         defaultVals = {
           ...defaultVals,
-          targetAddressT: data.targetAddress || "", // Use targetAddress from node data for T
+          // targetAddressT will be pre-filled if it exists, but the field won't be editable.
+          targetAddressT: data.targetAddress || "", 
         };
       }
       form.reset(defaultVals);
@@ -163,10 +166,19 @@ export function EditTopologyNodeDialog({ open, onOpenChange, node, onSave }: Edi
         logLevel: values.logLevelC,
       };
     } else if (role === 'T' && 'targetAddressT' in values) {
-      updatedData = {
-        ...updatedData,
-        targetAddress: values.targetAddressT, // Map form field to CustomNodeData field
-      };
+      // For T-nodes, we only update the label if targetAddressT was not editable.
+      // If it was somehow editable (though it shouldn't be), its value would be in `values`.
+      // Since we are hiding the field, we should ensure we don't unintentionally clear it.
+      // We'll only pass what's in `values` (label) and rely on sync for targetAddress.
+      // If targetAddressT is still in values due to schema, ensure it's not used if field was hidden.
+      // The existing node.data.targetAddress should be preserved unless changed by sync.
+      // This means `updatedData` will primarily just be the label for T-nodes from this form.
+      // If `targetAddressT` was *somehow* part of `values` and we want to ignore it:
+      // delete (values as any).targetAddressT;
+      // However, the most straightforward is just to ensure the `onSave` only gets `label`.
+      // The `targetAddress` for 'T' node is expected to be set by synchronization.
+      // We do NOT update targetAddress from this dialog for 'T' nodes.
+      updatedData = { label: values.label };
     }
     onSave(node.id, updatedData);
     onOpenChange(false);
@@ -279,8 +291,12 @@ export function EditTopologyNodeDialog({ open, onOpenChange, node, onSave }: Edi
 
             {role === 'T' && (
               <>
-                <FormField control={form.control} name="targetAddressT" render={({ field }) => (
-                  <FormItem><FormLabel className="font-sans">流量转发地址</FormLabel><FormControl><Input {...field} placeholder="例: 192.168.1.100:80" className="font-mono" /></FormControl><FormMessage /></FormItem>)} />
+                {/* The targetAddressT field is intentionally not rendered for 'T' nodes */}
+                {/* <FormField control={form.control} name="targetAddressT" render={({ field }) => (
+                  <FormItem><FormLabel className="font-sans">流量转发地址</FormLabel><FormControl><Input {...field} placeholder="例: 192.168.1.100:80" className="font-mono" /></FormControl><FormMessage /></FormItem>)} /> */}
+                 <FormDescription className="font-sans text-xs">
+                    落地端节点的“流量转发地址”通过连接的上游节点 (如 出口(s) 或 入口(c)) 自动同步，此处不可直接编辑。
+                </FormDescription>
               </>
             )}
             <DialogFooter className="pt-4">
