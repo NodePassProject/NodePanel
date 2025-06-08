@@ -46,6 +46,9 @@ const MAX_ZOOM = 1.0;
 const zoomStep = (MAX_ZOOM - MIN_ZOOM) / (TOTAL_ZOOM_LEVELS - 1);
 const initialZoom = MIN_ZOOM + (TARGET_ZOOM_LEVEL - 1) * zoomStep;
 
+const M_NODE_FOR_LINK_WIDTH = 200;
+const M_NODE_FOR_LINK_HEIGHT = 60; // Increased height for M nodes in U-M-T links
+
 
 export function TopologyEditor() {
   const [nodesInternal, setNodesInternal, onNodesChangeInternal] = useNodesState<Node>(initialNodes);
@@ -453,7 +456,7 @@ export function TopologyEditor() {
                     newNodeData.targetAddress = `[::]:${10001 + currentCounter + Math.floor(Math.random()*50)}`;
                     newNodeData.tlsMode = parentMContainer.data.defaultTlsMode || 'master';
                 }
-            } else {
+            } else { // Should not happen based on earlier check, but as fallback
                 newNodeData.isSingleEndedForwardC = true;
                 newNodeData.tunnelAddress = `[::]:${10002 + currentCounter + Math.floor(Math.random()*50)}`;
                 newNodeData.targetAddress = `some.external.service:${8000 + currentCounter}`;
@@ -785,8 +788,8 @@ export function TopologyEditor() {
     const nodeIndex = newNodes.findIndex(n => n.id === nodeId);
     if (nodeIndex === -1) return;
 
-    const originalNodeDataFromState = nodesInternal.find(n => n.id === nodeId)?.data;
-    if (!originalNodeDataFromState) return;
+    const originalNodeDataFromState = newNodes[nodeIndex].data; // Get it before potential modification
+    // const originalNodeDataFromState = nodesInternal.find(n => n.id === nodeId)?.data; // This would be pre-modification too.
 
     const mergedData = { ...originalNodeDataFromState, ...updatedDataFromDialog };
     newNodes[nodeIndex] = { ...newNodes[nodeIndex], data: mergedData };
@@ -806,13 +809,16 @@ export function TopologyEditor() {
                             ...newNodes[targetTNodeIndex],
                             data: { ...newNodes[targetTNodeIndex].data, targetAddress: editedNode.data.targetAddress }
                         };
-                        toast({ title: `落地 ${newNodes[targetTNodeIndex].data.label} 已同步目标地址。`});
+                         if(originalNodeDataFromState.targetAddress !== editedNode.data.targetAddress){
+                            toast({ title: `落地 ${newNodes[targetTNodeIndex].data.label} 已同步目标地址。`});
+                         }
                     }
                 }
             }
         });
     } else if (editedNode.data.role === 'T') {
-        const originalTNodeData = nodesInternal.find(n => n.id === editedNode.id)?.data;
+        // const originalTNodeData = nodesInternal.find(n => n.id === editedNode.id)?.data; // This is original before this whole save.
+        const originalTNodeData = originalNodeDataFromState; // If editedNode is T, this is its original data
         edgesInternal.forEach(edge => {
             if (edge.target === editedNode.id) {
                 const sourceNodeIndex = newNodes.findIndex(n => n.id === edge.source && (n.data.role === 'S' || (n.data.role === 'C' && !n.data.isSingleEndedForwardC) || (n.data.role === 'M' && n.data.masterSubRole === 'client-role')));
@@ -823,7 +829,7 @@ export function TopologyEditor() {
                             ...newNodes[sourceNodeIndex],
                             data: { ...newNodes[sourceNodeIndex].data, targetAddress: editedNode.data.targetAddress }
                         };
-                         if (originalTNodeData?.targetAddress !== editedNode.data.targetAddress) { // Toast only if T node's address actually changed
+                         if (originalTNodeData?.targetAddress !== editedNode.data.targetAddress) { 
                            toast({ title: `${newNodes[sourceNodeIndex].data.label} 已同步落地目标地址。`});
                          }
                     }
@@ -834,7 +840,7 @@ export function TopologyEditor() {
 
     if (editedNode.data.role === 'S') {
         edgesInternal.forEach(edge => {
-            if (edge.target === editedNode.id) {
+            if (edge.target === editedNode.id) { // If an edge points TO this S node (it's a target)
                 const clientNodeIndex = newNodes.findIndex(n => n.id === edge.source && n.data.role === 'C' && !n.data.isSingleEndedForwardC);
                 if (clientNodeIndex !== -1) {
                     const clientNode = newNodes[clientNodeIndex];
@@ -842,7 +848,9 @@ export function TopologyEditor() {
                     const newClientAddr = calculateClientTunnelAddressForServer(editedNode.data, effectiveServerMasterCfg);
                      if (clientNode.data.tunnelAddress !== newClientAddr) {
                          newNodes[clientNodeIndex] = { ...clientNode, data: { ...clientNode.data, tunnelAddress: newClientAddr }};
-                         toast({ title: `入口(c) ${clientNode.data.label} 的隧道地址已更新。` });
+                         if (originalNodeDataFromState.tunnelAddress !== editedNode.data.tunnelAddress) {
+                             toast({ title: `入口(c) ${clientNode.data.label} 的隧道地址已更新。` });
+                         }
                     }
                 }
             }
@@ -929,172 +937,171 @@ export function TopologyEditor() {
     setNodesInternal([]);
     setEdgesInternal([]);
     setSelectedNode(null);
-    let currentIdCounter = nodeIdCounter; // Use existing counter
+    let currentIdCounter = 0; // Reset counter for fresh rendering
+    setNodeIdCounter(0); // Reset global counter as well
 
     toast({ title: `正在加载主控 ${masterConfig.name} 的实例...`});
 
     try {
       const fetchedInstances: ApiInstanceType[] = await nodePassApi.getInstances(apiR, apiT);
+      const validInstances = fetchedInstances.filter(inst => inst.id !== '********');
 
       const newRenderedNodes: Node[] = [];
       const newRenderedEdges: Edge[] = [];
+      const clientInstances = validInstances.filter(inst => inst.type === 'client');
+      const serverInstances = validInstances.filter(inst => inst.type === 'server');
+      const pairedServerInstanceIds = new Set<string>();
+      let linkIndex = 0;
 
-      // M Node
-      const mNodeId = `master-${masterConfig.id.substring(0,8)}-${++currentIdCounter}`;
-      const instanceNodesPerRow = 4;
-      const mNodeMinWidth = 300;
-      const mNodeMinHeight = 200;
-      const mNodeWidth = Math.max(mNodeMinWidth, Math.min(fetchedInstances.length, instanceNodesPerRow) * (CARD_NODE_WIDTH + 20) + 40);
-      const mNodeHeight = Math.max(mNodeMinHeight, Math.ceil(fetchedInstances.length / instanceNodesPerRow) * (CARD_NODE_HEIGHT + 20) + 40);
-      const mNodePosition = { x: 250 + CARD_NODE_WIDTH + 80, y: 150 }; // Shift M to make space for U
+      // Process client instances first to form links
+      for (const clientInst of clientInstances) {
+        const parsedClientUrl = parseNodePassUrl(clientInst.url);
+        const uNodeId = `u-${clientInst.id.substring(0,5)}-${++currentIdCounter}`;
+        const mNodeId = `m-${clientInst.id.substring(0,5)}-${++currentIdCounter}`;
+        const tNodeId = `t-${clientInst.id.substring(0,5)}-${++currentIdCounter}`;
+        const yPos = 100 + linkIndex * (M_NODE_FOR_LINK_HEIGHT + 60); // M node height + vertical gap
 
-      const mNode: Node = {
-        id: mNodeId,
-        type: 'masterNode',
-        position: mNodePosition,
-        data: {
-          label: `主控: ${masterConfig.name}`,
-          role: 'M',
-          icon: Cog,
-          isContainer: true,
-          masterId: masterConfig.id,
-          masterName: masterConfig.name,
-          apiUrl: masterConfig.apiUrl,
-          defaultLogLevel: masterConfig.masterDefaultLogLevel,
-          defaultTlsMode: masterConfig.masterDefaultTlsMode,
-          masterSubRole: "server-role",
-        },
-        style: { ...nodeStyles.m.base, width: mNodeWidth, height: mNodeHeight },
-        width: mNodeWidth,
-        height: mNodeHeight,
-      };
-      newRenderedNodes.push(mNode);
-
-      const clientNodes: Node[] = [];
-      const serverNodes: Node[] = [];
-
-      fetchedInstances.forEach((instance, index) => {
-        if (instance.id === '********') return;
-
-        const parsedUrl = parseNodePassUrl(instance.url);
-        const nodeRole = instance.type === 'server' ? 'S' : 'C';
-        const nodeIcon = instance.type === 'server' ? Server : DatabaseZap;
-        const instanceNodeId = `${nodeRole.toLowerCase()}-${instance.id.substring(0,8)}-${++currentIdCounter}`;
-
-        const instanceNode: Node = {
-          id: instanceNodeId,
-          type: 'cardNode',
-          position: { x: 20 + (index % instanceNodesPerRow) * (CARD_NODE_WIDTH + 15) , y: 20 + Math.floor(index / instanceNodesPerRow) * (CARD_NODE_HEIGHT + 15) },
-          parentNode: mNodeId,
-          extent: 'parent',
-          data: {
-            label: `${nodeRole === 'S' ? '出口(s)' : '入口(c)'}: ${instance.id.substring(0,5)}...`,
-            role: nodeRole,
-            icon: nodeIcon,
-            parentNode: mNodeId,
-            tunnelAddress: parsedUrl.tunnelAddress || undefined,
-            targetAddress: parsedUrl.targetAddress || undefined,
-            logLevel: parsedUrl.logLevel || masterConfig.masterDefaultLogLevel || 'master',
-            tlsMode: parsedUrl.tlsMode || masterConfig.masterDefaultTlsMode || (nodeRole === 'S' ? 'master' : '0'),
-            certPath: parsedUrl.certPath || undefined,
-            keyPath: parsedUrl.keyPath || undefined,
-            originalInstanceId: instance.id,
-            originalInstanceUrl: instance.url,
-            isSingleEndedForwardC: nodeRole === 'C' ? (parsedUrl.tunnelAddress && isWildcardHostname(extractHostname(parsedUrl.tunnelAddress || ""))) : false,
-          },
-          width: CARD_NODE_WIDTH,
-          height: CARD_NODE_HEIGHT,
-        };
-        newRenderedNodes.push(instanceNode);
-        if (nodeRole === 'C') clientNodes.push(instanceNode);
-        if (nodeRole === 'S') serverNodes.push(instanceNode);
-      });
-
-      // Infer C-S connections within the master
-      clientNodes.forEach(cNode => {
-        if (cNode.data.isSingleEndedForwardC) return;
-        const clientParsedUrl = parseNodePassUrl(cNode.data.originalInstanceUrl!);
-        if (clientParsedUrl.tunnelAddress) {
-          serverNodes.forEach(sNode => {
-            const serverParsedUrl = parseNodePassUrl(sNode.data.originalInstanceUrl!);
-            let serverEffectiveListenAddress = serverParsedUrl.tunnelAddress;
-            const serverListenHost = extractHostname(serverParsedUrl.tunnelAddress || "");
-
-            if (serverListenHost && isWildcardHostname(serverListenHost)) {
-                const masterApiHost = extractHostname(masterConfig.apiUrl);
-                const serverPort = extractPort(serverParsedUrl.tunnelAddress || "");
-                if (masterApiHost && serverPort) {
-                    serverEffectiveListenAddress = `${formatHostForUrl(masterApiHost)}:${serverPort}`;
-                }
-            }
-            if (serverEffectiveListenAddress && clientParsedUrl.tunnelAddress.toLowerCase() === serverEffectiveListenAddress.toLowerCase()) {
-              newRenderedEdges.push({
-                id: `edge-${cNode.id}-${sNode.id}`,
-                source: cNode.id,
-                target: sNode.id,
-                type: 'step',
-                markerEnd: { type: MarkerType.ArrowClosed },
-                animated: true,
-              });
-            }
-          });
-        }
-      });
-      
-      // Add U Node if there are any clients
-      if (clientNodes.length > 0) {
-        const uId = `u-for-master-${mNodeId}-${++currentIdCounter}`;
-        const uNode: Node = {
-          id: uId, type: 'cardNode',
-          position: { x: mNodePosition.x - CARD_NODE_WIDTH - 80, y: mNodePosition.y + (mNodeHeight / 2) - (CARD_NODE_HEIGHT / 2) },
+        const uNodePosition = { x: 50, y: yPos + (M_NODE_FOR_LINK_HEIGHT - CARD_NODE_HEIGHT) / 2 };
+        const mNodePosition = { x: 50 + CARD_NODE_WIDTH + 60, y: yPos };
+        const tNodePositionBaseX = 50 + CARD_NODE_WIDTH + 60 + M_NODE_FOR_LINK_WIDTH + 60;
+        
+        newRenderedNodes.push({
+          id: uNodeId, type: 'cardNode', position: uNodePosition,
           data: { label: '用户', role: 'U', icon: User },
           width: CARD_NODE_WIDTH, height: CARD_NODE_HEIGHT,
-        };
-        newRenderedNodes.push(uNode);
-        newRenderedEdges.push({
-          id: `edge-${uId}-${mNodeId}`, source: uId, target: mNodeId, type: 'smoothstep', targetHandle: 'm-left',
-          markerEnd: { type: MarkerType.ArrowClosed }, animated: true, style: { strokeDasharray: '5 5' },
         });
+
+        const isSingleEnded = parsedClientUrl.tunnelAddress && isWildcardHostname(extractHostname(parsedClientUrl.tunnelAddress));
+
+        if (isSingleEnded) {
+          newRenderedNodes.push({
+            id: mNodeId, type: 'masterNode', position: mNodePosition,
+            data: {
+              label: `主控: ${masterConfig.name} (入口: ${clientInst.id.substring(0,5)}...)`, role: 'M',
+              masterId: masterConfig.id, masterName: masterConfig.name, apiUrl: masterConfig.apiUrl,
+              masterSubRole: 'single-client-link', isContainer: false,
+              originalInstanceId: clientInst.id, originalInstanceUrl: clientInst.url,
+            },
+            style: { ...nodeStyles.m.base, width: M_NODE_FOR_LINK_WIDTH, height: M_NODE_FOR_LINK_HEIGHT },
+            width: M_NODE_FOR_LINK_WIDTH, height: M_NODE_FOR_LINK_HEIGHT,
+          });
+          newRenderedNodes.push({
+            id: tNodeId, type: 'cardNode', position: { x: tNodePositionBaseX, y: yPos + (M_NODE_FOR_LINK_HEIGHT - CARD_NODE_HEIGHT) / 2 },
+            data: { label: `落地: ${parsedClientUrl.targetAddress?.substring(0,15) || 'N/A'}...`, role: 'T', icon: Globe, targetAddress: parsedClientUrl.targetAddress || "" },
+            width: CARD_NODE_WIDTH, height: CARD_NODE_HEIGHT,
+          });
+          newRenderedEdges.push({ id: `e-${uNodeId}-${mNodeId}`, source: uNodeId, target: mNodeId, type: 'smoothstep', targetHandle: 'm-left', markerEnd: { type: MarkerType.ArrowClosed } });
+          newRenderedEdges.push({ id: `e-${mNodeId}-${tNodeId}`, source: mNodeId, target: tNodeId, type: 'smoothstep', sourceHandle: 'm-right', markerEnd: { type: MarkerType.ArrowClosed } });
+          linkIndex++;
+        } else {
+          const serverMatch = serverInstances.find(sInst => {
+            const parsedServerUrl = parseNodePassUrl(sInst.url);
+            if (!parsedServerUrl.tunnelAddress) return false;
+            let serverEffectiveListenAddress = parsedServerUrl.tunnelAddress;
+            const serverListenHost = extractHostname(parsedServerUrl.tunnelAddress);
+            if (serverListenHost && isWildcardHostname(serverListenHost)) {
+                const masterApiHost = extractHostname(masterConfig.apiUrl);
+                const serverPort = extractPort(parsedServerUrl.tunnelAddress);
+                if (masterApiHost && serverPort) serverEffectiveListenAddress = `${formatHostForUrl(masterApiHost)}:${serverPort}`;
+            }
+            return parsedClientUrl.tunnelAddress?.toLowerCase() === serverEffectiveListenAddress?.toLowerCase();
+          });
+
+          if (serverMatch) {
+            pairedServerInstanceIds.add(serverMatch.id);
+            newRenderedNodes.push({
+              id: mNodeId, type: 'masterNode', position: mNodePosition,
+              data: {
+                label: `主控: ${masterConfig.name} (隧道 C-${clientInst.id.substring(0,3)} <> S-${serverMatch.id.substring(0,3)})`, role: 'M',
+                masterId: masterConfig.id, masterName: masterConfig.name, apiUrl: masterConfig.apiUrl,
+                masterSubRole: 'intra-master-tunnel', isContainer: false,
+                originalInstanceId: `${clientInst.id},${serverMatch.id}`, originalInstanceUrl: `${clientInst.url} | ${serverMatch.url}`,
+              },
+              style: { ...nodeStyles.m.base, width: M_NODE_FOR_LINK_WIDTH, height: M_NODE_FOR_LINK_HEIGHT },
+              width: M_NODE_FOR_LINK_WIDTH, height: M_NODE_FOR_LINK_HEIGHT,
+            });
+            const serverTargetAddress = parseNodePassUrl(serverMatch.url).targetAddress;
+            newRenderedNodes.push({
+              id: tNodeId, type: 'cardNode', position: { x: tNodePositionBaseX, y: yPos + (M_NODE_FOR_LINK_HEIGHT - CARD_NODE_HEIGHT) / 2 },
+              data: { label: `落地: ${serverTargetAddress?.substring(0,15) || 'N/A'}...`, role: 'T', icon: Globe, targetAddress: serverTargetAddress || "" },
+              width: CARD_NODE_WIDTH, height: CARD_NODE_HEIGHT,
+            });
+            newRenderedEdges.push({ id: `e-${uNodeId}-${mNodeId}`, source: uNodeId, target: mNodeId, type: 'smoothstep', targetHandle: 'm-left', markerEnd: { type: MarkerType.ArrowClosed } });
+            newRenderedEdges.push({ id: `e-${mNodeId}-${tNodeId}`, source: mNodeId, target: tNodeId, type: 'smoothstep', sourceHandle: 'm-right', markerEnd: { type: MarkerType.ArrowClosed } });
+            linkIndex++;
+          } else { // Client connects to an external server
+             newRenderedNodes.push({
+              id: mNodeId, type: 'masterNode', position: mNodePosition,
+              data: {
+                label: `主控: ${masterConfig.name} (出口连接 C-${clientInst.id.substring(0,3)}...)`, role: 'M',
+                masterId: masterConfig.id, masterName: masterConfig.name, apiUrl: masterConfig.apiUrl,
+                masterSubRole: 'external-client-link', isContainer: false,
+                originalInstanceId: clientInst.id, originalInstanceUrl: clientInst.url,
+              },
+              style: { ...nodeStyles.m.base, width: M_NODE_FOR_LINK_WIDTH, height: M_NODE_FOR_LINK_HEIGHT },
+              width: M_NODE_FOR_LINK_WIDTH, height: M_NODE_FOR_LINK_HEIGHT,
+            });
+            newRenderedNodes.push({
+              id: tNodeId, type: 'cardNode', position: { x: tNodePositionBaseX, y: yPos + (M_NODE_FOR_LINK_HEIGHT - CARD_NODE_HEIGHT) / 2 },
+              data: { label: `远程出口(s): ${parsedClientUrl.tunnelAddress?.substring(0,15) || 'N/A'}...`, role: 'T', icon: Globe, targetAddress: parsedClientUrl.tunnelAddress || "" },
+              width: CARD_NODE_WIDTH, height: CARD_NODE_HEIGHT,
+            });
+            newRenderedEdges.push({ id: `e-${uNodeId}-${mNodeId}`, source: uNodeId, target: mNodeId, type: 'smoothstep', targetHandle: 'm-left', markerEnd: { type: MarkerType.ArrowClosed } });
+            newRenderedEdges.push({ id: `e-${mNodeId}-${tNodeId}`, source: mNodeId, target: tNodeId, type: 'smoothstep', sourceHandle: 'm-right', markerEnd: { type: MarkerType.ArrowClosed } });
+            linkIndex++;
+          }
+        }
       }
 
-      // Add T Nodes for unique target addresses from S and single-ended C
-      const uniqueTargetAddresses = new Set<string>();
-      serverNodes.forEach(sNode => {
-        if (sNode.data.targetAddress) uniqueTargetAddresses.add(sNode.data.targetAddress);
-      });
-      clientNodes.forEach(cNode => {
-        if (cNode.data.isSingleEndedForwardC && cNode.data.targetAddress) {
-          uniqueTargetAddresses.add(cNode.data.targetAddress);
-        }
-      });
+      // Process standalone server instances
+      for (const serverInst of serverInstances) {
+        if (pairedServerInstanceIds.has(serverInst.id)) continue;
 
-      let landingNodeIndex = 0;
-      uniqueTargetAddresses.forEach(targetAddr => {
-        const tId = `t-to-${targetAddr.replace(/[^a-zA-Z0-9]/g, '')}-${++currentIdCounter}`;
-        const tNode: Node = {
-          id: tId, type: 'cardNode',
-          position: { x: mNodePosition.x + mNodeWidth + 80, y: mNodePosition.y + landingNodeIndex * (CARD_NODE_HEIGHT + 20) },
-          data: { label: `落地: ${targetAddr.substring(0,15)}...`, role: 'T', icon: Globe, targetAddress: targetAddr },
+        const uNodeId = `u-${serverInst.id.substring(0,5)}-${++currentIdCounter}`;
+        const mNodeId = `m-${serverInst.id.substring(0,5)}-${++currentIdCounter}`;
+        const tNodeId = `t-${serverInst.id.substring(0,5)}-${++currentIdCounter}`;
+        const yPos = 100 + linkIndex * (M_NODE_FOR_LINK_HEIGHT + 60);
+        
+        const uNodePosition = { x: 50, y: yPos + (M_NODE_FOR_LINK_HEIGHT - CARD_NODE_HEIGHT) / 2 };
+        const mNodePosition = { x: 50 + CARD_NODE_WIDTH + 60, y: yPos };
+        const tNodePositionBaseX = 50 + CARD_NODE_WIDTH + 60 + M_NODE_FOR_LINK_WIDTH + 60;
+
+        newRenderedNodes.push({
+          id: uNodeId, type: 'cardNode', position: uNodePosition,
+          data: { label: '外部用户/服务', role: 'U', icon: User },
           width: CARD_NODE_WIDTH, height: CARD_NODE_HEIGHT,
-        };
-        newRenderedNodes.push(tNode);
-        newRenderedEdges.push({
-          id: `edge-${mNodeId}-${tId}`, source: mNodeId, target: tId, type: 'smoothstep', sourceHandle: 'm-right',
-          markerEnd: { type: MarkerType.ArrowClosed }, animated: true, style: { strokeDasharray: '5 5' },
         });
-        landingNodeIndex++;
-      });
-
-
+        newRenderedNodes.push({
+          id: mNodeId, type: 'masterNode', position: mNodePosition,
+          data: {
+            label: `主控: ${masterConfig.name} (服务: S-${serverInst.id.substring(0,5)}...)`, role: 'M',
+            masterId: masterConfig.id, masterName: masterConfig.name, apiUrl: masterConfig.apiUrl,
+            masterSubRole: 'server-service-link', isContainer: false,
+            originalInstanceId: serverInst.id, originalInstanceUrl: serverInst.url,
+          },
+          style: { ...nodeStyles.m.base, width: M_NODE_FOR_LINK_WIDTH, height: M_NODE_FOR_LINK_HEIGHT },
+          width: M_NODE_FOR_LINK_WIDTH, height: M_NODE_FOR_LINK_HEIGHT,
+        });
+        const serverTargetAddress = parseNodePassUrl(serverInst.url).targetAddress;
+        newRenderedNodes.push({
+          id: tNodeId, type: 'cardNode', position: { x: tNodePositionBaseX, y: yPos + (M_NODE_FOR_LINK_HEIGHT - CARD_NODE_HEIGHT) / 2 },
+          data: { label: `落地: ${serverTargetAddress?.substring(0,15) || 'N/A'}...`, role: 'T', icon: Globe, targetAddress: serverTargetAddress || "" },
+          width: CARD_NODE_WIDTH, height: CARD_NODE_HEIGHT,
+        });
+        newRenderedEdges.push({ id: `e-${uNodeId}-${mNodeId}`, source: uNodeId, target: mNodeId, type: 'smoothstep', targetHandle: 'm-left', markerEnd: { type: MarkerType.ArrowClosed } });
+        newRenderedEdges.push({ id: `e-${mNodeId}-${tNodeId}`, source: mNodeId, target: tNodeId, type: 'smoothstep', sourceHandle: 'm-right', markerEnd: { type: MarkerType.ArrowClosed } });
+        linkIndex++;
+      }
+      
       setNodesInternal(newRenderedNodes);
       setEdgesInternal(newRenderedEdges);
       setNodeIdCounter(currentIdCounter);
 
       setTimeout(() => {
-        fitView({ duration: 400, padding: 0.3 }); // Increased padding a bit
+        fitView({ duration: 400, padding: 0.1 }); 
       }, 100);
 
-      toast({ title: `主控 ${masterConfig.name} 的实例已渲染。`, description: `共 ${fetchedInstances.filter(i => i.id !== '********').length} 个实例。`});
+      toast({ title: `主控 ${masterConfig.name} 的实例已渲染。`, description: `共 ${validInstances.length} 个实例，形成 ${linkIndex} 条链路。`});
 
     } catch (error: any) {
       console.error(`渲染主控 ${masterConfig.name} 实例失败:`, error);
@@ -1102,7 +1109,7 @@ export function TopologyEditor() {
       setNodesInternal([]);
       setEdgesInternal([]);
     }
-  }, [getApiConfigById, getApiRootUrl, getToken, toast, setNodesInternal, setEdgesInternal, fitView, nodeIdCounter]); // Removed queryClient from deps as it's not directly used here
+  }, [getApiConfigById, getApiRootUrl, getToken, toast, setNodesInternal, setEdgesInternal, fitView, nodeIdCounter]);
 
 
   return (
@@ -1160,7 +1167,7 @@ export function TopologyEditor() {
           {contextMenu.type === 'node' && (contextMenu.data as Node).data.role !== 'U' && (contextMenu.data as Node).data.role !== 'T' && (
             <Button variant="ghost" size="sm" className="w-full justify-start px-2 py-1 h-auto text-xs font-sans" onClick={() => handleOpenEditNodeDialog(contextMenu.data as Node)}>修改属性</Button>
           )}
-          {contextMenu.type === 'node' && (contextMenu.data as Node).data.role === 'T' && ( // Allow editing label for T node
+          {contextMenu.type === 'node' && (contextMenu.data as Node).data.role === 'T' && ( 
              <Button variant="ghost" size="sm" className="w-full justify-start px-2 py-1 h-auto text-xs font-sans" onClick={() => handleOpenEditNodeDialog(contextMenu.data as Node)}>修改标签</Button>
           )}
           {(contextMenu.data as Node).type === 'node' && (contextMenu.data as Node).data.role === 'S' && (contextMenu.data as Node).data.parentNode && (

@@ -36,6 +36,10 @@ export const MasterNode: React.FC<NodeProps<CustomNodeData>> = memo(({ data }) =
   const subRoleText = data.masterSubRole === 'client-role' ? '(客户隧道)'
     : data.masterSubRole === 'server-role' ? '(服务主机)'
     : data.masterSubRole === 'primary' ? '(主要)'
+    : data.masterSubRole === 'single-client-link' ? '(单客户端链路)'
+    : data.masterSubRole === 'intra-master-tunnel' ? '(内部隧道)'
+    : data.masterSubRole === 'external-client-link' ? '(外部客户端连接)'
+    : data.masterSubRole === 'server-service-link' ? '(服务端服务)'
     : '(通用)';
   return (
     <>
