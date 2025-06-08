@@ -647,27 +647,31 @@ export function TopologyEditor() {
     
     const editedNode = newNodes[nodeIndex];
 
+    // Sync targetAddress between S/C/M(client-role) and T nodes
     if (editedNode.data.targetAddress && editedNode.data.targetAddress.trim() !== "") {
-        const isEditableSource = editedNode.data.role === 'S' || editedNode.data.role === 'C' || (editedNode.data.role === 'M' && editedNode.data.masterSubRole === 'client-role');
-        if (isEditableSource) {
+        const isForwardingSourceNode = editedNode.data.role === 'S' || editedNode.data.role === 'C' || (editedNode.data.role === 'M' && editedNode.data.masterSubRole === 'client-role');
+        
+        if (isForwardingSourceNode) { // Edited S, C, or M(client-role)
             edgesInternal.forEach(edge => {
                 if (edge.source === editedNode.id) {
                     const targetTNodeIndex = newNodes.findIndex(n => n.id === edge.target && n.data.role === 'T');
-                    if (targetTNodeIndex !== -1 && editedNode.data.targetAddress !== newNodes[targetTNodeIndex].data.targetAddress) {
-                        newNodes[targetTNodeIndex] = { ...newNodes[targetTNodeIndex], data: { ...newNodes[targetTNodeIndex].data, targetAddress: editedNode.data.targetAddress }};
-                        if (nodesInternal[targetTNodeIndex].data.targetAddress !== editedNode.data.targetAddress) {
-                             toast({ title: `落地端 ${newNodes[targetTNodeIndex].data.label} 已同步目标地址。`});
+                    if (targetTNodeIndex !== -1) {
+                        const oldTargetAddressOfT = nodesInternal.find(n => n.id === newNodes[targetTNodeIndex].id)?.data.targetAddress;
+                        if (editedNode.data.targetAddress !== oldTargetAddressOfT) {
+                            newNodes[targetTNodeIndex] = { ...newNodes[targetTNodeIndex], data: { ...newNodes[targetTNodeIndex].data, targetAddress: editedNode.data.targetAddress }};
+                            toast({ title: `落地端 ${newNodes[targetTNodeIndex].data.label} 已同步目标地址。`});
                         }
                     }
                 }
             });
-        } else if (editedNode.data.role === 'T') {
+        } else if (editedNode.data.role === 'T') { // Edited T
             edgesInternal.forEach(edge => {
                 if (edge.target === editedNode.id) {
                     const sourceNodeIndex = newNodes.findIndex(n => n.id === edge.source && (n.data.role === 'S' || n.data.role === 'C' || (n.data.role === 'M' && n.data.masterSubRole === 'client-role')));
-                    if (sourceNodeIndex !== -1 && editedNode.data.targetAddress !== newNodes[sourceNodeIndex].data.targetAddress) {
-                        newNodes[sourceNodeIndex] = { ...newNodes[sourceNodeIndex], data: { ...newNodes[sourceNodeIndex].data, targetAddress: editedNode.data.targetAddress }};
-                         if (nodesInternal[sourceNodeIndex].data.targetAddress !== editedNode.data.targetAddress) {
+                    if (sourceNodeIndex !== -1) {
+                        const oldTargetAddressOfSource = nodesInternal.find(n => n.id === newNodes[sourceNodeIndex].id)?.data.targetAddress;
+                        if (editedNode.data.targetAddress !== oldTargetAddressOfSource) {
+                            newNodes[sourceNodeIndex] = { ...newNodes[sourceNodeIndex], data: { ...newNodes[sourceNodeIndex].data, targetAddress: editedNode.data.targetAddress }};
                             toast({ title: `${newNodes[sourceNodeIndex].data.label} 已同步落地端目标地址。`});
                         }
                     }
@@ -676,6 +680,7 @@ export function TopologyEditor() {
         }
     }
     
+    // Update client tunnel address if its connected server's tunnelAddress changes
     if (editedNode.data.role === 'S') {
         edgesInternal.forEach(edge => {
             if (edge.target === editedNode.id) { 
@@ -692,11 +697,12 @@ export function TopologyEditor() {
             }
         });
     } else if (editedNode.data.role === 'M' && originalNode.data.apiUrl !== editedNode.data.apiUrl) { 
+        // If M container's API URL (which implies its hostname) changes, update tunnelAddress of C nodes connected to S nodes *within this M container*
         const mContainerNode = editedNode;
         const mContainerMasterConfig = getApiConfigById(mContainerNode.data.masterId!);
 
-        newNodes.forEach((sNode, sNodeIndex) => {
-            if (sNode.data.parentNode === mContainerNode.id && sNode.data.role === 'S' && !sNode.data.representedMasterId) {
+        newNodes.forEach((sNode, sNodeIndex) => { // Iterate through all nodes to find relevant S nodes
+            if (sNode.data.parentNode === mContainerNode.id && sNode.data.role === 'S' && !sNode.data.representedMasterId) { // S is child of THIS M, and not representing external master
                 edgesInternal.forEach(edge => {
                     if (edge.target === sNode.id) { 
                         const clientNodeIndexToUpdate = newNodes.findIndex(n => n.id === edge.source && n.data.role === 'C');
@@ -799,3 +805,4 @@ export function TopologyEditor() {
     </div>
   );
 }
+
