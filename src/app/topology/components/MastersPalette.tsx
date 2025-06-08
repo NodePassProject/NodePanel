@@ -26,30 +26,29 @@ const MasterPaletteItem: React.FC<MasterPaletteItemProps> = ({ config, onRenderM
   const { getApiRootUrl, getToken } = useApiConfig();
   const { toast } = useToast();
 
-  const { data: instances, isLoading: isLoadingInstances, error, refetch } = useQuery<Instance[], Error, { clientCount: number; serverCount: number }>({
+  const { data: instanceCounts, isLoading: isLoadingInstances, error, refetch } = useQuery<
+    { clientCount: number; serverCount: number }, // serverCount will be displayed as tunnelCount 't'
+    Error
+  >({
     queryKey: ['masterInstancesCount', config.id],
     queryFn: async () => {
       const apiRoot = getApiRootUrl(config.id);
       const token = getToken(config.id);
       if (!apiRoot || !token) {
-        // This case should ideally be handled by disabling the query or returning a specific error/empty state
-        // For now, throwing an error will mark this query as failed.
         throw new Error(`API configuration for master ${config.name} is incomplete.`);
       }
-      return nodePassApi.getInstances(apiRoot, token);
-    },
-    select: (data) => {
+      const fetchedInstances = await nodePassApi.getInstances(apiRoot, token);
       let clientCount = 0;
       let serverCount = 0;
-      data.forEach(instance => {
-        if (instance.id === '********') return; // Skip API key special instance
+      fetchedInstances.forEach(instance => {
+        if (instance.id === '********') return; 
         if (instance.type === 'client') clientCount++;
         else if (instance.type === 'server') serverCount++;
       });
       return { clientCount, serverCount };
     },
-    enabled: !!config.id, // Only run query if config.id is available
-    staleTime: 5 * 60 * 1000, // 5 minutes
+    enabled: !!config.id, 
+    staleTime: 5 * 60 * 1000,
     refetchOnWindowFocus: false,
     onError: (err) => {
         toast({
@@ -69,8 +68,8 @@ const MasterPaletteItem: React.FC<MasterPaletteItemProps> = ({ config, onRenderM
     ? <Loader2 className="h-3 w-3 animate-spin ml-1" />
     : error
     ? <RefreshCw className="h-3 w-3 ml-1 text-destructive cursor-pointer" onClick={() => refetch()} title="点击重试计数"/>
-    : instances
-    ? `(${instances.clientCount}c/${instances.serverCount}s)`
+    : instanceCounts
+    ? `(${instanceCounts.clientCount}c/${instanceCounts.serverCount}t)` // Changed 's' to 't'
     : '';
 
 
