@@ -641,43 +641,57 @@ export function TopologyEditor() {
     const nodeIndex = newNodes.findIndex(n => n.id === nodeId);
     if (nodeIndex === -1) return;
 
-    const originalNode = newNodes[nodeIndex];
-    const mergedData = { ...originalNode.data, ...updatedDataFromDialog };
-    newNodes[nodeIndex] = { ...originalNode, data: mergedData };
+    const originalNodeDataFromState = nodesInternal.find(n => n.id === nodeId)?.data; // Get original data from current state
+    if (!originalNodeDataFromState) return;
+
+    const mergedData = { ...originalNodeDataFromState, ...updatedDataFromDialog };
+    newNodes[nodeIndex] = { ...newNodes[nodeIndex], data: mergedData };
     
     const editedNode = newNodes[nodeIndex];
 
     // Sync targetAddress between S/C/M(client-role) and T nodes
-    if (editedNode.data.targetAddress && editedNode.data.targetAddress.trim() !== "") {
-        const isForwardingSourceNode = editedNode.data.role === 'S' || editedNode.data.role === 'C' || (editedNode.data.role === 'M' && editedNode.data.masterSubRole === 'client-role');
-        
-        if (isForwardingSourceNode) { // Edited S, C, or M(client-role)
-            edgesInternal.forEach(edge => {
-                if (edge.source === editedNode.id) {
-                    const targetTNodeIndex = newNodes.findIndex(n => n.id === edge.target && n.data.role === 'T');
-                    if (targetTNodeIndex !== -1) {
-                        const oldTargetAddressOfT = nodesInternal.find(n => n.id === newNodes[targetTNodeIndex].id)?.data.targetAddress;
-                        if (editedNode.data.targetAddress !== oldTargetAddressOfT) {
-                            newNodes[targetTNodeIndex] = { ...newNodes[targetTNodeIndex], data: { ...newNodes[targetTNodeIndex].data, targetAddress: editedNode.data.targetAddress }};
-                            toast({ title: `落地端 ${newNodes[targetTNodeIndex].data.label} 已同步目标地址。`});
+    const isForwardingSourceNode = editedNode.data.role === 'S' || editedNode.data.role === 'C' || (editedNode.data.role === 'M' && editedNode.data.masterSubRole === 'client-role');
+    
+    if (isForwardingSourceNode) {
+        edgesInternal.forEach(edge => {
+            if (edge.source === editedNode.id) {
+                const targetTNodeIndex = newNodes.findIndex(n => n.id === edge.target && n.data.role === 'T');
+                if (targetTNodeIndex !== -1) {
+                    const connectedTNodeCurrentData = newNodes[targetTNodeIndex].data;
+                    const connectedTNodeOriginalData = nodesInternal.find(n => n.id === newNodes[targetTNodeIndex].id)?.data;
+
+                    if (editedNode.data.targetAddress !== connectedTNodeCurrentData.targetAddress) {
+                        newNodes[targetTNodeIndex] = {
+                            ...newNodes[targetTNodeIndex],
+                            data: { ...connectedTNodeCurrentData, targetAddress: editedNode.data.targetAddress }
+                        };
+                        if (editedNode.data.targetAddress !== connectedTNodeOriginalData?.targetAddress) {
+                             toast({ title: `落地端 ${newNodes[targetTNodeIndex].data.label} 已同步目标地址。`});
                         }
                     }
                 }
-            });
-        } else if (editedNode.data.role === 'T') { // Edited T
-            edgesInternal.forEach(edge => {
-                if (edge.target === editedNode.id) {
-                    const sourceNodeIndex = newNodes.findIndex(n => n.id === edge.source && (n.data.role === 'S' || n.data.role === 'C' || (n.data.role === 'M' && n.data.masterSubRole === 'client-role')));
-                    if (sourceNodeIndex !== -1) {
-                        const oldTargetAddressOfSource = nodesInternal.find(n => n.id === newNodes[sourceNodeIndex].id)?.data.targetAddress;
-                        if (editedNode.data.targetAddress !== oldTargetAddressOfSource) {
-                            newNodes[sourceNodeIndex] = { ...newNodes[sourceNodeIndex], data: { ...newNodes[sourceNodeIndex].data, targetAddress: editedNode.data.targetAddress }};
-                            toast({ title: `${newNodes[sourceNodeIndex].data.label} 已同步落地端目标地址。`});
+            }
+        });
+    } else if (editedNode.data.role === 'T') {
+        edgesInternal.forEach(edge => {
+            if (edge.target === editedNode.id) {
+                const sourceNodeIndex = newNodes.findIndex(n => n.id === edge.source && (n.data.role === 'S' || n.data.role === 'C' || (n.data.role === 'M' && n.data.masterSubRole === 'client-role')));
+                if (sourceNodeIndex !== -1) {
+                    const connectedSourceNodeCurrentData = newNodes[sourceNodeIndex].data;
+                    const connectedSourceNodeOriginalData = nodesInternal.find(n => n.id === newNodes[sourceNodeIndex].id)?.data;
+
+                    if (editedNode.data.targetAddress !== connectedSourceNodeCurrentData.targetAddress) {
+                        newNodes[sourceNodeIndex] = {
+                            ...newNodes[sourceNodeIndex],
+                            data: { ...connectedSourceNodeCurrentData, targetAddress: editedNode.data.targetAddress }
+                        };
+                        if (editedNode.data.targetAddress !== connectedSourceNodeOriginalData?.targetAddress) {
+                             toast({ title: `${newNodes[sourceNodeIndex].data.label} 已同步落地端目标地址。`});
                         }
                     }
                 }
-            });
-        }
+            }
+        });
     }
     
     // Update client tunnel address if its connected server's tunnelAddress changes
@@ -696,13 +710,12 @@ export function TopologyEditor() {
                 }
             }
         });
-    } else if (editedNode.data.role === 'M' && originalNode.data.apiUrl !== editedNode.data.apiUrl) { 
-        // If M container's API URL (which implies its hostname) changes, update tunnelAddress of C nodes connected to S nodes *within this M container*
+    } else if (editedNode.data.role === 'M' && originalNodeDataFromState.apiUrl !== editedNode.data.apiUrl) { 
         const mContainerNode = editedNode;
         const mContainerMasterConfig = getApiConfigById(mContainerNode.data.masterId!);
 
-        newNodes.forEach((sNode, sNodeIndex) => { // Iterate through all nodes to find relevant S nodes
-            if (sNode.data.parentNode === mContainerNode.id && sNode.data.role === 'S' && !sNode.data.representedMasterId) { // S is child of THIS M, and not representing external master
+        newNodes.forEach((sNode, sNodeIndex) => { 
+            if (sNode.data.parentNode === mContainerNode.id && sNode.data.role === 'S' && !sNode.data.representedMasterId) { 
                 edgesInternal.forEach(edge => {
                     if (edge.target === sNode.id) { 
                         const clientNodeIndexToUpdate = newNodes.findIndex(n => n.id === edge.source && n.data.role === 'C');
@@ -805,4 +818,3 @@ export function TopologyEditor() {
     </div>
   );
 }
-
