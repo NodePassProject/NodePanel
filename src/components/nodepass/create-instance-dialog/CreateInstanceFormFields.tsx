@@ -50,7 +50,12 @@ export function CreateInstanceFormFields({
     ? MASTER_TLS_MODE_DISPLAY_MAP[activeApiConfig.masterDefaultTlsMode as keyof typeof MASTER_TLS_MODE_DISPLAY_MAP] || '主控配置'
     : '主控配置';
 
-  const allMasterConfigsForServerSelection = apiConfigsList;
+  const serverApiIdOptions = React.useMemo(() => {
+    if (instanceType === '入口(c)' && autoCreateServer && !isSingleEndedForward) {
+      return apiConfigsList.filter(config => config.id !== activeApiConfig?.id);
+    }
+    return [];
+  }, [apiConfigsList, activeApiConfig?.id, instanceType, autoCreateServer, isSingleEndedForward]);
 
   return (
     <Form {...form}>
@@ -149,24 +154,27 @@ export function CreateInstanceFormFields({
                 <Select
                   onValueChange={field.onChange}
                   value={field.value || ""}
-                  disabled={allMasterConfigsForServerSelection.length === 0}
+                  disabled={serverApiIdOptions.length === 0}
                 >
                   <FormControl>
                     <SelectTrigger className="text-xs font-sans h-9">
-                      <SelectValue placeholder={allMasterConfigsForServerSelection.length === 0 ? "无可用主控" : "选择出口(s)创建主控"} />
+                      <SelectValue placeholder={serverApiIdOptions.length === 0 ? "无其他主控可选" : "选择出口(s)创建主控"} />
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
-                    {allMasterConfigsForServerSelection.map(config => (
+                    {serverApiIdOptions.map(config => (
                       <SelectItem key={config.id} value={config.id} className="font-sans text-xs">
-                        {config.name}{config.id === activeApiConfig?.id ? " (当前客户端主控)" : ""}
+                        {config.name}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
                 {showDetailedDescriptions && (
                   <FormDescription className="font-sans text-xs mt-0.5">
-                    选择自动创建的出口(s)实例将归属于哪个主控。
+                    选择自动创建的出口(s)实例将归属于哪个主控 (不能是当前客户端主控)。
+                    {serverApiIdOptions.length === 0 && (
+                      <span className="text-destructive"> 此功能要求至少配置一个其他主控。</span>
+                    )}
                   </FormDescription>
                 )}
                 <FormMessage className="text-xs" />
