@@ -52,6 +52,7 @@ export function CreateInstanceFormFields({
 
   const serverApiIdOptions = React.useMemo(() => {
     if (instanceType === '入口(c)' && autoCreateServer && !isSingleEndedForward) {
+      // Filter out the activeApiConfig from the list of available masters for the server
       return apiConfigsList.filter(config => config.id !== activeApiConfig?.id);
     }
     return [];
@@ -103,7 +104,7 @@ export function CreateInstanceFormFields({
                   </FormLabel>
                   {showDetailedDescriptions && (
                     <FormDescription className="font-sans text-xs mt-0.5">
-                      启用后，仅需配置本地监听端口和远程目标地址。
+                      启用后，仅需配置本地监听端口和远程目标转发地址。
                     </FormDescription>
                   )}
                 </div>
@@ -193,7 +194,7 @@ export function CreateInstanceFormFields({
                  <Settings2 size={14} className="mr-1 text-muted-foreground" />
                 {instanceType === '出口(s)' ? '出口(s)隧道监听地址' :
                  (isSingleEndedForward ? '入口(c)本地监听端口' : 
-                   (autoCreateServer ? '自动创建的出口(s)监听端口' : '连接的出口(s)隧道地址')
+                   (autoCreateServer ? '隧道监听端口' : '连接的出口(s)隧道地址')
                  )}
               </FormLabel>
               <FormControl>
@@ -218,7 +219,7 @@ export function CreateInstanceFormFields({
                     : (isSingleEndedForward
                         ? "入口(c)在此本地端口监听传入连接。"
                         : (autoCreateServer
-                            ? "自动创建的出口(s)将在此端口监听 (主机固定为 [::])。"
+                            ? "自动创建的出口(s)将在此隧道监听端口监听 (主机固定为 [::])。"
                             : "入口(c)连接此出口(s)地址的控制通道。"))}
                 </FormDescription>
                )}
@@ -242,7 +243,7 @@ export function CreateInstanceFormFields({
               <FormItem className="space-y-1">
                 <FormLabel className="font-sans text-xs flex items-center">
                   <Share2 size={14} className="mr-1 text-muted-foreground" />
-                  自动创建的出口(s)目标地址 (业务数据)
+                  转发地址 (自动创建的出口(s))
                 </FormLabel>
                 <FormControl>
                   <Input
@@ -312,8 +313,8 @@ export function CreateInstanceFormFields({
             <FormItem className="space-y-1">
               <FormLabel className="font-sans text-xs flex items-center">
                 <Share2 size={14} className="mr-1 text-muted-foreground" />
-                {instanceType === '出口(s)' ? '出口(s)目标地址 (业务数据)' :
-                 (isSingleEndedForward ? '目标地址 (业务数据)' : '入口(c)本地转发端口 (可选)')}
+                {instanceType === '出口(s)' ? '转发地址 (出口(s))' :
+                 (isSingleEndedForward ? '转发地址 (远程目标)' : '入口(c)本地转发端口 (可选)')}
               </FormLabel>
               <FormControl>
                 <Input
@@ -328,9 +329,9 @@ export function CreateInstanceFormFields({
               {showDetailedDescriptions && (
                 <FormDescription className="font-sans text-xs mt-0.5">
                   {instanceType === "出口(s)"
-                    ? "出口(s)业务数据的目标地址。"
+                    ? "出口(s)将业务数据转发到此地址。"
                     : (isSingleEndedForward
-                        ? "入口(c)将流量转发到的远程目标。"
+                        ? "入口(c)将流量转发到的远程目标服务地址。"
                         : "入口(c)将流量转发到的本地服务端口 (主机固定为 [::])。若留空，将使用 (出口(s)隧道端口+1) 自动生成。")}
                 </FormDescription>
               )}

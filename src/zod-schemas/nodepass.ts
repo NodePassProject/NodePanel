@@ -35,13 +35,13 @@ export const createInstanceFormSchema = z.object({
       if (!data.targetAddress || data.targetAddress.trim() === "") {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          message: "目标地址 (业务数据) 是必需的。",
+          message: "转发地址 (远程目标) 是必需的。",
           path: ["targetAddress"],
         });
       } else if (!/^(?:\[[0-9a-fA-F:]+\]|[0-9a-zA-Z.-]+):[0-9]+$/.test(data.targetAddress)) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          message: "目标地址 (业务数据) 格式无效 (例: host:port)",
+          message: "转发地址 (远程目标) 格式无效 (例: host:port)",
           path: ["targetAddress"],
         });
       }
@@ -51,7 +51,7 @@ export const createInstanceFormSchema = z.object({
       if (!/^[0-9]+$/.test(data.tunnelAddress)) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          message: "自动创建的出口(s)监听端口格式无效 (例: 10101)",
+          message: "隧道监听端口格式无效 (例: 10101)",
           path: ["tunnelAddress"],
         });
       }
@@ -59,13 +59,13 @@ export const createInstanceFormSchema = z.object({
       if (!data.serverTargetAddressForAutoCreate || data.serverTargetAddressForAutoCreate.trim() === "") {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          message: "自动创建的出口(s)目标地址 (业务数据) 是必需的。",
+          message: "转发地址 (自动创建的出口(s)) 是必需的。",
           path: ["serverTargetAddressForAutoCreate"],
         });
       } else if (!/^(?:\[[0-9a-fA-F:]+\]|[0-9a-zA-Z.-]+):[0-9]+$/.test(data.serverTargetAddressForAutoCreate)) {
          ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          message: "自动创建的出口(s)目标地址 (业务数据) 格式无效 (例: host:port)",
+          message: "转发地址 (自动创建的出口(s)) 格式无效 (例: host:port)",
           path: ["serverTargetAddressForAutoCreate"],
         });
       }
@@ -109,13 +109,13 @@ export const createInstanceFormSchema = z.object({
     if (!data.targetAddress || data.targetAddress.trim() === "") {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "出口(s)目标地址 (业务数据) 是必需的。",
+        message: "转发地址 (出口(s)) 是必需的。",
         path: ["targetAddress"],
       });
     } else if (!/^(?:\[[0-9a-fA-F:]+\]|[0-9a-zA-Z.-]+):[0-9]+$/.test(data.targetAddress)) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "出口(s)目标地址 (业务数据) 格式无效 (例: host:port)",
+        message: "转发地址 (出口(s)) 格式无效 (例: host:port)",
         path: ["targetAddress"],
       });
     }
@@ -171,4 +171,5 @@ export const createInstanceApiSchema = z.object({
 export const updateInstanceSchema = z.object({
   action: z.enum(["start", "stop", "restart"]),
 });
+
 
