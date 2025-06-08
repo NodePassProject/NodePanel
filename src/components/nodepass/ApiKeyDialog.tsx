@@ -167,7 +167,7 @@ export function ApiConfigDialog({ open, onOpenChange, onSave, currentConfig, isE
                   <SelectItem value="info">Info</SelectItem>
                   <SelectItem value="warn">Warn</SelectItem>
                   <SelectItem value="error">Error</SelectItem>
-                  <SelectItem value="fatal">Fatal</SelectItem>
+                  <SelectItem value="event">Event</SelectItem>
                 </SelectContent>
               </Select>
             </div>

@@ -7,7 +7,7 @@ import { v4 as uuidv4 } from 'uuid'; // For generating unique IDs
 const API_CONFIGS_LIST_STORAGE_KEY = 'nodepass_api_configs_list';
 const ACTIVE_API_CONFIG_ID_STORAGE_KEY = 'nodepass_active_api_config_id';
 
-export type MasterLogLevel = 'debug' | 'info' | 'warn' | 'error' | 'fatal' | 'master';
+export type MasterLogLevel = 'debug' | 'info' | 'warn' | 'error' | 'event' | 'master';
 export type MasterTlsMode = '0' | '1' | '2' | 'master';
 
 export interface ApiConfig {

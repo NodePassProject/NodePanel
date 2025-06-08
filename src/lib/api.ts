@@ -1,5 +1,9 @@
 
-import type { Instance, CreateInstanceRequest, UpdateInstanceRequest, ModifyInstanceConfigRequest } from '@/types/nodepass';
+import type { Instance as NodelessInstance, CreateInstanceRequest, UpdateInstanceRequest } from '@/types/nodepass'; // ModifyInstanceConfigRequest removed
+
+// Re-export Instance to avoid direct dependency on types/nodepass elsewhere if not needed.
+export type Instance = NodelessInstance;
+
 
 async function request<T>(
   fullRequestUrl: string,
@@ -79,10 +83,7 @@ export const nodePassApi = {
     return request<Instance>(`${apiRootUrl}/v1/instances/${id}`, { method: 'PATCH', body: JSON.stringify(data) }, token);
   },
 
-  modifyInstanceConfig: (id: string, data: ModifyInstanceConfigRequest, apiRootUrl: string, token: string) => {
-    checkApiRootUrl(apiRootUrl, `修改实例配置 ${id}`);
-    return request<Instance>(`${apiRootUrl}/v1/instances/${id}`, { method: 'PATCH', body: JSON.stringify(data) }, token);
-  },
+  // modifyInstanceConfig function removed
   
   deleteInstance: (id: string, apiRootUrl: string, token: string) => {
     checkApiRootUrl(apiRootUrl, `删除实例 ${id}`);
@@ -92,5 +93,6 @@ export const nodePassApi = {
 
 export const getEventsUrl = (apiRootUrl: string | null): string => {
   if (!apiRootUrl) throw new Error("API 根地址 (apiRootUrl) 未配置，无法获取事件 URL。");
-  return `${apiRootUrl}/v1/events`; 
+  return `${apiRootUrl}/v1/events`;
 };
+

@@ -18,15 +18,13 @@ export interface UpdateInstanceRequest {
   action: "start" | "stop" | "restart";
 }
 
-export interface ModifyInstanceConfigRequest {
-  url: string;
-}
+// ModifyInstanceConfigRequest interface removed
 
 // Add instanceDetails to InstanceEvent for structured data
 export interface InstanceEvent {
-  type: 'initial' | 'create' | 'update' | 'delete' | 'log' | 'shutdown' | 'error'; 
-  data: any; 
-  instanceDetails?: Instance; 
-  level?: string; 
+  type: 'initial' | 'create' | 'update' | 'delete' | 'log' | 'shutdown' | 'error';
+  data: any;
+  instanceDetails?: Instance;
+  level?: string;
   timestamp: string;
 }
