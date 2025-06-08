@@ -15,10 +15,10 @@ interface ComponentItem {
 }
 
 const componentItems: ComponentItem[] = [
-  { type: 'S', label: '出口(s)', icon: Server, colorClass: 'text-primary', description: 'NodePass 出口(s) 实例' },
-  { type: 'C', label: '入口(c)', icon: Smartphone, colorClass: 'text-green-600', description: 'NodePass 入口(c) 实例' }, // Updated color for C
-  { type: 'T', label: '落地端 (T)', icon: Globe, colorClass: 'text-orange-500', description: '最终流量目标设备/服务' }, // Updated color for T
   { type: 'U', label: '用户 (U)', icon: UserCircle2, colorClass: 'text-purple-600', description: '用户或流量发起方' },
+  { type: 'C', label: '入口(c)', icon: Smartphone, colorClass: 'text-green-600', description: 'NodePass 入口(c) 实例' },
+  { type: 'S', label: '出口(s)', icon: Server, colorClass: 'text-primary', description: 'NodePass 出口(s) 实例' },
+  { type: 'T', label: '落地 (T)', icon: Globe, colorClass: 'text-orange-500', description: '最终流量目标设备/服务' },
 ];
 
 export function ComponentsPalette() {

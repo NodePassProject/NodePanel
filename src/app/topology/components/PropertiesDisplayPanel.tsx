@@ -2,7 +2,7 @@
 "use client";
 
 import React from 'react';
-import type { Node, CustomNodeData } from '../topologyTypes'; // Adjusted import for our Node type
+import type { Node, CustomNodeData } from '../topologyTypes'; 
 
 interface PropertiesDisplayPanelProps {
   selectedNode: Node | null;
@@ -17,7 +17,7 @@ export function PropertiesDisplayPanel({ selectedNode }: PropertiesDisplayPanelP
     );
   }
 
-  const data = selectedNode.data as CustomNodeData; // Type assertion
+  const data = selectedNode.data as CustomNodeData; 
 
   return (
     <div className="space-y-2 text-xs font-sans p-1">
@@ -53,24 +53,24 @@ export function PropertiesDisplayPanel({ selectedNode }: PropertiesDisplayPanelP
           <span className="ml-1">{data.isSingleEndedForwardC ? '是' : '否'}</span>
         </div>
       )}
-      {data.masterId && ( // For M nodes representing a master config
+      {data.masterId && ( 
          <div>
           <strong className="text-muted-foreground">源主控ID:</strong>
           <span className="ml-1 font-mono break-all">{data.masterId}</span>
         </div>
       )}
-      {data.representedMasterId && ( // For S/C nodes created from a master drag
+      {data.representedMasterId && ( 
          <div>
           <strong className="text-muted-foreground">代表主控ID:</strong>
           <span className="ml-1 font-mono break-all">{data.representedMasterId}</span>
         </div>
       )}
-       {data.representedMasterName && ( // For S/C nodes created from a master drag
+       {data.representedMasterName && ( 
          <div>
           <strong className="text-muted-foreground">代表主控名:</strong>
           <span className="ml-1">{data.representedMasterName}</span>
         </div>
-      )}
+       )}
        {data.parentNode && (
          <div>
           <strong className="text-muted-foreground">父节点ID (ParentNodeID):</strong>
@@ -89,13 +89,13 @@ export function PropertiesDisplayPanel({ selectedNode }: PropertiesDisplayPanelP
           <span className="ml-1">{data.masterName}</span>
         </div>
       )}
-      {(data.role === 'S' || (data.role === 'C' && !data.isSingleEndedForwardC)) && data.tunnelAddress && ( // Normal C or S
+      {(data.role === 'S' || (data.role === 'C' && !data.isSingleEndedForwardC)) && data.tunnelAddress && ( 
         <div>
           <strong className="text-muted-foreground">隧道地址:</strong>
           <span className="ml-1 font-mono break-all">{data.tunnelAddress}</span>
         </div>
       )}
-      {data.role === 'C' && data.isSingleEndedForwardC && data.tunnelAddress && ( // Single-ended C
+      {data.role === 'C' && data.isSingleEndedForwardC && data.tunnelAddress && ( 
         <div>
           <strong className="text-muted-foreground">本地监听地址:</strong>
           <span className="ml-1 font-mono break-all">{data.tunnelAddress}</span>
@@ -106,7 +106,7 @@ export function PropertiesDisplayPanel({ selectedNode }: PropertiesDisplayPanelP
         <div>
           <strong className="text-muted-foreground">
             {data.role === 'S' ? '出口(s)转发地址:' : 
-             data.role === 'T' ? '落地端转发地址:' : 
+             data.role === 'T' ? '落地转发地址:' : 
              (data.role === 'M' && data.masterSubRole === 'client-role') ? 'M(客户)本地服务:' : 
              '目标地址:' 
             }
@@ -150,3 +150,4 @@ export function PropertiesDisplayPanel({ selectedNode }: PropertiesDisplayPanelP
   );
 }
     
+

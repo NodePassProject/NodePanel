@@ -14,7 +14,7 @@ import {
   type OnEdgesChange,
 } from 'reactflow';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Server, DatabaseZap, Cable, User } from 'lucide-react';
+import { Server, DatabaseZap, Cable, User, ListTree, Puzzle, Info as InfoIcon } from 'lucide-react'; // Added ListTree, Puzzle, InfoIcon
 
 import { TopologyCanvasWrapper } from './TopologyCanvas';
 import { MastersPalette } from './components/MastersPalette';
@@ -25,6 +25,7 @@ import { useApiConfig } from '@/hooks/use-api-key';
 import { useToast } from '@/hooks/use-toast';
 import { Separator } from '@/components/ui/separator';
 import { Button } from '@/components/ui/button';
+import { ScrollArea } from '@/components/ui/scroll-area'; // Added ScrollArea
 import { nodePassApi } from '@/lib/api';
 import { buildUrlFromFormValues, type BuildUrlParams } from '@/components/nodepass/create-instance-dialog/utils';
 import { extractPort, extractHostname, formatHostForDisplay, isWildcardHostname, formatHostForUrl } from '@/lib/url-utils';
@@ -146,11 +147,10 @@ export function TopologyEditor() {
       }
 
       if (sourceNode.data.role === 'T') {
-        toast({ title: '连接无效', description: '落地端 (T) 节点不能作为连接的起点。', variant: 'destructive' });
+        toast({ title: '连接无效', description: '落地 (T) 节点不能作为连接的起点。', variant: 'destructive' });
         return;
       }
       
-      // Client in single-ended mode should not connect to a Server node in the same M container
       if (sourceNode.data.role === 'C' && sourceNode.data.isSingleEndedForwardC && targetNode.data.role === 'S' && sourceNode.data.parentNode === targetNode.data.parentNode) {
         toast({ title: '连接无效', description: '单端转发模式的入口(c)不能直接连接到同一主控内的出口(s)。', variant: 'destructive' });
         return;
@@ -158,10 +158,9 @@ export function TopologyEditor() {
 
 
       if (targetNode.data.role === 'T') {
-        // Allow C node (including single-ended) to connect to T
         const sourceIsConnectableToT = sourceNode.data.role === 'S' || sourceNode.data.role === 'C' || (sourceNode.data.role === 'M' && sourceNode.data.masterSubRole === 'client-role');
         if (!sourceIsConnectableToT) {
-            toast({ title: '连接无效', description: '落地端 (T) 节点只能被主控 (客户隧道角色), 出口(s), 或 入口(c) 节点链接。', variant: 'destructive' });
+            toast({ title: '连接无效', description: '落地 (T) 节点只能被主控 (客户隧道角色), 出口(s), 或 入口(c) 节点链接。', variant: 'destructive' });
             return;
         }
       }
@@ -186,7 +185,7 @@ export function TopologyEditor() {
       setEdgesInternal((eds) => addEdge(newEdge, eds));
       let updatedNodes = [...nodesInternal];
 
-      if (sourceNode.data.role === 'C' && !sourceNode.data.isSingleEndedForwardC && targetNode.data.role === 'S') { // Normal C to S
+      if (sourceNode.data.role === 'C' && !sourceNode.data.isSingleEndedForwardC && targetNode.data.role === 'S') { 
         const clientNode = sourceNode;
         const serverNode = targetNode;
         
@@ -221,8 +220,6 @@ export function TopologyEditor() {
         let tNodeUpdated = false;
         let scOrMNodeUpdated = false;
         
-        // For single-ended C node, its targetAddress is its remote destination, which should sync with T node's targetAddress
-        // For normal C/S/M client-role, its targetAddress is its local forward, which should sync with T node's targetAddress
         const sourceTargetAddr = scOrMNode.data.targetAddress;
 
         if (sourceTargetAddr && sourceTargetAddr.trim() !== "" && sourceTargetAddr !== tNode.data.targetAddress) {
@@ -236,8 +233,8 @@ export function TopologyEditor() {
           );
           scOrMNodeUpdated = true;
         }
-        if (tNodeUpdated) toast({ title: `落地端 ${tNode.data.label} 已同步上游目标地址。`});
-        if (scOrMNodeUpdated) toast({ title: `${scOrMNode.data.label} 已同步落地端目标地址。`});
+        if (tNodeUpdated) toast({ title: `落地 ${tNode.data.label} 已同步上游目标地址。`});
+        if (scOrMNodeUpdated) toast({ title: `${scOrMNode.data.label} 已同步落地目标地址。`});
       }
       setNodesInternal(updatedNodes);
     },
@@ -345,10 +342,8 @@ export function TopologyEditor() {
                   width: mNodeWidth, height: mNodeHeight,
               });
               
-              // Default client for a new Master container. If no S nodes, it might be single-ended.
-              // For simplicity, default C in M is standard, not single-ended. User can edit.
-              const hasServersInNewM = false; // New M won't have servers yet unless explicitly added S nodes too.
-              const defaultClientIsSingleEnded = !hasServersInNewM; // Let's try this logic: if M is empty, default C is single-ended.
+              const sNodesInNewM = nodesInternal.filter(n => n.data.parentNode === mId && n.data.role === 'S');
+              const defaultClientIsSingleEnded = sNodesInNewM.length === 0;
 
               newNodes.push({ 
                   id: cId, type: 'cardNode', parentNode: mId, extent: 'parent',
@@ -356,10 +351,10 @@ export function TopologyEditor() {
                   data: { 
                     label: '本地 (C)', role: 'C', icon: DatabaseZap, parentNode: mId, isDefaultClient: true,
                     isSingleEndedForwardC: defaultClientIsSingleEnded,
-                    tunnelAddress: defaultClientIsSingleEnded ? `[::]:${10001 + currentCounter}` : "", // Local listen if single, else empty
-                    targetAddress: defaultClientIsSingleEnded ? `remote.example.com:80` : `[::]:${10001 + currentCounter}`, // Remote target if single, else local forward
+                    tunnelAddress: defaultClientIsSingleEnded ? `[::]:${10001 + currentCounter}` : "",
+                    targetAddress: defaultClientIsSingleEnded ? `remote.example.com:80` : `[::]:${10001 + currentCounter}`,
                     logLevel: draggedData.masterDefaultLogLevel || 'master',
-                    tlsMode: defaultClientIsSingleEnded ? '0' : 'master', // default no TLS for target if single-ended
+                    tlsMode: defaultClientIsSingleEnded ? '0' : (draggedData.masterDefaultTlsMode || 'master'),
                   },
                   width: CARD_NODE_WIDTH, height: CARD_NODE_HEIGHT,
               });
@@ -374,7 +369,7 @@ export function TopologyEditor() {
               newNodes.push({
                   id: tId, type: 'cardNode',
                   position: { x: position.x + mNodeWidth + 60, y: position.y + (mNodeHeight / 2) - (CARD_NODE_HEIGHT / 2) },
-                  data: { label: '落地端', role: 'T', icon: Cable, targetAddress: '192.168.1.10:80' },
+                  data: { label: '落地', role: 'T', icon: Cable, targetAddress: '192.168.1.10:80' },
                   width: CARD_NODE_WIDTH, height: CARD_NODE_HEIGHT,
               });
 
@@ -394,7 +389,7 @@ export function TopologyEditor() {
           const { labelPrefix, icon, width, height } = {
               'S': { labelPrefix: '出口(s)', icon: Server, width: CARD_NODE_WIDTH, height: CARD_NODE_HEIGHT },
               'C': { labelPrefix: '入口(c)', icon: DatabaseZap, width: CARD_NODE_WIDTH, height: CARD_NODE_HEIGHT },
-              'T': { labelPrefix: '落地端', icon: Cable, width: CARD_NODE_WIDTH, height: CARD_NODE_HEIGHT },
+              'T': { labelPrefix: '落地', icon: Cable, width: CARD_NODE_WIDTH, height: CARD_NODE_HEIGHT },
               'U': { labelPrefix: '用户端', icon: User, width: CARD_NODE_WIDTH, height: CARD_NODE_HEIGHT },
           }[nodeRole]!;
 
@@ -418,16 +413,18 @@ export function TopologyEditor() {
                 const sNodesInParent = nodesInternal.filter(n => n.data.parentNode === parentMContainer.id && n.data.role === 'S');
                 newNodeData.isSingleEndedForwardC = sNodesInParent.length === 0;
                 if (newNodeData.isSingleEndedForwardC) {
-                    newNodeData.tunnelAddress = `[::]:${10002 + currentCounter + Math.floor(Math.random()*50)}`; // Local listen port
-                    newNodeData.targetAddress = `some.external.service:${8000 + currentCounter}`; // Remote target
-                    newNodeData.tlsMode = '0'; // Default no TLS for single-ended target connection
+                    newNodeData.tunnelAddress = `[::]:${10002 + currentCounter + Math.floor(Math.random()*50)}`; 
+                    newNodeData.targetAddress = `some.external.service:${8000 + currentCounter}`; 
+                    newNodeData.tlsMode = '0';
                 } else {
-                    newNodeData.targetAddress = `[::]:${10001 + currentCounter + Math.floor(Math.random()*50)}`; // Local forward target for normal client
-                    newNodeData.tlsMode = 'master'; // Default TLS for client connecting to server
+                    newNodeData.targetAddress = `[::]:${10001 + currentCounter + Math.floor(Math.random()*50)}`; 
+                    newNodeData.tlsMode = 'master'; 
                 }
-            } else { // Should not happen due to check above, but as a fallback
-                newNodeData.targetAddress = `[::]:${10001 + currentCounter + Math.floor(Math.random()*50)}`;
-                newNodeData.tlsMode = 'master';
+            } else { 
+                newNodeData.isSingleEndedForwardC = true; // Default to single-ended if not in a parent initially
+                newNodeData.tunnelAddress = `[::]:${10002 + currentCounter + Math.floor(Math.random()*50)}`;
+                newNodeData.targetAddress = `some.external.service:${8000 + currentCounter}`;
+                newNodeData.tlsMode = '0';
             }
           } else if (nodeRole === 'T') {
             newNodeData.targetAddress = '192.168.1.20:8080';
@@ -441,14 +438,13 @@ export function TopologyEditor() {
               newNode.position = { x: position.x - parentMContainer.position.x - (width / 2), y: position.y - parentMContainer.position.y - (height / 2) };
               newNode.data.logLevel = parentMContainer.data.defaultLogLevel || 'master';
               if (nodeRole === 'S') newNode.data.tlsMode = parentMContainer.data.defaultTlsMode || 'master';
-              if (nodeRole === 'C') { // If C inside M, inherit M's default log/tls if not single-ended, or specific defaults if single-ended
+              if (nodeRole === 'C') {
                   if(newNode.data.isSingleEndedForwardC) {
-                    // tlsMode already set to '0' above, logLevel set to parent's default
+                    newNode.data.tlsMode = '0';
                   } else {
                     newNode.data.tlsMode = parentMContainer.data.defaultTlsMode || 'master';
                   }
               }
-
 
               if (nodeRole === 'S') { 
                   const defaultClient = nodesInternal.find(n => n.data.parentNode === parentMContainer.id && n.data.isDefaultClient && !n.data.isSingleEndedForwardC);
@@ -485,18 +481,17 @@ export function TopologyEditor() {
                 const newIcon = newRole === 'S' ? Server : DatabaseZap;
                 const newData: CustomNodeData = { ...node.data, role: newRole, icon: newIcon, label: newLabel };
                 if (newRole === 'S') {
-                    newData.isSingleEndedForwardC = false; // Cannot be single-ended if it's a server
+                    newData.isSingleEndedForwardC = false; 
                     if (!node.data.tlsMode) newData.tlsMode = node.data.parentNode ? (getNodeById(node.data.parentNode)?.data.defaultTlsMode || 'master') : 'master';
-                } else if (newRole === 'C') { // When changing to C
-                    delete newData.tlsMode; // C nodes have their own TLS logic (to target or to S), remove S-specific one
-                    // Determine if new C should be single-ended based on S nodes in parent
+                } else if (newRole === 'C') { 
+                    delete newData.tlsMode; 
                     if (node.data.parentNode) {
                         const parentM = getNodeById(node.data.parentNode);
                         const sNodesInParent = parentM ? nodesInternal.filter(n => n.data.parentNode === parentM.id && n.data.role === 'S' && n.id !== nodeId) : [];
                         newData.isSingleEndedForwardC = sNodesInParent.length === 0;
                         newData.tlsMode = newData.isSingleEndedForwardC ? '0' : (parentM?.data.defaultTlsMode || 'master');
                     } else {
-                        newData.isSingleEndedForwardC = true; // Default to single-ended if no parent context
+                        newData.isSingleEndedForwardC = true; 
                         newData.tlsMode = '0';
                     }
                 }
@@ -561,21 +556,21 @@ export function TopologyEditor() {
           };
         } else if (node.data.role === 'C') {
           if (node.data.isSingleEndedForwardC) {
-            if (!node.data.tunnelAddress || !node.data.targetAddress) { // tunnelAddress is local listen, targetAddress is remote target
+            if (!node.data.tunnelAddress || !node.data.targetAddress) { 
               setNodesInternal(nds => nds.map(n => n.id === node.id ? { ...n, data: { ...n.data, submissionStatus: 'error', submissionMessage: '单端转发地址不完整' } } : n));
               continue;
             }
             urlParams = {
               instanceType: instanceTypeForBuild,
               isSingleEndedForward: true,
-              tunnelAddress: node.data.tunnelAddress, // e.g. [::]:10101
-              targetAddress: node.data.targetAddress, // e.g. remote.host:8000
+              tunnelAddress: node.data.tunnelAddress, 
+              targetAddress: node.data.targetAddress, 
               logLevel: (node.data.logLevel as any) || 'master',
-              tlsMode: (node.data.tlsMode as any) || '0', // Default '0' for single-ended client connection to target
+              tlsMode: (node.data.tlsMode as any) || '0', 
               certPath: node.data.certPath,
               keyPath: node.data.keyPath,
             };
-          } else { // Normal client
+          } else { 
             if (!node.data.tunnelAddress || !node.data.targetAddress) {
               setNodesInternal(nds => nds.map(n => n.id === node.id ? { ...n, data: { ...n.data, submissionStatus: 'error', submissionMessage: '地址不完整' } } : n));
               continue;
@@ -724,7 +719,6 @@ export function TopologyEditor() {
     
     const editedNode = newNodes[nodeIndex];
 
-    // Sync targetAddress between S/C/M(client-role) and T nodes
     const isForwardingSourceNode = editedNode.data.role === 'S' || editedNode.data.role === 'C' || (editedNode.data.role === 'M' && editedNode.data.masterSubRole === 'client-role');
     
     if (isForwardingSourceNode) {
@@ -732,17 +726,13 @@ export function TopologyEditor() {
             if (edge.source === editedNode.id) {
                 const targetTNodeIndex = newNodes.findIndex(n => n.id === edge.target && n.data.role === 'T');
                 if (targetTNodeIndex !== -1) {
-                    const connectedTNodeCurrentData = newNodes[targetTNodeIndex].data;
                     const connectedTNodeOriginalData = nodesInternal.find(n => n.id === newNodes[targetTNodeIndex].id)?.data;
-
-                    if (editedNode.data.targetAddress !== connectedTNodeCurrentData.targetAddress) {
+                    if (editedNode.data.targetAddress !== connectedTNodeOriginalData?.targetAddress) {
                         newNodes[targetTNodeIndex] = {
                             ...newNodes[targetTNodeIndex],
-                            data: { ...connectedTNodeCurrentData, targetAddress: editedNode.data.targetAddress }
+                            data: { ...newNodes[targetTNodeIndex].data, targetAddress: editedNode.data.targetAddress }
                         };
-                        if (editedNode.data.targetAddress !== connectedTNodeOriginalData?.targetAddress) {
-                             toast({ title: `落地端 ${newNodes[targetTNodeIndex].data.label} 已同步目标地址。`});
-                        }
+                        toast({ title: `落地 ${newNodes[targetTNodeIndex].data.label} 已同步目标地址。`});
                     }
                 }
             }
@@ -752,29 +742,23 @@ export function TopologyEditor() {
             if (edge.target === editedNode.id) {
                 const sourceNodeIndex = newNodes.findIndex(n => n.id === edge.source && (n.data.role === 'S' || n.data.role === 'C' || (n.data.role === 'M' && n.data.masterSubRole === 'client-role')));
                 if (sourceNodeIndex !== -1) {
-                    const connectedSourceNodeCurrentData = newNodes[sourceNodeIndex].data;
-                    const connectedSourceNodeOriginalData = nodesInternal.find(n => n.id === newNodes[sourceNodeIndex].id)?.data;
-
-                    if (editedNode.data.targetAddress !== connectedSourceNodeCurrentData.targetAddress) {
+                     const connectedSourceNodeOriginalData = nodesInternal.find(n => n.id === newNodes[sourceNodeIndex].id)?.data;
+                    if (editedNode.data.targetAddress !== connectedSourceNodeOriginalData?.targetAddress) {
                         newNodes[sourceNodeIndex] = {
                             ...newNodes[sourceNodeIndex],
-                            data: { ...connectedSourceNodeCurrentData, targetAddress: editedNode.data.targetAddress }
+                            data: { ...newNodes[sourceNodeIndex].data, targetAddress: editedNode.data.targetAddress }
                         };
-                        if (editedNode.data.targetAddress !== connectedSourceNodeOriginalData?.targetAddress) {
-                             toast({ title: `${newNodes[sourceNodeIndex].data.label} 已同步落地端目标地址。`});
-                        }
+                         toast({ title: `${newNodes[sourceNodeIndex].data.label} 已同步落地目标地址。`});
                     }
                 }
             }
         });
     }
     
-    // Update client tunnel address if its connected server's tunnelAddress changes
-    if (editedNode.data.role === 'S') { // If an S node was edited
+    if (editedNode.data.role === 'S') { 
         edgesInternal.forEach(edge => {
-            // Find C nodes connected TO this S node
             if (edge.target === editedNode.id) { 
-                const clientNodeIndex = newNodes.findIndex(n => n.id === edge.source && n.data.role === 'C' && !n.data.isSingleEndedForwardC); // Only normal C nodes
+                const clientNodeIndex = newNodes.findIndex(n => n.id === edge.source && n.data.role === 'C' && !n.data.isSingleEndedForwardC);
                 if (clientNodeIndex !== -1) {
                     const clientNode = newNodes[clientNodeIndex];
                     const effectiveServerMasterCfg = getEffectiveServerMasterConfig(editedNode.data, (id) => newNodes.find(n => n.id === id), getApiConfigById);
@@ -787,8 +771,6 @@ export function TopologyEditor() {
             }
         });
     } else if (editedNode.data.role === 'M' && originalNodeDataFromState.apiUrl !== editedNode.data.apiUrl) { 
-        // If an M node's API URL changed, it might affect tunnel addresses of C nodes connecting to S nodes *within* this M container
-        // if those S nodes are not representedMasterId (i.e., they derive their effective host from this M container)
         const mContainerNode = editedNode;
         const mContainerMasterConfig = getApiConfigById(mContainerNode.data.masterId!);
 
@@ -826,20 +808,31 @@ export function TopologyEditor() {
       <div className="flex flex-row flex-grow h-full overflow-hidden">
         <div className="w-60 flex-shrink-0 flex flex-col border-r bg-muted/30 p-2">
           <div className="flex flex-col h-full bg-background rounded-lg shadow-md border">
-            <div className="flex flex-col h-1/2 p-3">
-              <h2 className="text-base font-semibold font-title mb-1">主控列表 (M)</h2>
+            <div className="flex flex-col p-3">
+              <h2 className="text-sm font-semibold font-title mb-1 flex items-center">
+                <ListTree size={16} className="mr-2 text-primary" />
+                主控列表 (M)
+              </h2>
               <p className="text-xs text-muted-foreground font-sans mb-2">拖拽主控到画布。</p>
-              <div className="flex-grow overflow-y-auto pr-1"><MastersPalette /></div>
+              <ScrollArea className="flex-grow pr-1 max-h-60"> {/* Limited height and scroll */}
+                <MastersPalette />
+              </ScrollArea>
             </div>
             <Separator className="my-0" />
-            <div className="flex flex-col h-1/2 p-3">
-              <h2 className="text-base font-semibold font-title mb-1">组件 (S, C, T, U)</h2>
+            <div className="flex flex-col p-3">
+              <h2 className="text-sm font-semibold font-title mb-1 flex items-center">
+                <Puzzle size={16} className="mr-2 text-primary" />
+                组件 (U, C, S, T)
+              </h2>
               <p className="text-xs text-muted-foreground font-sans mb-2">拖拽组件到画布或主控容器。</p>
               <div className="flex-grow overflow-y-auto pr-1"><ComponentsPalette /></div>
             </div>
             <Separator className="my-0" />
             <div className="flex flex-col flex-grow min-h-0 p-3">
-              <h2 className="text-base font-semibold font-title mb-1">节点属性</h2>
+              <h2 className="text-sm font-semibold font-title mb-1 flex items-center">
+                <InfoIcon size={16} className="mr-2 text-primary" />
+                节点属性
+              </h2>
               <p className="text-xs text-muted-foreground font-sans mb-2">{selectedNode ? `选中: ${selectedNode.data.label || selectedNode.id}` : '点击节点查看属性。'}</p>
               <div className="flex-grow overflow-y-hidden"><PropertiesDisplayPanel selectedNode={selectedNode} /></div>
             </div>

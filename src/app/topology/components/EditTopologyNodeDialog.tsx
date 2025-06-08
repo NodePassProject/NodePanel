@@ -55,15 +55,15 @@ const serverSchema = baseSchema.extend({
 const clientSchema = baseSchema.extend({
   isSingleEndedForwardC: z.boolean().default(false),
   // For normal client
-  tunnelAddressC_Normal: z.optional(z.string()), // Server's tunnel address
+  tunnelAddressC_Normal: z.optional(z.string()), 
   localHostC_Normal: z.optional(z.string().default("[::]")),
-  localPortC_Normal: z.optional(z.string()), // Local listen port
+  localPortC_Normal: z.optional(z.string()), 
   // For single-ended client
-  localListenPortC_Single: z.optional(z.string()), // Local listen port (just port number)
-  remoteTargetAddressC_Single: z.optional(z.string()), // Remote target host:port
+  localListenPortC_Single: z.optional(z.string()), 
+  remoteTargetAddressC_Single: z.optional(z.string()), 
   // Common for client
   logLevelC: z.enum(["master", "debug", "info", "warn", "error", "event"]),
-  tlsModeC: z.enum(["master", "0", "1", "2"]), // Applies to connection to server OR remote target
+  tlsModeC: z.enum(["master", "0", "1", "2"]), 
   certPathC: z.optional(z.string()),
   keyPathC: z.optional(z.string()),
 }).superRefine((data, ctx) => {
@@ -143,22 +143,21 @@ export function EditTopologyNodeDialog({ open, onOpenChange, node, onSave }: Edi
           ...defaultVals,
           isSingleEndedForwardC: isSingle,
           logLevelC: (data.logLevel as any) || "master",
-          tlsModeC: (data.tlsMode as any) || "master", // Default to 'master', implies '0' for client usually
+          tlsModeC: (data.tlsMode as any) || (isSingle ? "0" : "master"), 
           certPathC: data.certPath || "",
           keyPathC: data.keyPath || "",
         };
         if (isSingle) {
-          (defaultVals as any).localListenPortC_Single = extractPort(data.tunnelAddress || "[::]:0") || ""; // tunnelAddress stores local listen for single-ended
-          (defaultVals as any).remoteTargetAddressC_Single = data.targetAddress || ""; // targetAddress stores remote target for single-ended
+          (defaultVals as any).localListenPortC_Single = extractPort(data.tunnelAddress || "[::]:0") || ""; 
+          (defaultVals as any).remoteTargetAddressC_Single = data.targetAddress || ""; 
         } else {
-          (defaultVals as any).tunnelAddressC_Normal = data.tunnelAddress || ""; // Connect to server
-          (defaultVals as any).localHostC_Normal = extractHostname(data.targetAddress || "[::]:0") || "[::]"; // Local forward host
-          (defaultVals as any).localPortC_Normal = extractPort(data.targetAddress || "[::]:0") || ""; // Local forward port
+          (defaultVals as any).tunnelAddressC_Normal = data.tunnelAddress || ""; 
+          (defaultVals as any).localHostC_Normal = extractHostname(data.targetAddress || "[::]:0") || "[::]"; 
+          (defaultVals as any).localPortC_Normal = extractPort(data.targetAddress || "[::]:0") || ""; 
         }
       } else if (role === 'T') {
-        defaultVals = {
+        defaultVals = { // targetAddressT is now for display only, not part of form for T
           ...defaultVals,
-          targetAddressT: data.targetAddress || "",
         };
       }
       form.reset(defaultVals as any);
@@ -202,18 +201,19 @@ export function EditTopologyNodeDialog({ open, onOpenChange, node, onSave }: Edi
         ...updatedData,
         isSingleEndedForwardC: values.isSingleEndedForwardC,
         logLevel: values.logLevelC,
-        tlsMode: values.tlsModeC, // This TLS mode applies to the C node's outgoing connection
+        tlsMode: values.tlsModeC, 
         certPath: values.tlsModeC === "2" ? values.certPathC : "",
         keyPath: values.tlsModeC === "2" ? values.keyPathC : "",
       };
       if (values.isSingleEndedForwardC) {
-        updatedData.tunnelAddress = `${formatHostForDisplay("[::]")}:${values.localListenPortC_Single}`; // C listens locally
-        updatedData.targetAddress = values.remoteTargetAddressC_Single; // C connects to this remote target
+        updatedData.tunnelAddress = `${formatHostForDisplay("[::]")}:${values.localListenPortC_Single}`; 
+        updatedData.targetAddress = values.remoteTargetAddressC_Single; 
       } else {
-        updatedData.tunnelAddress = values.tunnelAddressC_Normal; // C connects to this S
-        updatedData.targetAddress = `${formatHostForDisplay(values.localHostC_Normal || "[::]")}:${values.localPortC_Normal}`; // C forwards from local
+        updatedData.tunnelAddress = values.tunnelAddressC_Normal; 
+        updatedData.targetAddress = `${formatHostForDisplay(values.localHostC_Normal || "[::]")}:${values.localPortC_Normal}`; 
       }
-    } else if (role === 'T' && 'targetAddressT' in values) {
+    } else if (role === 'T') {
+      // No targetAddressT in form for 'T' role anymore
       updatedData = { label: values.label };
     }
     onSave(node.id, updatedData);
@@ -221,7 +221,7 @@ export function EditTopologyNodeDialog({ open, onOpenChange, node, onSave }: Edi
   };
 
   if (!node) return null;
-  const dialogTitle = role === 'M' ? "编辑 主控容器 属性" : role === 'S' ? "编辑 出口(s) 属性" : role === 'C' ? "编辑 入口(c) 属性" : "编辑 落地端 属性";
+  const dialogTitle = role === 'M' ? "编辑 主控容器 属性" : role === 'S' ? "编辑 出口(s) 属性" : role === 'C' ? "编辑 入口(c) 属性" : "编辑 落地 属性";
   const watchedMasterSubRole = role === 'M' ? form.watch('masterSubRoleM') : undefined;
   const watchedIsSingleEndedForwardC = role === 'C' ? form.watch('isSingleEndedForwardC') : false;
   const watchedClientTlsMode = role === 'C' ? form.watch('tlsModeC') : undefined;
@@ -365,7 +365,7 @@ export function EditTopologyNodeDialog({ open, onOpenChange, node, onSave }: Edi
             {role === 'T' && (
               <>
                  <FormDescription className="font-sans text-xs">
-                    落地端节点的“流量转发地址”通过连接的上游节点 (如 出口(s) 或 入口(c)) 自动同步，此处不可直接编辑。
+                    落地节点的“流量转发地址”通过连接的上游节点 (如 出口(s) 或 入口(c)) 自动同步，此处不可直接编辑。
                 </FormDescription>
               </>
             )}
@@ -379,3 +379,4 @@ export function EditTopologyNodeDialog({ open, onOpenChange, node, onSave }: Edi
     </Dialog>
   );
 }
+
