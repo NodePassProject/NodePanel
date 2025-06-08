@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useCallback, useState, useEffect, useMemo, useRef } from 'react';
@@ -57,14 +56,15 @@ export function TopologyEditor() {
   const { apiConfigsList, getApiConfigById, getApiRootUrl, getToken, activeApiConfig } = useApiConfig();
   const queryClient = useQueryClient();
 
-  const [isSubmitting, setIsSubmitting] = useState(false); // General flag for pre-check & dialog open
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSubmitConfirmOpen, setIsSubmitConfirmOpen] = useState(false);
   const [instancesForConfirmation, setInstancesForConfirmation] = useState<InstanceUrlConfigWithName[]>([]);
   const [isEditNodeDialogOpen, setIsEditNodeDialogOpen] = useState(false);
   const [editingNodeContext, setEditingNodeContext] = useState<{ node: Node; hasS: boolean } | null>(null);
   
   const sseHandshakeAbortControllerRef = useRef<AbortController | null>(null);
-  const handshakeLogRegex = /Event\s+Tunnel\s+handshaked:.*?in\s+(\d+)\s*ms/i;
+  // **优化点**: 正则表达式现在只关注 "logs" 字段的内容，更稳定
+  const handshakeLogRegex = /Tunnel handshaked:.*?in\s+(\d+)\s*ms/i;
 
 
   const getNodeById = useCallback((id: string): Node | undefined => nodesInternal.find((n) => n.id === id), [nodesInternal]);
@@ -82,14 +82,15 @@ export function TopologyEditor() {
       }));
     },
     onSuccess: (createdInstance, variables) => {
-      toast({ title: `实例创建成功`, description: `节点 ${variables.originalNodeId.substring(0,8)}... -> ID: ${createdInstance.id.substring(0,8)}...` });
+      // 这个通知是辅助性的，主要通知来自SSE
+      toast({ title: `实例创建请求成功`, description: `节点 ${variables.originalNodeId.substring(0,8)}... -> ID: ${createdInstance.id.substring(0,8)}...` });
       setNodesInternal(nds => nds.map(n => {
          if (n.id === variables.originalNodeId) {
             let message = `ID: ${createdInstance.id.substring(0,8)}...`;
             if (n.data.role === 'M' && n.data.submissionMessage && n.data.submissionMessage.startsWith('ID:')) {
                 message = `${n.data.submissionMessage}, ${message}`;
             }
-            return { ...n, data: { ...n.data, submissionStatus: 'success', submissionMessage: message } };
+            return { ...n, data: { ...n.data, submissionStatus: 'success', submissionMessage: message, originalInstanceId: createdInstance.id, originalInstanceUrl: variables.data.url } };
         }
         return n;
       }));
@@ -659,11 +660,11 @@ export function TopologyEditor() {
               tunnelAddress: node.data.tunnelAddress,
               targetAddress: node.data.targetAddress,
               logLevel: (node.data.logLevel as any) || masterConfigForNode.masterDefaultLogLevel || 'master',
-              tlsMode: (node.data.tlsMode as any) || '0', // Single-ended client defaults to no TLS for its connection *to target* if not specified
+              tlsMode: (node.data.tlsMode as any) || '0',
               certPath: node.data.certPath,
               keyPath: node.data.keyPath,
             };
-          } else { // Normal client connecting to an S
+          } else { 
             if (!node.data.tunnelAddress || !node.data.targetAddress) {
               setNodesInternal(nds => nds.map(n => n.id === node.id ? { ...n, data: { ...n.data, submissionStatus: 'error', submissionMessage: '地址不完整' } } : n));
               continue;
@@ -671,10 +672,10 @@ export function TopologyEditor() {
             urlParams = {
               instanceType: instanceTypeForBuild,
               isSingleEndedForward: false,
-              tunnelAddress: node.data.tunnelAddress, // This is the Server's address it connects to
-              targetAddress: node.data.targetAddress, // This is the local forward address for the client
+              tunnelAddress: node.data.tunnelAddress,
+              targetAddress: node.data.targetAddress,
               logLevel: (node.data.logLevel as any) || masterConfigForNode.masterDefaultLogLevel || 'master',
-              tlsMode: (node.data.tlsMode as any) || masterConfigForNode.masterDefaultTlsMode || 'master', // TLS for connection to S
+              tlsMode: (node.data.tlsMode as any) || masterConfigForNode.masterDefaultTlsMode || 'master',
               certPath: node.data.certPath,
               keyPath: node.data.keyPath,
             };
@@ -713,7 +714,7 @@ export function TopologyEditor() {
             instanceType: "入口(c)",
             isSingleEndedForward: false,
             tunnelAddress: clientTunnelAddressToRemote,
-            targetAddress: node.data.targetAddress, // Client local service address
+            targetAddress: node.data.targetAddress,
             logLevel: (node.data.logLevel as any) || clientMasterConfig.masterDefaultLogLevel || 'master',
             tlsMode: (node.data.tlsMode as any) || clientMasterConfig.masterDefaultTlsMode || 'master',
             certPath: node.data.certPath,
@@ -721,7 +722,7 @@ export function TopologyEditor() {
         };
         const clientFinalUrl = buildUrlFromFormValues(clientUrlParams, clientMasterConfig);
         instancesToCreate.push({
-            nodeId: node.id, // Use M node's ID for tracking this part
+            nodeId: node.id,
             nodeLabel: `${node.data.label} (入口部分)`,
             masterId: clientMasterConfig.id,
             masterName: clientMasterConfig.name,
@@ -731,8 +732,8 @@ export function TopologyEditor() {
 
         const serverUrlParams: BuildUrlParams = {
             instanceType: "出口(s)",
-            tunnelAddress: node.data.remoteServerListenAddress, // Server listen address on remote master
-            targetAddress: node.data.remoteServerForwardAddress, // Server forward address on remote master
+            tunnelAddress: node.data.remoteServerListenAddress,
+            targetAddress: node.data.remoteServerForwardAddress,
             logLevel: (node.data.logLevel as any) || serverMasterConfig.masterDefaultLogLevel || 'master',
             tlsMode: (node.data.tlsMode as any) || serverMasterConfig.masterDefaultTlsMode || 'master',
             certPath: (node.data.tlsMode === '2' && clientUrlParams.tlsMode === '2') ? node.data.certPath : "",
@@ -740,7 +741,7 @@ export function TopologyEditor() {
         };
         const serverFinalUrl = buildUrlFromFormValues(serverUrlParams, serverMasterConfig);
         instancesToCreate.push({
-            nodeId: node.id, // Use M node's ID for tracking this part as well
+            nodeId: node.id,
             nodeLabel: `${node.data.label} (出口部分 @ ${serverMasterConfig.name})`,
             masterId: serverMasterConfig.id,
             masterName: serverMasterConfig.name,
@@ -815,7 +816,7 @@ export function TopologyEditor() {
     await Promise.race([checkConnectionPromise, timeoutPromise]);
 
     if (!sseCheckSuccess) {
-        if (!ssePreCheckAbortController.signal.aborted) { // Ensure abort if not already done
+        if (!ssePreCheckAbortController.signal.aborted) {
             ssePreCheckAbortController.abort("Pre-check timeout or failure post-race");
         }
         toast({ title: "连接检查失败", description: "无法连接到主控事件流，请检查主控状态或网络。提交已取消。", variant: "destructive" });
@@ -833,9 +834,11 @@ export function TopologyEditor() {
     }
     setInstancesForConfirmation(instancesToCreate);
     setIsSubmitConfirmOpen(true);
-    // isSubmitting remains true until dialog is closed or submission finishes
   }, [activeApiConfig, getApiRootUrl, getToken, toast, prepareInstancesForSubmission, setNodesInternal]);
 
+  // ====================================================================
+  // ===== MODIFIED FUNCTION: SSE listener with robust parsing      =====
+  // ====================================================================
   const listenForHandshakeViaSSE = useCallback(async (
     masterForSse: NamedApiConfig,
     signal: AbortSignal
@@ -874,30 +877,43 @@ export function TopologyEditor() {
 
             buffer += decoder.decode(value, { stream: true });
             const messageBlocks = buffer.split('\n\n');
-            buffer = messageBlocks.pop() || '';
+            buffer = messageBlocks.pop() || ''; // Keep the last partial message
 
             for (const block of messageBlocks) {
+                if (signal.aborted) break;
                 if (block.trim() === '') continue;
+
+                // **优化点**: Robustly parse SSE fields instead of a single large regex
                 let eventName = 'message';
                 let eventDataStr = '';
                 const lines = block.split('\n');
                 for (const line of lines) {
-                    if (line.startsWith('event:')) eventName = line.substring('event:'.length).trim();
-                    else if (line.startsWith('data:')) eventDataStr += line.substring('data:'.length).trimStart();
+                    if (line.startsWith('event:')) {
+                        eventName = line.substring('event:'.length).trim();
+                    } else if (line.startsWith('data:')) {
+                        // Support multi-line data fields
+                        eventDataStr += line.substring('data:'.length).trimStart();
+                    }
                 }
 
                 if (eventName === 'instance' && eventDataStr) {
                     try {
                         const jsonData = JSON.parse(eventDataStr);
                         if (jsonData.type === 'log' && typeof jsonData.logs === 'string') {
+                            // Match against the log content only
                             const match = jsonData.logs.match(handshakeLogRegex);
                             if (match && match[1]) {
                                 const latency = match[1];
-                                toast({ title: "隧道握手成功", description: `延迟: ${latency}ms` });
+                                // **核心通知**: This is the important toast notification
+                                toast({ 
+                                    title: "✅ 隧道握手成功", 
+                                    description: `延迟: ${latency}ms` 
+                                });
+                                // Abort the listener since we found what we were looking for
                                 if (sseHandshakeAbortControllerRef.current && !sseHandshakeAbortControllerRef.current.signal.aborted) {
                                   sseHandshakeAbortControllerRef.current.abort("Handshake detected");
                                 }
-                                return; 
+                                return; // Exit the listener function
                             }
                         }
                     } catch (e) {
@@ -919,9 +935,40 @@ export function TopologyEditor() {
   }, [getApiRootUrl, getToken, toast, handshakeLogRegex]);
 
 
+  // ====================================================================
+  // ===== MODIFIED FUNCTION: Manages dialog state and full flow    =====
+  // ====================================================================
   const executeActualSubmission = useCallback(async () => {
-    // setIsSubmitConfirmOpen(false); // Dialog will close itself or onOpenChange will handle it
-    toast({ title: '开始提交拓扑...', description: `准备创建 ${instancesForConfirmation.length} 个实例。` });
+    // **修复点 1**: 立即关闭确认对话框
+    setIsSubmitConfirmOpen(false);
+
+    toast({ title: '拓扑已提交', description: `正在创建 ${instancesForConfirmation.length} 个实例并实时监听隧道握手事件...` });
+
+    if (activeApiConfig) {
+      if (sseHandshakeAbortControllerRef.current && !sseHandshakeAbortControllerRef.current.signal.aborted) {
+        sseHandshakeAbortControllerRef.current.abort("New submission handshake listener starting");
+      }
+      const newAbortController = new AbortController();
+      sseHandshakeAbortControllerRef.current = newAbortController;
+
+      listenForHandshakeViaSSE(activeApiConfig, newAbortController.signal);
+
+      setTimeout(() => {
+        if (newAbortController && !newAbortController.signal.aborted) {
+          if (newAbortController.signal.reason !== "Handshake detected") {
+             toast({
+                title: "监听超时",
+                description: "25秒内未检测到隧道握手事件。请检查Master日志。",
+                variant: "default"
+             });
+          }
+          newAbortController.abort("Handshake listener timeout");
+          if (sseHandshakeAbortControllerRef.current === newAbortController) {
+              sseHandshakeAbortControllerRef.current = null;
+          }
+        }
+      }, 25000); 
+    }
 
     const submissionPromises = instancesForConfirmation.map(inst => {
       const apiR = getApiRootUrl(inst.masterId);
@@ -935,35 +982,12 @@ export function TopologyEditor() {
 
     try {
         await Promise.allSettled(submissionPromises);
-        toast({ title: '拓扑提交处理完毕', description: '检查各节点状态。开始监听隧道握手...' });
-
-        if (activeApiConfig) {
-          if (sseHandshakeAbortControllerRef.current && !sseHandshakeAbortControllerRef.current.signal.aborted) {
-            sseHandshakeAbortControllerRef.current.abort("New submission handshake listener starting");
-          }
-          const newAbortController = new AbortController();
-          sseHandshakeAbortControllerRef.current = newAbortController;
-          
-          listenForHandshakeViaSSE(activeApiConfig, newAbortController.signal);
-
-          setTimeout(() => {
-            if (newAbortController && !newAbortController.signal.aborted) {
-              newAbortController.abort("Handshake listener timeout");
-              console.log("Handshake listener timed out.");
-              if (sseHandshakeAbortControllerRef.current === newAbortController) {
-                  sseHandshakeAbortControllerRef.current = null;
-              }
-            }
-          }, 25000); 
-        }
-
+        console.log('所有实例创建请求已发送完毕。');
     } catch (e) {
         console.error("拓扑提交出错:", e);
         toast({ title: '拓扑提交过程中发生意外错误', variant: 'destructive' });
     } finally {
         setIsSubmitting(false);
-        // Do not clear instancesForConfirmation, allow user to see submitted items.
-        // It will be cleared on next submit trigger.
     }
   }, [instancesForConfirmation, getApiRootUrl, getToken, toast, createInstanceMutation, setNodesInternal, activeApiConfig, listenForHandshakeViaSSE]);
   
@@ -975,7 +999,6 @@ export function TopologyEditor() {
         }
     };
   }, []);
-
 
   const handleOpenEditNodeDialog = (node: Node) => {
     let hasS = false;
@@ -1213,7 +1236,6 @@ const handleRenderMasterInstancesOnCanvas = useCallback(async (masterId: string)
                 internalNodeYOffset += CARD_NODE_HEIGHT + 15;
             } else if (inst.type === 'server') {
                 const serverNodeId = `s-${inst.id.substring(0, 8)}-${++currentIdCounter}`;
-                 // Adjust Y based on client nodes length if clients were added first in this loop
                 const serverYPos = internalNodeYOffset - (internalClientNodes.length * (CARD_NODE_HEIGHT + 15)) + (internalServerNodes.length * (CARD_NODE_HEIGHT + 15));
                 const serverNode: Node = {
                     id: serverNodeId, type: 'cardNode',
@@ -1510,7 +1532,7 @@ const handleRenderMasterInstancesOnCanvas = useCallback(async (masterId: string)
         onOpenChange={(isOpen) => {
             setIsSubmitConfirmOpen(isOpen);
             if (!isOpen && !createInstanceMutation.isPending) {
-                setIsSubmitting(false); // Reset if dialog closed and not in final submission phase
+                setIsSubmitting(false);
             }
         }}
         instancesToCreate={instancesForConfirmation}
@@ -1530,4 +1552,3 @@ const handleRenderMasterInstancesOnCanvas = useCallback(async (masterId: string)
     </div>
   );
 }
-    
