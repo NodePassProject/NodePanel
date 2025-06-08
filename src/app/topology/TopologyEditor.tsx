@@ -327,7 +327,11 @@ export function TopologyEditor() {
                     const defaultClientToConvert = updatedNodes[defaultClientToConvertIndex];
                     const effectiveServerMasterCfg = getEffectiveServerMasterConfig(sNode.data, (id) => newNodesList.concat(updatedNodes).find(n => n.id === id), getApiConfigById);
                     const newClientTunnelAddr = calculateClientTunnelAddressForServer(sNode.data, effectiveServerMasterCfg);
-                    const newClientTargetAddr = `[::]:${(parseInt(extractPort(sNode.data.tunnelAddress || "0") || "0", 10) + 1).toString()}`;
+                    
+                    let newClientTargetPort = parseInt(extractPort(sNode.data.tunnelAddress || "0") || "0", 10);
+                    if (newClientTargetPort > 0) newClientTargetPort++; else newClientTargetPort = 3001 + currentCounter;
+                    const newClientTargetAddr = `[::]:${newClientTargetPort.toString()}`;
+
 
                     updatedNodes[defaultClientToConvertIndex] = {
                         ...defaultClientToConvert,
@@ -452,7 +456,11 @@ export function TopologyEditor() {
                     const firstSNode = sNodesInParent[0]; // Connect to the first available S node by default
                     const effectiveServerMasterCfg = getEffectiveServerMasterConfig(firstSNode.data, getNodeById, getApiConfigById);
                     newNodeData.tunnelAddress = calculateClientTunnelAddressForServer(firstSNode.data, effectiveServerMasterCfg);
-                    newNodeData.targetAddress = `[::]:${(parseInt(extractPort(firstSNode.data.tunnelAddress || "0") || "0", 10) + 1).toString()}`;
+                    
+                    let newClientTargetPortForS = parseInt(extractPort(firstSNode.data.tunnelAddress || "0") || "0", 10);
+                    if (newClientTargetPortForS > 0) newClientTargetPortForS++; else newClientTargetPortForS = 3001 + currentCounter;
+                    newNodeData.targetAddress = `[::]:${newClientTargetPortForS.toString()}`;
+
                     newNodeData.tlsMode = parentMContainer.data.defaultTlsMode || 'master';
                 }
             } else { // Not in a parent container (shouldn't happen based on check above, but defensive)
@@ -484,7 +492,10 @@ export function TopologyEditor() {
                             const defaultClientToConvert = updatedNodes[defaultClientToConvertIndex];
                             const effectiveServerMasterCfg = getEffectiveServerMasterConfig(newNode.data, (id) => newNodesList.concat(updatedNodes).find(n => n.id === id), getApiConfigById);
                             const newClientTunnelAddr = calculateClientTunnelAddressForServer(newNode.data, effectiveServerMasterCfg);
-                            const newClientTargetAddr = `[::]:${(parseInt(extractPort(newNode.data.tunnelAddress || "0") || "0", 10) + 1).toString()}`;
+                            
+                            let newClientTargetPortForNewS = parseInt(extractPort(newNode.data.tunnelAddress || "0") || "0", 10);
+                            if (newClientTargetPortForNewS > 0) newClientTargetPortForNewS++; else newClientTargetPortForNewS = 3001 + currentCounter;
+                            const newClientTargetAddr = `[::]:${newClientTargetPortForNewS.toString()}`;
 
                             updatedNodes[defaultClientToConvertIndex] = {
                                 ...defaultClientToConvert,
@@ -959,28 +970,26 @@ export function TopologyEditor() {
       
       const clientInstancesRaw = validInstances.filter(inst => inst.type === 'client');
       const serverInstancesRaw = validInstances.filter(inst => inst.type === 'server');
+      const clientNodesMap = new Map<string, Node>(); 
+      const serverNodesMap = new Map<string, Node>(); 
+      const landingNodesMap = new Map<string, string>(); 
+      const pairedServerInstanceIds = new Set<string>();
 
       // Create the main master container node
       const masterNodeId = `master-container-${masterConfig.id.substring(0,8)}-${++currentIdCounter}`;
       const masterNode: Node = {
         id: masterNodeId,
         type: 'masterNode',
-        position: { x: 250, y: 50 }, // Initial position
+        position: { x: 250, y: 50 }, // Initial position, will be adjusted
         data: {
           label: `主控: ${masterConfig.name}`, role: 'M', isContainer: true,
           masterId: masterConfig.id, masterName: masterConfig.name,
           apiUrl: masterConfig.apiUrl, defaultLogLevel: masterConfig.masterDefaultLogLevel,
           defaultTlsMode: masterConfig.masterDefaultTlsMode, masterSubRole: 'primary',
         },
-        style: { ...nodeStyles.m.base, minWidth: 250, minHeight: 150 },
+        style: { ...nodeStyles.m.base, minWidth: 250, minHeight: 150 }, // Initial style
       };
       newRenderedNodes.push(masterNode);
-
-      // Store created nodes for edge creation
-      const clientNodesMap = new Map<string, Node>(); // originalInstanceId -> Node
-      const serverNodesMap = new Map<string, Node>(); // originalInstanceId -> Node
-      const landingNodesMap = new Map<string, string>(); // targetAddressKey -> NodeId
-      const pairedServerInstanceIds = new Set<string>(); // Store IDs of servers already paired with an internal client
 
       let internalNodeYOffset = 40;
       const internalNodeXOffsetBase = 20;
@@ -1000,7 +1009,7 @@ export function TopologyEditor() {
             tunnelAddress: parsedClientUrl.tunnelAddress || '', targetAddress: parsedClientUrl.targetAddress || '',
             logLevel: parsedClientUrl.logLevel || 'master', tlsMode: parsedClientUrl.tlsMode || '0',
             certPath: parsedClientUrl.certPath || '', keyPath: parsedClientUrl.keyPath || '',
-            isSingleEndedForwardC: parsedClientUrl.tunnelAddress?.startsWith('[::]:') || parsedClientUrl.tunnelAddress?.startsWith('0.0.0.0:'), // Heuristic
+            isSingleEndedForwardC: parsedClientUrl.tunnelAddress?.startsWith('[::]:') || parsedClientUrl.tunnelAddress?.startsWith('0.0.0.0:'),
           },
           width: CARD_NODE_WIDTH, height: CARD_NODE_HEIGHT,
         };
@@ -1009,8 +1018,7 @@ export function TopologyEditor() {
         internalNodeYOffset += internalNodeSpacing;
       });
       
-      let serverNodeYOffset = 40; // Reset Y offset for servers if placing in a new column
-      // Render server instances inside the master node
+      let serverNodeYOffset = 40; 
       serverInstancesRaw.forEach(serverInst => {
         const parsedServerUrl = parseNodePassUrl(serverInst.url);
         const serverNodeId = `s-${serverInst.id.substring(0,8)}-${++currentIdCounter}`;
@@ -1032,49 +1040,51 @@ export function TopologyEditor() {
         serverNodeYOffset += internalNodeSpacing;
       });
 
-      // Create U (User) node - a single one for all ingress
+      // Adjust master node size based on content
+      const maxInternalClientY = clientInstancesRaw.length > 0 ? Math.max(...Array.from(clientNodesMap.values()).map(n => n.position.y + (n.height || CARD_NODE_HEIGHT))) : 0;
+      const maxInternalServerY = serverInstancesRaw.length > 0 ? Math.max(...Array.from(serverNodesMap.values()).map(n => n.position.y + (n.height || CARD_NODE_HEIGHT))) : 0;
+      const requiredHeight = Math.max(maxInternalClientY, maxInternalServerY, 100) + 40; 
+      const requiredWidth = (CARD_NODE_WIDTH * 2) + 120; 
+
+      const masterContainerNodeInList = newRenderedNodes.find(n => n.id === masterNodeId)!;
+      masterContainerNodeInList.style = { ...masterContainerNodeInList.style, width: requiredWidth, height: requiredHeight };
+      masterContainerNodeInList.width = requiredWidth;
+      masterContainerNodeInList.height = requiredHeight;
+      
+      // Create U (User) node
       const uNodeId = `u-global-${masterConfig.id.substring(0,5)}-${++currentIdCounter}`;
-      const uNode: Node = {
+      newRenderedNodes.push({
         id: uNodeId, type: 'cardNode',
-        position: { x: masterNode.position.x - CARD_NODE_WIDTH - 80, y: masterNode.position.y + 50 },
+        position: { x: masterNode.position.x - CARD_NODE_WIDTH - 80, y: masterNode.position.y + (requiredHeight / 2) - (CARD_NODE_HEIGHT / 2) },
         data: { label: '用户/服务', role: 'U', icon: User },
         width: CARD_NODE_WIDTH, height: CARD_NODE_HEIGHT,
-      };
-      newRenderedNodes.push(uNode);
+      });
 
-      let tNodeYOffset = masterNode.position.y; // Initial Y for T nodes
+      let tNodeYOffset = masterNode.position.y; 
 
-      // Process connections
       clientInstancesRaw.forEach(clientInst => {
         const clientNode = clientNodesMap.get(clientInst.id);
         if (!clientNode) return;
-
-        newRenderedEdges.push({ id: `edge-${uNode.id}-${clientNode.id}`, source: uNode.id, target: clientNode.id, type: 'smoothstep', markerEnd: { type: MarkerType.ArrowClosed }});
-
-        const parsedClientUrl = parseNodePassUrl(clientInst.url);
+        newRenderedEdges.push({ id: `edge-${uNodeId}-${clientNode.id}`, source: uNodeId, target: clientNode.id, type: 'smoothstep', markerEnd: { type: MarkerType.ArrowClosed }});
         
-        // Check for internal S connection
+        const parsedClientUrl = parseNodePassUrl(clientInst.url);
         let connectedToInternalServer = false;
+
         if (parsedClientUrl.tunnelAddress && !(clientNode.data as CustomNodeData).isSingleEndedForwardC) {
             const clientConnectsToHost = extractHostname(parsedClientUrl.tunnelAddress);
             const clientConnectsToPort = extractPort(parsedClientUrl.tunnelAddress);
+            const masterApiHostname = extractHostname(masterConfig.apiUrl);
 
             const targetServerRaw = serverInstancesRaw.find(sInst => {
                 const parsedLocalServerUrl = parseNodePassUrl(sInst.url);
                 if (!parsedLocalServerUrl.tunnelAddress) return false;
                 const localServerListenHost = extractHostname(parsedLocalServerUrl.tunnelAddress);
                 const localServerListenPort = extractPort(parsedLocalServerUrl.tunnelAddress);
+                
                 if (clientConnectsToPort !== localServerListenPort) return false;
-
-                const masterApiHostname = extractHostname(masterConfig.apiUrl);
                 if (clientConnectsToHost === localServerListenHost) return true;
-                if (isWildcardHostname(localServerListenHost)) {
-                    if (clientConnectsToHost === masterApiHostname) return true;
-                    if (clientConnectsToHost === 'localhost' || clientConnectsToHost === '127.0.0.1' || clientConnectsToHost === '[::1]') return true;
-                }
-                 if ((clientConnectsToHost === 'localhost' || clientConnectsToHost === '127.0.0.1' || clientConnectsToHost === '[::1]') &&
-                    (localServerListenHost === 'localhost' || localServerListenHost === '127.0.0.1' || localServerListenHost === '[::1]')) return true;
-
+                if (isWildcardHostname(localServerListenHost) && (clientConnectsToHost === masterApiHostname || clientConnectsToHost === 'localhost' || clientConnectsToHost === '127.0.0.1' || clientConnectsToHost === '[::1]')) return true;
+                if ((clientConnectsToHost === 'localhost' || clientConnectsToHost === '127.0.0.1' || clientConnectsToHost === '[::1]') && (localServerListenHost === 'localhost' || localServerListenHost === '127.0.0.1' || localServerListenHost === '[::1]' || isWildcardHostname(localServerListenHost))) return true;
                 return false;
             });
 
@@ -1087,30 +1097,26 @@ export function TopologyEditor() {
                 }
             }
         }
-
-        // If client is single-ended OR connects externally (not to an internal server)
+        
         if ((clientNode.data as CustomNodeData).isSingleEndedForwardC || (!connectedToInternalServer && parsedClientUrl.tunnelAddress)) {
             const targetAddressKey = (clientNode.data as CustomNodeData).isSingleEndedForwardC ? parsedClientUrl.targetAddress! : parsedClientUrl.tunnelAddress!;
             const tNodeRoleLabel = (clientNode.data as CustomNodeData).isSingleEndedForwardC ? `远程目标` : `外部出口(s)`;
-            
             let tNodeLabel = `${tNodeRoleLabel} @ ${targetAddressKey}`;
-            if (!(clientNode.data as CustomNodeData).isSingleEndedForwardC) { // External server connection
+            if (!(clientNode.data as CustomNodeData).isSingleEndedForwardC) {
                  for (const otherMaster of apiConfigsList) {
                     if (otherMaster.id === masterConfig.id) continue;
                     const otherMasterApiHost = extractHostname(otherMaster.apiUrl);
                     if (extractHostname(targetAddressKey) === otherMasterApiHost) {
-                        tNodeLabel = `出口(s) @ ${otherMaster.name} (${targetAddressKey})`;
-                        break;
+                        tNodeLabel = `出口(s) @ ${otherMaster.name} (${targetAddressKey})`; break;
                     }
                 }
             }
-
             let tNodeId = landingNodesMap.get(targetAddressKey);
             if (!tNodeId) {
                 tNodeId = `t-${targetAddressKey.replace(/[^a-zA-Z0-9]/g, '')}-${++currentIdCounter}`;
                 newRenderedNodes.push({
                     id: tNodeId, type: 'cardNode',
-                    position: { x: masterNode.position.x + (masterNode.width ?? M_NODE_WIDTH) + 150, y: tNodeYOffset },
+                    position: { x: masterNode.position.x + requiredWidth + 150, y: tNodeYOffset },
                     data: { label: tNodeLabel, role: 'T', icon: Globe, targetAddress: targetAddressKey },
                     width: CARD_NODE_WIDTH, height: CARD_NODE_HEIGHT,
                 });
@@ -1124,13 +1130,9 @@ export function TopologyEditor() {
       serverInstancesRaw.forEach(serverInst => {
         const serverNode = serverNodesMap.get(serverInst.id);
         if (!serverNode) return;
-
-        // If server is not paired with an internal client, it's an entry point from U
         if (!pairedServerInstanceIds.has(serverInst.id)) {
-             newRenderedEdges.push({ id: `edge-${uNode.id}-${serverNode.id}`, source: uNode.id, target: serverNode.id, type: 'smoothstep', markerEnd: { type: MarkerType.ArrowClosed }});
+             newRenderedEdges.push({ id: `edge-${uNodeId}-${serverNode.id}`, source: uNodeId, target: serverNode.id, type: 'smoothstep', markerEnd: { type: MarkerType.ArrowClosed }});
         }
-
-        // Connect server to its T (target service)
         const parsedServerUrl = parseNodePassUrl(serverInst.url);
         if (parsedServerUrl.targetAddress) {
             const targetAddressKey = parsedServerUrl.targetAddress;
@@ -1139,7 +1141,7 @@ export function TopologyEditor() {
                 tNodeId = `t-${targetAddressKey.replace(/[^a-zA-Z0-9]/g, '')}-${++currentIdCounter}`;
                 newRenderedNodes.push({
                     id: tNodeId, type: 'cardNode',
-                    position: { x: masterNode.position.x + (masterNode.width ?? M_NODE_WIDTH) + 150, y: tNodeYOffset },
+                    position: { x: masterNode.position.x + requiredWidth + 150, y: tNodeYOffset },
                     data: { label: `本地服务 @ ${targetAddressKey}`, role: 'T', icon: Globe, targetAddress: targetAddressKey },
                     width: CARD_NODE_WIDTH, height: CARD_NODE_HEIGHT,
                 });
@@ -1150,22 +1152,6 @@ export function TopologyEditor() {
         }
       });
       
-      // Adjust master node size based on content
-      const maxInternalClientY = clientInstancesRaw.length > 0 ? Math.max(...clientInstancesRaw.map((_,idx) => 40 + idx * (CARD_NODE_HEIGHT + 20) + CARD_NODE_HEIGHT )) : 0;
-      const maxInternalServerY = serverInstancesRaw.length > 0 ? Math.max(...serverInstancesRaw.map((_,idx) => 40 + idx * (CARD_NODE_HEIGHT + 20) + CARD_NODE_HEIGHT )) : 0;
-      const requiredHeight = Math.max(maxInternalClientY, maxInternalServerY, 100) + 40; // Padding
-      const requiredWidth = (CARD_NODE_WIDTH * 2) + 120; // Two columns of cards + spacing
-
-      const masterContainerNodeIndex = newRenderedNodes.findIndex(n => n.id === masterNodeId);
-      if (masterContainerNodeIndex !== -1) {
-        newRenderedNodes[masterContainerNodeIndex].style = {
-          ...newRenderedNodes[masterContainerNodeIndex].style,
-          width: requiredWidth, height: requiredHeight,
-        };
-        newRenderedNodes[masterContainerNodeIndex].width = requiredWidth;
-        newRenderedNodes[masterContainerNodeIndex].height = requiredHeight;
-      }
-
       setNodesInternal(newRenderedNodes);
       setEdgesInternal(newRenderedEdges);
       setNodeIdCounter(currentIdCounter);
