@@ -946,7 +946,7 @@ export function TopologyEditor() {
       const mNodeMinHeight = 200;
       const mNodeWidth = Math.max(mNodeMinWidth, Math.min(fetchedInstances.length, instanceNodesPerRow) * (CARD_NODE_WIDTH + 20) + 40);
       const mNodeHeight = Math.max(mNodeMinHeight, Math.ceil(fetchedInstances.length / instanceNodesPerRow) * (CARD_NODE_HEIGHT + 20) + 40);
-      const mNodePosition = { x: 250, y: 150 }; // Initial position, might be adjusted by fitView
+      const mNodePosition = { x: 250 + CARD_NODE_WIDTH + 80, y: 150 }; // Shift M to make space for U
 
       const mNode: Node = {
         id: mNodeId,
@@ -970,7 +970,6 @@ export function TopologyEditor() {
       };
       newRenderedNodes.push(mNode);
 
-      const instanceNodesMap = new Map<string, Node>();
       const clientNodes: Node[] = [];
       const serverNodes: Node[] = [];
 
@@ -1007,14 +1006,13 @@ export function TopologyEditor() {
           height: CARD_NODE_HEIGHT,
         };
         newRenderedNodes.push(instanceNode);
-        instanceNodesMap.set(instance.id, instanceNode);
         if (nodeRole === 'C') clientNodes.push(instanceNode);
         if (nodeRole === 'S') serverNodes.push(instanceNode);
       });
 
-      // Infer C-S connections
+      // Infer C-S connections within the master
       clientNodes.forEach(cNode => {
-        if (cNode.data.isSingleEndedForwardC) return; // Single-ended clients don't connect to S nodes in this way
+        if (cNode.data.isSingleEndedForwardC) return;
         const clientParsedUrl = parseNodePassUrl(cNode.data.originalInstanceUrl!);
         if (clientParsedUrl.tunnelAddress) {
           serverNodes.forEach(sNode => {
@@ -1042,76 +1040,49 @@ export function TopologyEditor() {
           });
         }
       });
-
-      // Add U and T nodes
-      const landingNodesMap = new Map<string, Node>(); // To avoid duplicate T nodes for the same target
-      const userNodeVerticalOffset = 50;
-      const landingNodeVerticalOffset = 50;
-      let userNodeIndex = 0;
-      let landingNodeIndex = 0;
-
-      clientNodes.forEach(cNode => {
-        const uId = `u-for-${cNode.id}-${++currentIdCounter}`;
-        const userNode: Node = {
+      
+      // Add U Node if there are any clients
+      if (clientNodes.length > 0) {
+        const uId = `u-for-master-${mNodeId}-${++currentIdCounter}`;
+        const uNode: Node = {
           id: uId, type: 'cardNode',
-          position: { x: mNodePosition.x - CARD_NODE_WIDTH - 80, y: mNodePosition.y + userNodeIndex * (CARD_NODE_HEIGHT + 20) },
+          position: { x: mNodePosition.x - CARD_NODE_WIDTH - 80, y: mNodePosition.y + (mNodeHeight / 2) - (CARD_NODE_HEIGHT / 2) },
           data: { label: '用户', role: 'U', icon: User },
           width: CARD_NODE_WIDTH, height: CARD_NODE_HEIGHT,
         };
-        newRenderedNodes.push(userNode);
+        newRenderedNodes.push(uNode);
         newRenderedEdges.push({
-          id: `edge-${uId}-${cNode.id}`, source: uId, target: cNode.id, type: 'smoothstep',
+          id: `edge-${uId}-${mNodeId}`, source: uId, target: mNodeId, type: 'smoothstep', targetHandle: 'm-left',
           markerEnd: { type: MarkerType.ArrowClosed }, animated: true, style: { strokeDasharray: '5 5' },
         });
-        userNodeIndex++;
+      }
 
+      // Add T Nodes for unique target addresses from S and single-ended C
+      const uniqueTargetAddresses = new Set<string>();
+      serverNodes.forEach(sNode => {
+        if (sNode.data.targetAddress) uniqueTargetAddresses.add(sNode.data.targetAddress);
+      });
+      clientNodes.forEach(cNode => {
         if (cNode.data.isSingleEndedForwardC && cNode.data.targetAddress) {
-          const targetAddrKey = cNode.data.targetAddress;
-          let tNode: Node;
-          if (landingNodesMap.has(targetAddrKey)) {
-            tNode = landingNodesMap.get(targetAddrKey)!;
-          } else {
-            const tId = `t-to-${targetAddrKey.replace(/[^a-zA-Z0-9]/g, '')}-${++currentIdCounter}`;
-            tNode = {
-              id: tId, type: 'cardNode',
-              position: { x: mNodePosition.x + mNodeWidth + 80, y: mNodePosition.y + landingNodeIndex * (CARD_NODE_HEIGHT + 20) },
-              data: { label: `落地: ${targetAddrKey.substring(0,15)}...`, role: 'T', icon: Globe, targetAddress: targetAddrKey },
-              width: CARD_NODE_WIDTH, height: CARD_NODE_HEIGHT,
-            };
-            newRenderedNodes.push(tNode);
-            landingNodesMap.set(targetAddrKey, tNode);
-            landingNodeIndex++;
-          }
-          newRenderedEdges.push({
-            id: `edge-${cNode.id}-${tNode.id}`, source: cNode.id, target: tNode.id, type: 'smoothstep',
-            markerEnd: { type: MarkerType.ArrowClosed }, animated: true, style: { strokeDasharray: '5 5' },
-          });
+          uniqueTargetAddresses.add(cNode.data.targetAddress);
         }
       });
 
-      serverNodes.forEach(sNode => {
-        if (sNode.data.targetAddress) {
-          const targetAddrKey = sNode.data.targetAddress;
-          let tNode: Node;
-          if (landingNodesMap.has(targetAddrKey)) {
-            tNode = landingNodesMap.get(targetAddrKey)!;
-          } else {
-            const tId = `t-to-${targetAddrKey.replace(/[^a-zA-Z0-9]/g, '')}-${++currentIdCounter}`;
-             tNode = {
-              id: tId, type: 'cardNode',
-              position: { x: mNodePosition.x + mNodeWidth + 80, y: mNodePosition.y + landingNodeIndex * (CARD_NODE_HEIGHT + 20) },
-              data: { label: `落地: ${targetAddrKey.substring(0,15)}...`, role: 'T', icon: Globe, targetAddress: targetAddrKey },
-              width: CARD_NODE_WIDTH, height: CARD_NODE_HEIGHT,
-            };
-            newRenderedNodes.push(tNode);
-            landingNodesMap.set(targetAddrKey, tNode);
-            landingNodeIndex++;
-          }
-          newRenderedEdges.push({
-            id: `edge-${sNode.id}-${tNode.id}`, source: sNode.id, target: tNode.id, type: 'smoothstep',
-            markerEnd: { type: MarkerType.ArrowClosed }, animated: true, style: { strokeDasharray: '5 5' },
-          });
-        }
+      let landingNodeIndex = 0;
+      uniqueTargetAddresses.forEach(targetAddr => {
+        const tId = `t-to-${targetAddr.replace(/[^a-zA-Z0-9]/g, '')}-${++currentIdCounter}`;
+        const tNode: Node = {
+          id: tId, type: 'cardNode',
+          position: { x: mNodePosition.x + mNodeWidth + 80, y: mNodePosition.y + landingNodeIndex * (CARD_NODE_HEIGHT + 20) },
+          data: { label: `落地: ${targetAddr.substring(0,15)}...`, role: 'T', icon: Globe, targetAddress: targetAddr },
+          width: CARD_NODE_WIDTH, height: CARD_NODE_HEIGHT,
+        };
+        newRenderedNodes.push(tNode);
+        newRenderedEdges.push({
+          id: `edge-${mNodeId}-${tId}`, source: mNodeId, target: tId, type: 'smoothstep', sourceHandle: 'm-right',
+          markerEnd: { type: MarkerType.ArrowClosed }, animated: true, style: { strokeDasharray: '5 5' },
+        });
+        landingNodeIndex++;
       });
 
 
@@ -1120,7 +1091,7 @@ export function TopologyEditor() {
       setNodeIdCounter(currentIdCounter);
 
       setTimeout(() => {
-        fitView({ duration: 400, padding: 0.2 });
+        fitView({ duration: 400, padding: 0.3 }); // Increased padding a bit
       }, 100);
 
       toast({ title: `主控 ${masterConfig.name} 的实例已渲染。`, description: `共 ${fetchedInstances.filter(i => i.id !== '********').length} 个实例。`});
@@ -1137,7 +1108,7 @@ export function TopologyEditor() {
   return (
     <div ref={editorContainerRef} className="flex flex-col flex-grow h-full relative">
       <div className="flex flex-row flex-grow h-full overflow-hidden">
-        <div className="w-60 flex-shrink-0 flex flex-col border-r bg-muted/30 p-2">
+        <ScrollArea className="w-60 flex-shrink-0 border-r bg-muted/30 p-2">
           <div className="flex flex-col h-full bg-background rounded-lg shadow-md border">
             <div className="flex flex-col p-3">
               <h2 className="text-sm font-semibold font-title mb-1 flex items-center">
@@ -1168,7 +1139,7 @@ export function TopologyEditor() {
               <div className="flex-grow overflow-y-hidden"><PropertiesDisplayPanel selectedNode={selectedNode} /></div>
             </div>
           </div>
-        </div>
+        </ScrollArea>
         <div className="flex-grow flex flex-col overflow-hidden p-2">
           <div className="flex-grow relative">
             <div className="absolute inset-0">
@@ -1227,3 +1198,4 @@ export function TopologyEditor() {
     </div>
   );
 }
+
