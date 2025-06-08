@@ -3,7 +3,7 @@
 
 import type { CustomNodeData, Node } from './topologyTypes';
 import type { NamedApiConfig } from '@/hooks/use-api-key';
-import { extractHostname, isWildcardHostname, formatHostForUrl } from '@/lib/url-utils';
+import { extractHostname, extractPort, isWildcardHostname, formatHostForUrl } from '@/lib/url-utils';
 
 // Helper function to determine the effective master config for a server node
 export function getEffectiveServerMasterConfig(
@@ -34,7 +34,7 @@ export function calculateClientTunnelAddressForServer(
   }
 
   const serverListenHost = extractHostname(serverNodeData.tunnelAddress || "");
-  const serverListenPort = extractHostname(serverNodeData.tunnelAddress || "") ? extractPort(serverNodeData.tunnelAddress || "") : serverNodeData.tunnelAddress; // If only port provided for server, tunnelAddress is port
+  const serverListenPort = extractPort(serverNodeData.tunnelAddress || ""); // If only port provided for server, tunnelAddress is port
 
   let clientEffectiveTunnelHost = serverListenHost;
 
@@ -50,5 +50,16 @@ export function calculateClientTunnelAddressForServer(
     return `${formatHostForUrl(clientEffectiveTunnelHost)}:${serverListenPort}`;
   }
   
+  // Fallback if port or host couldn't be determined for construction, return original or empty.
+  // This case might happen if serverNodeData.tunnelAddress is only a port number.
+  if (serverListenPort && (!clientEffectiveTunnelHost || clientEffectiveTunnelHost.trim() === "")) {
+    // If we have a port but no host, it implies a local server, usually represented as [::]:port or 0.0.0.0:port
+    // However, for a client connecting, this isn't enough.
+    // If the original tunnelAddress was just a port, this function might not be able to resolve it to a full address
+    // without more context or assumptions. Returning the original tunnelAddress in such edge cases.
+    return serverNodeData.tunnelAddress || "";
+  }
+  
   return serverNodeData.tunnelAddress || "";
 }
+
