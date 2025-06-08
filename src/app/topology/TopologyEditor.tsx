@@ -10,8 +10,6 @@ import {
   useReactFlow,
   type Connection,
   type Edge,
-  type OnNodesChange,
-  type OnEdgesChange,
 } from 'reactflow';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Server, DatabaseZap, Cable, UserCircle2 as User, Globe, Cog, ListTree, Puzzle, Info as InfoIcon } from 'lucide-react';
@@ -34,25 +32,15 @@ import { SubmitTopologyConfirmationDialog, type InstanceUrlConfigWithName } from
 import { EditTopologyNodeDialog } from './components/EditTopologyNodeDialog';
 
 import type { Node, CustomNodeData, NodeRole, TopologyContextMenu } from './topologyTypes';
-import { CARD_NODE_WIDTH, CARD_NODE_HEIGHT, nodeStyles } from './NodeRenderer';
+import { CARD_NODE_WIDTH, CARD_NODE_HEIGHT, M_NODE_FOR_LINK_WIDTH, M_NODE_FOR_LINK_HEIGHT, nodeStyles } from './NodeRenderer';
 import { getEffectiveServerMasterConfig, calculateClientTunnelAddressForServer } from './topologyLogic';
 
 const initialNodes: Node[] = [];
 const initialEdges: Edge[] = [];
 
-const TOTAL_ZOOM_LEVELS = 10;
-const TARGET_ZOOM_LEVEL = 4;
-const MIN_ZOOM = 0.1;
-const MAX_ZOOM = 1.0;
-const zoomStep = (MAX_ZOOM - MIN_ZOOM) / (TOTAL_ZOOM_LEVELS - 1);
-const initialZoom = MIN_ZOOM + (TARGET_ZOOM_LEVEL - 1) * zoomStep;
-
-const M_NODE_FOR_LINK_WIDTH = 200;
-const M_NODE_FOR_LINK_HEIGHT = 60;
 const DEFAULT_MASTER_NODE_WIDTH = 300;
 const DEFAULT_MASTER_NODE_HEIGHT = 200;
 const MIN_MASTER_NODE_HEIGHT = 150;
-const MASTER_CONTAINER_SPACING = 100;
 
 
 export function TopologyEditor() {
@@ -62,13 +50,14 @@ export function TopologyEditor() {
   const [nodeIdCounter, setNodeIdCounter] = useState(0);
   const { toast } = useToast();
   const reactFlowWrapperRef = useRef<HTMLDivElement>(null);
-  const { deleteElements, fitView, getViewport, setViewport } = useReactFlow();
+  const { deleteElements, fitView } = useReactFlow();
   const [contextMenu, setContextMenu] = useState<TopologyContextMenu | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const editorContainerRef = useRef<HTMLDivElement>(null);
   const { apiConfigsList, getApiConfigById, getApiRootUrl, getToken, activeApiConfig } = useApiConfig();
   const queryClient = useQueryClient();
-  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const [isSubmitting, setIsSubmitting] = useState(false); // General flag for pre-check & dialog open
   const [isSubmitConfirmOpen, setIsSubmitConfirmOpen] = useState(false);
   const [instancesForConfirmation, setInstancesForConfirmation] = useState<InstanceUrlConfigWithName[]>([]);
   const [isEditNodeDialogOpen, setIsEditNodeDialogOpen] = useState(false);
@@ -155,22 +144,20 @@ export function TopologyEditor() {
         toast({ title: '连接无效', description: '用户端 (U) 节点不能被其他节点链接。', variant: 'destructive' });
         return;
       }
-      if (sourceNode.data.role === 'U' && targetNode.data.role !== 'M' && targetNode.data.role !== 'C') {
+       if (sourceNode.data.role === 'U' && targetNode.data.role !== 'M' && targetNode.data.role !== 'C') {
         toast({ title: '连接无效', description: '用户端 (U) 节点只能链接到主控 (M) 或 入口(c) 节点。', variant: 'destructive' });
         return;
       }
-
 
       if (sourceNode.data.role === 'T') {
         toast({ title: '连接无效', description: '落地 (T) 节点不能作为连接的起点。', variant: 'destructive' });
         return;
       }
-
+      
       if (sourceNode.data.role === 'C' && sourceNode.data.isSingleEndedForwardC && targetNode.data.role === 'S' && sourceNode.data.parentNode === targetNode.data.parentNode) {
         toast({ title: '连接无效', description: '单端转发模式的入口(c)不能连接到同一主控内的出口(s)。', variant: 'destructive' });
         return;
       }
-
 
       if (targetNode.data.role === 'T') {
         const sourceIsConnectableToT = sourceNode.data.role === 'S' || (sourceNode.data.role === 'C' && !sourceNode.data.isSingleEndedForwardC) || (sourceNode.data.role === 'M' && sourceNode.data.masterSubRole === 'client-role');
@@ -311,14 +298,14 @@ export function TopologyEditor() {
 
       if (type === 'master' && draggedData) {
           if (parentMContainer) {
-              const sNodeId = `s-from-master-${draggedData.id.substring(0, 8)}-${++currentCounter}`;
+              const sNodeId = `s-from-master-${draggedData.id.substring(0, 8)}-${uuidv4().substring(0,4)}`;
               const relativePosition = { x: position.x - parentMContainer.position.x - (CARD_NODE_WIDTH / 2), y: position.y - parentMContainer.position.y - (CARD_NODE_HEIGHT / 2) };
               const sNode: Node = {
                   id: sNodeId, type: 'cardNode', position: relativePosition, parentNode: parentMContainer.id, extent: 'parent',
                   data: {
                       label: `出口(s): ${draggedData.name}`, role: 'S', icon: Server, parentNode: parentMContainer.id,
                       representedMasterId: draggedData.id, representedMasterName: draggedData.name,
-                      tunnelAddress: `[::]:${10000 + currentCounter}`,
+                      tunnelAddress: `[::]:${10000 + ++currentCounter}`,
                       targetAddress: `127.0.0.1:${3000 + currentCounter}`,
                       logLevel: draggedData.masterDefaultLogLevel || parentMContainer.data.defaultLogLevel || 'master',
                       tlsMode: draggedData.masterDefaultTlsMode || parentMContainer.data.defaultTlsMode || 'master',
@@ -373,10 +360,11 @@ export function TopologyEditor() {
               toast({ title: "出口(s)节点已添加至主控容器" });
 
           } else {
-              const mId = `master-${draggedData.id.substring(0, 8)}-${++currentCounter}`;
+              const mId = `master-${draggedData.id.substring(0, 8)}-${uuidv4().substring(0,4)}`;
               const uId = `user-for-${mId}`;
               const cId = `default-client-for-${mId}`;
               const tId = `default-tunnel-for-${mId}`;
+              currentCounter++;
 
               newNodesList.push({
                   id: mId, type: 'masterNode', position,
@@ -444,8 +432,8 @@ export function TopologyEditor() {
               toast({ title: "操作无效", description: `请将 ${labelPrefix} (${nodeRole}) 拖拽到主控 (M) 容器内。`, variant: "destructive" });
               return;
           }
-
-          const newNodeId = `${nodeRole.toLowerCase()}-${uuidv4().substring(0,8)}`; // Ensure unique ID for new nodes
+          currentCounter++;
+          const newNodeId = `${nodeRole.toLowerCase()}-${uuidv4().substring(0,8)}`; 
           const newNodeData: CustomNodeData = {
              label: labelPrefix, role: nodeRole, icon,
              logLevel: 'master',
@@ -551,7 +539,7 @@ export function TopologyEditor() {
 
       setNodesInternal(nds => nds.concat(newNodesList));
       if (newEdgesList.length > 0) setEdgesInternal(eds => eds.concat(newEdgesList));
-      setNodeIdCounter(currentCounter + newNodesList.length);
+      setNodeIdCounter(currentCounter);
 
       if (nodesToFit) {
         setTimeout(() => {
@@ -623,20 +611,21 @@ export function TopologyEditor() {
     for (const node of nodesInternal) {
       if (node.data.role === 'S' || node.data.role === 'C') {
         let masterId: string | undefined;
-        if (node.data.representedMasterId) {
+        let masterConfigForNode: NamedApiConfig | null = null;
+
+        if (node.data.representedMasterId) { // For S nodes representing an external master
             masterId = node.data.representedMasterId;
-        } else if (node.data.parentNode) {
+            masterConfigForNode = getApiConfigById(masterId);
+        } else if (node.data.parentNode) { // For S/C nodes inside a master container
             const parentMNode = getNodeById(node.data.parentNode);
             masterId = parentMNode?.data.masterId;
+            masterConfigForNode = masterId ? getApiConfigById(masterId) : null;
+        } else { // Standalone S/C nodes (should not happen if dropped correctly)
+             masterConfigForNode = activeApiConfig; // Fallback to active, though this indicates a potential issue
+             masterId = activeApiConfig?.id;
         }
-
-        if (!masterId) {
-          setNodesInternal(nds => nds.map(n => n.id === node.id ? { ...n, data: { ...n.data, submissionStatus: 'error', submissionMessage: '无主控' } } : n));
-          continue;
-        }
-
-        const masterConfig = getApiConfigById(masterId);
-        if (!masterConfig) {
+        
+        if (!masterId || !masterConfigForNode) {
           setNodesInternal(nds => nds.map(n => n.id === node.id ? { ...n, data: { ...n.data, submissionStatus: 'error', submissionMessage: '主控配置丢失' } } : n));
           continue;
         }
@@ -653,8 +642,8 @@ export function TopologyEditor() {
             instanceType: instanceTypeForBuild,
             tunnelAddress: node.data.tunnelAddress,
             targetAddress: node.data.targetAddress,
-            logLevel: (node.data.logLevel as any) || 'master',
-            tlsMode: (node.data.tlsMode as any) || 'master',
+            logLevel: (node.data.logLevel as any) || masterConfigForNode.masterDefaultLogLevel || 'master',
+            tlsMode: (node.data.tlsMode as any) || masterConfigForNode.masterDefaultTlsMode || 'master',
             certPath: node.data.certPath,
             keyPath: node.data.keyPath,
           };
@@ -669,12 +658,12 @@ export function TopologyEditor() {
               isSingleEndedForward: true,
               tunnelAddress: node.data.tunnelAddress,
               targetAddress: node.data.targetAddress,
-              logLevel: (node.data.logLevel as any) || 'master',
-              tlsMode: (node.data.tlsMode as any) || '0',
+              logLevel: (node.data.logLevel as any) || masterConfigForNode.masterDefaultLogLevel || 'master',
+              tlsMode: (node.data.tlsMode as any) || '0', // Single-ended client defaults to no TLS for its connection *to target* if not specified
               certPath: node.data.certPath,
               keyPath: node.data.keyPath,
             };
-          } else {
+          } else { // Normal client connecting to an S
             if (!node.data.tunnelAddress || !node.data.targetAddress) {
               setNodesInternal(nds => nds.map(n => n.id === node.id ? { ...n, data: { ...n.data, submissionStatus: 'error', submissionMessage: '地址不完整' } } : n));
               continue;
@@ -682,10 +671,10 @@ export function TopologyEditor() {
             urlParams = {
               instanceType: instanceTypeForBuild,
               isSingleEndedForward: false,
-              tunnelAddress: node.data.tunnelAddress,
-              targetAddress: node.data.targetAddress,
-              logLevel: (node.data.logLevel as any) || 'master',
-              tlsMode: (node.data.tlsMode as any) || 'master',
+              tunnelAddress: node.data.tunnelAddress, // This is the Server's address it connects to
+              targetAddress: node.data.targetAddress, // This is the local forward address for the client
+              logLevel: (node.data.logLevel as any) || masterConfigForNode.masterDefaultLogLevel || 'master',
+              tlsMode: (node.data.tlsMode as any) || masterConfigForNode.masterDefaultTlsMode || 'master', // TLS for connection to S
               certPath: node.data.certPath,
               keyPath: node.data.keyPath,
             };
@@ -693,12 +682,12 @@ export function TopologyEditor() {
         }
 
         if (urlParams) {
-          const finalUrl = buildUrlFromFormValues(urlParams, masterConfig);
+          const finalUrl = buildUrlFromFormValues(urlParams, masterConfigForNode);
           instancesToCreate.push({
             nodeId: node.id,
             nodeLabel: node.data.representedMasterName ? `${instanceTypeForBuild}: ${node.data.representedMasterName}` : node.data.label,
-            masterId: masterConfig.id,
-            masterName: masterConfig.name,
+            masterId: masterConfigForNode.id,
+            masterName: masterConfigForNode.name,
             url: finalUrl,
             instanceType: instanceTypeForBuild
           });
@@ -724,7 +713,7 @@ export function TopologyEditor() {
             instanceType: "入口(c)",
             isSingleEndedForward: false,
             tunnelAddress: clientTunnelAddressToRemote,
-            targetAddress: node.data.targetAddress,
+            targetAddress: node.data.targetAddress, // Client local service address
             logLevel: (node.data.logLevel as any) || clientMasterConfig.masterDefaultLogLevel || 'master',
             tlsMode: (node.data.tlsMode as any) || clientMasterConfig.masterDefaultTlsMode || 'master',
             certPath: node.data.certPath,
@@ -732,7 +721,7 @@ export function TopologyEditor() {
         };
         const clientFinalUrl = buildUrlFromFormValues(clientUrlParams, clientMasterConfig);
         instancesToCreate.push({
-            nodeId: node.id,
+            nodeId: node.id, // Use M node's ID for tracking this part
             nodeLabel: `${node.data.label} (入口部分)`,
             masterId: clientMasterConfig.id,
             masterName: clientMasterConfig.name,
@@ -742,8 +731,8 @@ export function TopologyEditor() {
 
         const serverUrlParams: BuildUrlParams = {
             instanceType: "出口(s)",
-            tunnelAddress: node.data.remoteServerListenAddress,
-            targetAddress: node.data.remoteServerForwardAddress,
+            tunnelAddress: node.data.remoteServerListenAddress, // Server listen address on remote master
+            targetAddress: node.data.remoteServerForwardAddress, // Server forward address on remote master
             logLevel: (node.data.logLevel as any) || serverMasterConfig.masterDefaultLogLevel || 'master',
             tlsMode: (node.data.tlsMode as any) || serverMasterConfig.masterDefaultTlsMode || 'master',
             certPath: (node.data.tlsMode === '2' && clientUrlParams.tlsMode === '2') ? node.data.certPath : "",
@@ -751,7 +740,7 @@ export function TopologyEditor() {
         };
         const serverFinalUrl = buildUrlFromFormValues(serverUrlParams, serverMasterConfig);
         instancesToCreate.push({
-            nodeId: node.id,
+            nodeId: node.id, // Use M node's ID for tracking this part as well
             nodeLabel: `${node.data.label} (出口部分 @ ${serverMasterConfig.name})`,
             masterId: serverMasterConfig.id,
             masterName: serverMasterConfig.name,
@@ -761,21 +750,91 @@ export function TopologyEditor() {
       }
     }
     return instancesToCreate;
-  }, [nodesInternal, getNodeById, getApiConfigById, setNodesInternal]);
+  }, [nodesInternal, getNodeById, getApiConfigById, setNodesInternal, activeApiConfig]);
 
-  const handleTriggerSubmitTopology = useCallback(() => {
+  const handleTriggerSubmitTopology = useCallback(async () => {
     setContextMenu(null);
-    setNodesInternal(nds => nds.map(n => ({ ...n, data: { ...n.data, submissionStatus: undefined, submissionMessage: undefined } })));
+    setIsSubmitting(true);
 
+    if (!activeApiConfig) {
+        toast({ title: "错误", description: "没有活动的API配置可用于连接事件流。", variant: "destructive" });
+        setIsSubmitting(false);
+        return;
+    }
+
+    const ssePreCheckAbortController = new AbortController();
+    let sseCheckSuccess = false;
+
+    const checkConnectionPromise = (async () => {
+        try {
+            const apiRootForCheck = getApiRootUrl(activeApiConfig.id);
+            const tokenForCheck = getToken(activeApiConfig.id);
+            if (!apiRootForCheck || !tokenForCheck) throw new Error("活动主控API配置不完整。");
+
+            const eventsUrl = getEventsUrl(apiRootForCheck);
+            if (!eventsUrl) throw new Error("无法生成事件URL。");
+
+            const response = await fetch(eventsUrl, {
+                method: 'GET',
+                headers: { 'X-API-Key': tokenForCheck, 'Accept': 'text/event-stream', 'Cache-Control': 'no-cache' },
+                signal: ssePreCheckAbortController.signal,
+            });
+
+            if (!response.ok || !response.body) {
+                const errorText = response.statusText || `HTTP error ${response.status}`;
+                throw new Error(errorText);
+            }
+            
+            const reader = response.body.getReader();
+            const { done } = await reader.read(); 
+            if (!done) {
+                sseCheckSuccess = true;
+            }
+            if (!ssePreCheckAbortController.signal.aborted) {
+                 ssePreCheckAbortController.abort("Pre-check complete");
+            }
+            reader.releaseLock();
+             if (response.body && response.body.locked) {
+                await response.body.cancel().catch(e => console.warn("Error cancelling pre-check stream body:", e));
+            }
+        } catch (error: any) {
+            if (error.name !== 'AbortError') {
+                console.warn("SSE Pre-check connection error:", error.message);
+            }
+             sseCheckSuccess = false;
+        }
+    })();
+
+    const timeoutPromise = new Promise(resolve => setTimeout(() => {
+        if (!sseCheckSuccess && !ssePreCheckAbortController.signal.aborted) {
+            ssePreCheckAbortController.abort("Pre-check timeout");
+        }
+        resolve(null);
+    }, 10000));
+
+    await Promise.race([checkConnectionPromise, timeoutPromise]);
+
+    if (!sseCheckSuccess) {
+        if (!ssePreCheckAbortController.signal.aborted) { // Ensure abort if not already done
+            ssePreCheckAbortController.abort("Pre-check timeout or failure post-race");
+        }
+        toast({ title: "连接检查失败", description: "无法连接到主控事件流，请检查主控状态或网络。提交已取消。", variant: "destructive" });
+        setIsSubmitting(false);
+        return;
+    }
+
+    setNodesInternal(nds => nds.map(n => ({ ...n, data: { ...n.data, submissionStatus: undefined, submissionMessage: undefined } })));
     const instancesToCreate = prepareInstancesForSubmission();
 
     if (instancesToCreate.length === 0) {
       toast({ title: '无实例可提交', description: '请配置有效的出口(s)/入口(c)节点或跨主控隧道。' });
+      setIsSubmitting(false);
       return;
     }
     setInstancesForConfirmation(instancesToCreate);
     setIsSubmitConfirmOpen(true);
-  }, [prepareInstancesForSubmission, toast, setNodesInternal]);
+    // isSubmitting remains true until dialog is closed or submission finishes
+  }, [activeApiConfig, getApiRootUrl, getToken, toast, prepareInstancesForSubmission, setNodesInternal]);
 
   const listenForHandshakeViaSSE = useCallback(async (
     masterForSse: NamedApiConfig,
@@ -807,8 +866,7 @@ export function TopologyEditor() {
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
         let buffer = '';
-
-        // eslint-disable-next-line no-constant-condition
+        
         while (true) {
             if (signal.aborted) break;
             const { value, done } = await reader.read();
@@ -839,7 +897,7 @@ export function TopologyEditor() {
                                 if (sseHandshakeAbortControllerRef.current && !sseHandshakeAbortControllerRef.current.signal.aborted) {
                                   sseHandshakeAbortControllerRef.current.abort("Handshake detected");
                                 }
-                                return; // Stop listening
+                                return; 
                             }
                         }
                     } catch (e) {
@@ -862,9 +920,7 @@ export function TopologyEditor() {
 
 
   const executeActualSubmission = useCallback(async () => {
-    setIsSubmitting(true);
-    setIsSubmitConfirmOpen(false);
-
+    // setIsSubmitConfirmOpen(false); // Dialog will close itself or onOpenChange will handle it
     toast({ title: '开始提交拓扑...', description: `准备创建 ${instancesForConfirmation.length} 个实例。` });
 
     const submissionPromises = instancesForConfirmation.map(inst => {
@@ -882,7 +938,7 @@ export function TopologyEditor() {
         toast({ title: '拓扑提交处理完毕', description: '检查各节点状态。开始监听隧道握手...' });
 
         if (activeApiConfig) {
-          if (sseHandshakeAbortControllerRef.current) {
+          if (sseHandshakeAbortControllerRef.current && !sseHandshakeAbortControllerRef.current.signal.aborted) {
             sseHandshakeAbortControllerRef.current.abort("New submission handshake listener starting");
           }
           const newAbortController = new AbortController();
@@ -898,7 +954,7 @@ export function TopologyEditor() {
                   sseHandshakeAbortControllerRef.current = null;
               }
             }
-          }, 25000); // 25-second timeout for handshake log
+          }, 25000); 
         }
 
     } catch (e) {
@@ -906,13 +962,12 @@ export function TopologyEditor() {
         toast({ title: '拓扑提交过程中发生意外错误', variant: 'destructive' });
     } finally {
         setIsSubmitting(false);
-        // Do not clear instancesForConfirmation here, SSE listener might still need it or its length.
-        // setInstancesForConfirmation([]); // This line was removed
+        // Do not clear instancesForConfirmation, allow user to see submitted items.
+        // It will be cleared on next submit trigger.
     }
   }, [instancesForConfirmation, getApiRootUrl, getToken, toast, createInstanceMutation, setNodesInternal, activeApiConfig, listenForHandshakeViaSSE]);
   
   useEffect(() => {
-    // Cleanup SSE connection on component unmount
     return () => {
         if (sseHandshakeAbortControllerRef.current && !sseHandshakeAbortControllerRef.current.signal.aborted) {
             sseHandshakeAbortControllerRef.current.abort("Component unmounting");
@@ -938,10 +993,8 @@ export function TopologyEditor() {
     if (nodeIndex === -1) return;
 
     const originalNodeDataFromState = newNodes[nodeIndex].data;
-
     const mergedData = { ...originalNodeDataFromState, ...updatedDataFromDialog };
     newNodes[nodeIndex] = { ...newNodes[nodeIndex], data: mergedData };
-
     const editedNode = newNodes[nodeIndex];
 
     const isForwardingSourceNode = editedNode.data.role === 'S' || (editedNode.data.role === 'C' && !editedNode.data.isSingleEndedForwardC) || (editedNode.data.role === 'M' && editedNode.data.masterSubRole === 'client-role');
@@ -1007,7 +1060,7 @@ export function TopologyEditor() {
         const mContainerMasterConfig = getApiConfigById(mContainerNode.data.masterId!);
 
         newNodes.forEach((sNode) => {
-            if (sNode.data.parentNode === mContainerNode.id && sNode.data.role === 'S' && !sNode.data.representedMasterId) {
+            if (sNode.data.parentNode === mContainerNode.id && sNode.data.role === 'S' && !sNode.data.representedMasterId && mContainerMasterConfig) {
                 edgesInternal.forEach(edge => {
                     if (edge.target === sNode.id) {
                         const clientNodeIndexToUpdate = newNodes.findIndex(n => n.id === edge.source && n.data.role === 'C' && !n.data.isSingleEndedForwardC);
@@ -1093,7 +1146,7 @@ const handleRenderMasterInstancesOnCanvas = useCallback(async (masterId: string)
 
         const newRenderedNodes: Node[] = [];
         const newRenderedEdges: Edge[] = [];
-
+        
         const m1ContainerNodeId = `master-container-${m1Config.id.substring(0, 8)}-${++currentIdCounter}`;
         const m1ContainerNode: Node = {
             id: m1ContainerNodeId,
@@ -1109,7 +1162,6 @@ const handleRenderMasterInstancesOnCanvas = useCallback(async (masterId: string)
             style: { ...nodeStyles.m.base, minWidth: DEFAULT_MASTER_NODE_WIDTH, minHeight: MIN_MASTER_NODE_HEIGHT },
         };
         newRenderedNodes.push(m1ContainerNode);
-        let yPosForNextMContainer = m1ContainerNode.position.y; 
 
         const uGlobalNodeId = `u-global-${m1Config.id.substring(0, 5)}-${++currentIdCounter}`;
         newRenderedNodes.push({
@@ -1121,19 +1173,15 @@ const handleRenderMasterInstancesOnCanvas = useCallback(async (masterId: string)
 
         const landingNodesMap = new Map<string, Node>();
         let tNodeYOffset = m1ContainerNode.position.y;
-        const tNodeXOffsetBase = m1ContainerNode.position.x + DEFAULT_MASTER_NODE_WIDTH + 100; // Initial base for T nodes
-
+        
         const internalClientNodes: Node[] = [];
         const internalServerNodes: Node[] = [];
         const representedServerNodesMap = new Map<string, Node>(); 
         const pairedServerInstanceIds = new Set<string>(); 
-        const processedMasters = new Set<string>([m1Config.id]);
-
-
+        
         let internalNodeYOffset = 40;
         const internalNodeXOffsetC = 20;
         let internalNodeXOffsetSBase = internalNodeXOffsetC + CARD_NODE_WIDTH + 40;
-
 
         for (const inst of m1ValidInstances) {
             const parsedUrl = parseNodePassUrl(inst.url);
@@ -1143,7 +1191,7 @@ const handleRenderMasterInstancesOnCanvas = useCallback(async (masterId: string)
                 tunnelAddress: parsedUrl.tunnelAddress || '',
                 targetAddress: parsedUrl.targetAddress || '',
                 logLevel: parsedUrl.logLevel || 'master',
-                tlsMode: parsedUrl.tlsMode || parsedUrl.scheme === 'client' ? '0' : 'master', // Client defaults to 0 if not specified
+                tlsMode: parsedUrl.tlsMode || (parsedUrl.scheme === 'client' ? '0' : 'master'),
                 parentNode: m1ContainerNodeId,
             };
 
@@ -1165,9 +1213,11 @@ const handleRenderMasterInstancesOnCanvas = useCallback(async (masterId: string)
                 internalNodeYOffset += CARD_NODE_HEIGHT + 15;
             } else if (inst.type === 'server') {
                 const serverNodeId = `s-${inst.id.substring(0, 8)}-${++currentIdCounter}`;
+                 // Adjust Y based on client nodes length if clients were added first in this loop
+                const serverYPos = internalNodeYOffset - (internalClientNodes.length * (CARD_NODE_HEIGHT + 15)) + (internalServerNodes.length * (CARD_NODE_HEIGHT + 15));
                 const serverNode: Node = {
                     id: serverNodeId, type: 'cardNode',
-                    position: { x: internalNodeXOffsetSBase, y: internalNodeYOffset - (internalClientNodes.length * (CARD_NODE_HEIGHT + 15)) }, 
+                    position: { x: internalNodeXOffsetSBase, y: serverYPos }, 
                     parentNode: m1ContainerNodeId, extent: 'parent',
                     data: {
                         ...commonNodeData,
@@ -1177,13 +1227,11 @@ const handleRenderMasterInstancesOnCanvas = useCallback(async (masterId: string)
                 };
                 internalServerNodes.push(serverNode);
                 newRenderedNodes.push(serverNode);
-                internalNodeYOffset += CARD_NODE_HEIGHT + 15; 
             }
         }
         
         const m1ContainerData = newRenderedNodes.find(n => n.id === m1ContainerNodeId)?.data;
         if (m1ContainerData) m1ContainerData.renderedChildCount = internalClientNodes.length + internalServerNodes.length;
-
 
         for (const cNode of internalClientNodes) {
             const parsedClientUrl = parseNodePassUrl(cNode.data.originalInstanceUrl!);
@@ -1194,8 +1242,7 @@ const handleRenderMasterInstancesOnCanvas = useCallback(async (masterId: string)
                 if (!tNode) {
                     const tNodeId = `t-${parsedClientUrl.targetAddress.replace(/[^a-zA-Z0-9]/g, '')}-${++currentIdCounter}`;
                     tNode = {
-                        id: tNodeId, type: 'cardNode',
-                        position: { x: 0, y: 0 }, // Actual position set later
+                        id: tNodeId, type: 'cardNode', position: { x: 0, y: 0 },
                         data: { label: `远程 @ ${parsedClientUrl.targetAddress}`, role: 'T', icon: Globe, targetAddress: parsedClientUrl.targetAddress },
                         width: CARD_NODE_WIDTH, height: CARD_NODE_HEIGHT,
                     };
@@ -1222,7 +1269,7 @@ const handleRenderMasterInstancesOnCanvas = useCallback(async (masterId: string)
                     newRenderedEdges.push({ id: `edge-${uuidv4()}`, source: cNode.id, target: sOnM1Node.id, type: 'step', markerEnd: { type: MarkerType.ArrowClosed } });
                     pairedServerInstanceIds.add(sOnM1Node.data.originalInstanceId!);
                 } else if (clientConnectsToHost && clientConnectsToPort) { 
-                    const targetM2Config = apiConfigsList.find(conf => conf.id !== m1Config.id && extractHostname(conf.apiUrl) === clientConnectsToHost);
+                    const targetM2Config = apiConfigsList.find(conf => conf.id !== m1Config.id && extractHostname(conf.apiUrl)?.toLowerCase() === clientConnectsToHost.toLowerCase());
                     if (targetM2Config) {
                         const m2ApiRoot = getApiRootUrl(targetM2Config.id);
                         const m2Token = getToken(targetM2Config.id);
@@ -1235,7 +1282,7 @@ const handleRenderMasterInstancesOnCanvas = useCallback(async (masterId: string)
                                     const sListenHost = extractHostname(parsedSUrl.tunnelAddress || "");
                                     const sListenPort = extractPort(parsedSUrl.tunnelAddress || "");
                                     if (sListenPort !== clientConnectsToPort) return false;
-                                    return (sListenHost === clientConnectsToHost || (isWildcardHostname(sListenHost) && clientConnectsToHost === extractHostname(targetM2Config.apiUrl)));
+                                    return (sListenHost?.toLowerCase() === clientConnectsToHost.toLowerCase() || (isWildcardHostname(sListenHost) && clientConnectsToHost.toLowerCase() === extractHostname(targetM2Config.apiUrl)?.toLowerCase()));
                                 });
 
                                 if (sOnM2InstanceData) {
@@ -1244,10 +1291,13 @@ const handleRenderMasterInstancesOnCanvas = useCallback(async (masterId: string)
                                     if (!representativeSNode) {
                                         const parsedServerOnM2Url = parseNodePassUrl(sOnM2InstanceData.url);
                                         const sNodeId = `s-repr-${sOnM2InstanceData.id.substring(0, 8)}-${++currentIdCounter}`;
-                                        const repSNodeYPos = internalNodeYOffset; 
+                                        const currentMaxS_X = Math.max(internalNodeXOffsetSBase, ...newRenderedNodes.filter(n => n.data.parentNode === m1ContainerNodeId && n.data.role === 'S' && n.data.representedMasterId).map(n => n.position.x + (n.width || CARD_NODE_WIDTH)));
+                                        const newRepS_X = (currentMaxS_X === internalNodeXOffsetSBase ? internalNodeXOffsetSBase : currentMaxS_X + 20);
+                                        const repS_Y_pos = (internalServerNodes.length + representedServerNodesMap.size) * (CARD_NODE_HEIGHT + 15) + 40;
+                                        
                                         representativeSNode = {
                                             id: sNodeId, type: 'cardNode',
-                                            position: { x: internalNodeXOffsetSBase, y: repSNodeYPos }, 
+                                            position: { x: newRepS_X, y: repS_Y_pos }, 
                                             parentNode: m1ContainerNodeId, extent: 'parent',
                                             data: {
                                                 label: `出口(s) @ ${targetM2Config.name.substring(0,10)}..`, role: 'S', icon: Server,
@@ -1261,7 +1311,6 @@ const handleRenderMasterInstancesOnCanvas = useCallback(async (masterId: string)
                                         };
                                         newRenderedNodes.push(representativeSNode);
                                         representedServerNodesMap.set(representativeSNodeKey, representativeSNode);
-                                        internalNodeYOffset += CARD_NODE_HEIGHT + 15;
                                         if(m1ContainerData) m1ContainerData.renderedChildCount = (m1ContainerData.renderedChildCount || 0) + 1;
                                         internalNodeXOffsetSBase = Math.max(internalNodeXOffsetSBase, representativeSNode.position.x + CARD_NODE_WIDTH + 20);
                                     }
@@ -1271,8 +1320,7 @@ const handleRenderMasterInstancesOnCanvas = useCallback(async (masterId: string)
                                     if (!tNode) {
                                         const tNodeId = `t-ext-${(parsedClientUrl.tunnelAddress!).replace(/[^a-zA-Z0-9]/g, '')}-${++currentIdCounter}`;
                                         tNode = {
-                                            id: tNodeId, type: 'cardNode',
-                                            position: { x: 0, y: 0 }, // Actual position set later
+                                            id: tNodeId, type: 'cardNode', position: { x: 0, y: 0 },
                                             data: { label: `外部出口(s) @ ${parsedClientUrl.tunnelAddress}`, role: 'T', icon: Globe, targetAddress: parsedClientUrl.tunnelAddress },
                                             width: CARD_NODE_WIDTH, height: CARD_NODE_HEIGHT,
                                         };
@@ -1288,8 +1336,7 @@ const handleRenderMasterInstancesOnCanvas = useCallback(async (masterId: string)
                         if (!tNode) {
                             const tNodeId = `t-ext-${(parsedClientUrl.tunnelAddress!).replace(/[^a-zA-Z0-9]/g, '')}-${++currentIdCounter}`;
                             tNode = {
-                                id: tNodeId, type: 'cardNode',
-                                position: { x: 0, y: 0 }, // Actual position set later
+                                id: tNodeId, type: 'cardNode', position: { x: 0, y: 0 },
                                 data: { label: `外部出口(s) @ ${parsedClientUrl.tunnelAddress}`, role: 'T', icon: Globe, targetAddress: parsedClientUrl.tunnelAddress },
                                 width: CARD_NODE_WIDTH, height: CARD_NODE_HEIGHT,
                             };
@@ -1310,8 +1357,7 @@ const handleRenderMasterInstancesOnCanvas = useCallback(async (masterId: string)
                 if (!tNode) {
                     const tNodeId = `t-${serverTargetAddr.replace(/[^a-zA-Z0-9]/g, '')}-${++currentIdCounter}`;
                     tNode = {
-                        id: tNodeId, type: 'cardNode',
-                        position: { x: 0, y: 0 }, // Actual position set later
+                        id: tNodeId, type: 'cardNode', position: { x: 0, y: 0 },
                         data: { label: `服务 @ ${serverTargetAddr}`, role: 'T', icon: Globe, targetAddress: serverTargetAddr },
                         width: CARD_NODE_WIDTH, height: CARD_NODE_HEIGHT,
                     };
@@ -1336,7 +1382,7 @@ const handleRenderMasterInstancesOnCanvas = useCallback(async (masterId: string)
             const maxY = Math.max(...childNodesForM1.map(n => n.position.y + (n.height || CARD_NODE_HEIGHT)));
             const maxX = Math.max(...childNodesForM1.map(n => n.position.x + (n.width || CARD_NODE_WIDTH)));
             requiredHeight = Math.max(maxY + 40, MIN_MASTER_NODE_HEIGHT);
-            requiredWidth = Math.max(maxX + 40, DEFAULT_MASTER_NODE_WIDTH, internalNodeXOffsetSBase + CARD_NODE_WIDTH + 20);
+            requiredWidth = Math.max(maxX + 40, DEFAULT_MASTER_NODE_WIDTH, internalNodeXOffsetSBase);
         }
 
         const m1NodeToUpdateIndex = newRenderedNodes.findIndex(n => n.id === m1ContainerNodeId);
@@ -1350,11 +1396,22 @@ const handleRenderMasterInstancesOnCanvas = useCallback(async (masterId: string)
         const currentMasterNodeWidth = masterNode?.width ?? requiredWidth;
         
         tNodeYOffset = masterNode.position.y;
-        landingNodesMap.forEach(tNode => {
+        let tNodeXBase = masterNode.position.x + currentMasterNodeWidth + 150;
+        let tNodesInCurrentColumn = 0;
+        const tNodesPerColumn = Math.floor((masterNode.height || requiredHeight) / (CARD_NODE_HEIGHT + 30)) || 1;
+
+
+        Array.from(landingNodesMap.values()).forEach((tNode, index) => {
             const tNodeIndex = newRenderedNodes.findIndex(n => n.id === tNode.id);
             if (tNodeIndex !== -1) {
-                newRenderedNodes[tNodeIndex].position = { x: masterNode.position.x + currentMasterNodeWidth + 150, y: tNodeYOffset };
+                 if (tNodesInCurrentColumn >= tNodesPerColumn) {
+                    tNodeXBase += CARD_NODE_WIDTH + 50; 
+                    tNodeYOffset = masterNode.position.y;
+                    tNodesInCurrentColumn = 0;
+                }
+                newRenderedNodes[tNodeIndex].position = { x: tNodeXBase, y: tNodeYOffset };
                 tNodeYOffset += CARD_NODE_HEIGHT + 30;
+                tNodesInCurrentColumn++;
             }
         });
         
@@ -1362,7 +1419,6 @@ const handleRenderMasterInstancesOnCanvas = useCallback(async (masterId: string)
         if (uNodeGlobalToUpdateIndex !== -1) {
            newRenderedNodes[uNodeGlobalToUpdateIndex].position.y = masterNode.position.y + (requiredHeight / 2) - (CARD_NODE_HEIGHT / 2);
         }
-
 
         setNodesInternal(newRenderedNodes);
         setEdgesInternal(newRenderedEdges);
@@ -1376,7 +1432,7 @@ const handleRenderMasterInstancesOnCanvas = useCallback(async (masterId: string)
       toast({ title: `渲染主控 ${m1Config.name} 实例失败`, description: error.message, variant: "destructive" });
       setNodesInternal([]); setEdgesInternal([]);
     }
-  }, [getApiConfigById, getApiRootUrl, getToken, toast, setNodesInternal, setEdgesInternal, fitView, apiConfigsList]);
+  }, [getApiConfigById, getApiRootUrl, getToken, toast, setNodesInternal, setEdgesInternal, fitView, apiConfigsList, activeApiConfig]);
 
 
   return (
@@ -1451,10 +1507,15 @@ const handleRenderMasterInstancesOnCanvas = useCallback(async (masterId: string)
       )}
        <SubmitTopologyConfirmationDialog
         open={isSubmitConfirmOpen}
-        onOpenChange={setIsSubmitConfirmOpen}
+        onOpenChange={(isOpen) => {
+            setIsSubmitConfirmOpen(isOpen);
+            if (!isOpen && !createInstanceMutation.isPending) {
+                setIsSubmitting(false); // Reset if dialog closed and not in final submission phase
+            }
+        }}
         instancesToCreate={instancesForConfirmation}
         onConfirm={executeActualSubmission}
-        isSubmitting={isSubmitting}
+        isSubmitting={createInstanceMutation.isPending}
       />
       <EditTopologyNodeDialog
         open={isEditNodeDialogOpen}
@@ -1470,4 +1531,3 @@ const handleRenderMasterInstancesOnCanvas = useCallback(async (masterId: string)
   );
 }
     
-
