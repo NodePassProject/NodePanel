@@ -14,8 +14,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useQuery } from '@tanstack/react-query';
 import { nodePassApi } from '@/lib/api';
-import type { Instance } from '@/types/nodepass';
 import { useToast } from '@/hooks/use-toast';
+import { parseNodePassUrl, extractHostname } from '@/lib/url-utils'; // Added extractHostname
 
 interface MasterPaletteItemProps {
   config: NamedApiConfig;
@@ -27,7 +27,7 @@ const MasterPaletteItem: React.FC<MasterPaletteItemProps> = ({ config, onRenderM
   const { toast } = useToast();
 
   const { data: instanceCounts, isLoading: isLoadingInstances, error, refetch } = useQuery<
-    { clientCount: number; serverCount: number }, // serverCount will be displayed as tunnelCount 't'
+    { clientCount: number; tunnelCount: number }, // Updated to tunnelCount
     Error
   >({
     queryKey: ['masterInstancesCount', config.id],
@@ -40,14 +40,53 @@ const MasterPaletteItem: React.FC<MasterPaletteItemProps> = ({ config, onRenderM
       const fetchedInstances = await nodePassApi.getInstances(apiRoot, token);
       let clientCount = 0;
       let serverCount = 0;
+      let externalClientConnections = 0;
+
+      const localServerListenAddresses = new Set<string>();
+      const masterApiHost = extractHostname(config.apiUrl);
+
       fetchedInstances.forEach(instance => {
-        if (instance.id === '********') return; 
-        if (instance.type === 'client') clientCount++;
-        else if (instance.type === 'server') serverCount++;
+        if (instance.id === '********') return;
+        if (instance.type === 'client') {
+          clientCount++;
+          const parsedClientUrl = parseNodePassUrl(instance.url);
+          if (parsedClientUrl.tunnelAddress) {
+            const clientConnectsToHost = extractHostname(parsedClientUrl.tunnelAddress);
+            // Check if client connects to a host different from its own master's API host
+            // This is a heuristic for "external" connection.
+            // A more robust check would involve checking against known server instances on this master.
+            if (clientConnectsToHost && masterApiHost && clientConnectsToHost.toLowerCase() !== masterApiHost.toLowerCase()) {
+               let isExternal = true;
+               // Check if the client tunnel address matches any local server instance listen address
+               for (const sInst of fetchedInstances) {
+                   if (sInst.type === 'server') {
+                       const parsedSUrl = parseNodePassUrl(sInst.url);
+                       if (parsedSUrl.tunnelAddress) {
+                           const serverListenHost = extractHostname(parsedSUrl.tunnelAddress);
+                           const serverListenPort = parsedSUrl.tunnelAddress.split(':').pop();
+                           const clientConnectsToPort = parsedClientUrl.tunnelAddress.split(':').pop();
+
+                           if (clientConnectsToPort === serverListenPort && (serverListenHost === clientConnectsToHost || (isWildcardHostname(serverListenHost) && clientConnectsToHost === masterApiHost) )) {
+                               isExternal = false;
+                               break;
+                           }
+                       }
+                   }
+               }
+               if (isExternal) {
+                 externalClientConnections++;
+               }
+            }
+          }
+        } else if (instance.type === 'server') {
+          serverCount++;
+        }
       });
-      return { clientCount, serverCount };
+      // Tunnel count = server instances + client instances connecting externally
+      const tunnelCount = serverCount + externalClientConnections;
+      return { clientCount, tunnelCount };
     },
-    enabled: !!config.id, 
+    enabled: !!config.id,
     staleTime: 5 * 60 * 1000,
     refetchOnWindowFocus: false,
     onError: (err) => {
@@ -69,7 +108,7 @@ const MasterPaletteItem: React.FC<MasterPaletteItemProps> = ({ config, onRenderM
     : error
     ? <RefreshCw className="h-3 w-3 ml-1 text-destructive cursor-pointer" onClick={() => refetch()} title="点击重试计数"/>
     : instanceCounts
-    ? `(${instanceCounts.clientCount}c/${instanceCounts.serverCount}t)` // Changed 's' to 't'
+    ? `(${instanceCounts.clientCount}c/${instanceCounts.tunnelCount}t)` // Display tunnelCount
     : '';
 
 
@@ -135,4 +174,6 @@ export function MastersPalette({ onRenderMasterInstances }: { onRenderMasterInst
     </div>
   );
 }
+    
+
     
