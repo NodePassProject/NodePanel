@@ -41,6 +41,8 @@ export interface CustomNodeData {
 
   originalInstanceId?: string;
   originalInstanceUrl?: string;
+
+  isExpanded?: boolean; // For S/C node expansion
 }
 
 export interface Node extends ReactFlowNode<CustomNodeData> {
@@ -56,3 +58,8 @@ export interface TopologyContextMenu {
   data: Node | import('reactflow').Edge; 
 }
 
+// Default dimensions for different node states
+export const ICON_ONLY_NODE_SIZE = 48;
+export const EXPANDED_SC_NODE_WIDTH = 200;
+export const EXPANDED_SC_NODE_BASE_HEIGHT = 40; // Base height, will grow with content
+export const DETAIL_LINE_HEIGHT = 18; // Estimated height per detail line

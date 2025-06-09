@@ -38,7 +38,8 @@ const baseSchema = z.object({
 });
 
 const masterSchema = baseSchema.extend({
-  masterSubRoleM: z.enum(["primary", "client-role", "server-role", "generic"]),
+  // For advanced editor, masterSubRole is primarily 'container'
+  masterSubRoleM: z.enum(["container", "primary", "client-role", "server-role", "generic"]), 
   targetAddressM: z.optional(z.string().regex(hostPortRegex, hostPortErrorMsg)),
   logLevelM: z.enum(["master", "debug", "info", "warn", "error", "event"]),
   tlsModeM: z.enum(["master", "0", "1", "2"]),
@@ -71,10 +72,11 @@ const clientSchema = z.object({
   keyPathC: z.optional(z.string()),
 });
 
+const tuSchema = baseSchema.extend({ // T and U nodes primarily need label and targetAddress for T
+  targetAddressTU: z.optional(z.string().regex(hostPortRegex, hostPortErrorMsg)),
+});
 
-const landingSchema = baseSchema.extend({});
-
-type FormValues = z.infer<typeof masterSchema> | z.infer<typeof serverSchema> | z.infer<typeof clientSchema> | z.infer<typeof landingSchema>;
+type FormValues = z.infer<typeof masterSchema> | z.infer<typeof serverSchema> | z.infer<typeof clientSchema> | z.infer<typeof tuSchema>;
 
 export function EditTopologyNodeDialog({
   open,
@@ -123,9 +125,8 @@ export function EditTopologyNodeDialog({
             }
         });
     }
-    return landingSchema;
+    return tuSchema; 
   }, [role, canClientBeSingleEnded]);
-
 
   const otherApiConfigs = apiConfigsList.filter(c => c.id !== node?.data.masterId && c.id !== activeApiConfig?.id);
 
@@ -142,7 +143,7 @@ export function EditTopologyNodeDialog({
       if (role === 'M') {
         defaultVals = {
           ...defaultVals,
-          masterSubRoleM: data.masterSubRole || "generic",
+          masterSubRoleM: data.masterSubRole || "container",
           targetAddressM: data.targetAddress || "",
           logLevelM: (data.logLevel as any) || data.defaultLogLevel || "master",
           tlsModeM: (data.tlsMode as any) || data.defaultTlsMode || "master",
@@ -184,8 +185,8 @@ export function EditTopologyNodeDialog({
           (defaultVals as any).localHostC_Normal = extractHostname(data.targetAddress || "[::]:0") || "[::]";
           (defaultVals as any).localPortC_Normal = extractPort(data.targetAddress || "[::]:0") || "";
         }
-      } else if (role === 'T') {
-        defaultVals = { ...defaultVals };
+      } else if (role === 'T' || role === 'U') {
+        defaultVals = { ...defaultVals, targetAddressTU: data.targetAddress || "" };
       }
       form.reset(defaultVals as any);
     }
@@ -207,7 +208,7 @@ export function EditTopologyNodeDialog({
         updatedData.remoteMasterIdForTunnel = values.remoteMasterIdForTunnel;
         updatedData.remoteServerListenAddress = values.remoteServerListenAddress;
         updatedData.remoteServerForwardAddress = values.remoteServerForwardAddress;
-      } else {
+      } else { // For 'container' and other M roles not acting as client-role for tunnel
         updatedData.targetAddress = "";
         updatedData.remoteMasterIdForTunnel = "";
         updatedData.remoteServerListenAddress = "";
@@ -242,22 +243,27 @@ export function EditTopologyNodeDialog({
         updatedData.tunnelAddress = values.tunnelAddressC_Normal;
         updatedData.targetAddress = `${formatHostForDisplay(values.localHostC_Normal || "[::]")}:${values.localPortC_Normal}`;
       }
-    } else if (role === 'T') {
-      updatedData = { label: values.label };
+    } else if (role === 'T' && 'targetAddressTU' in values) {
+      updatedData = { ...updatedData, targetAddress: values.targetAddressTU };
+    } else if (role === 'U') { // U node just has label usually
+      updatedData = { ...updatedData };
     }
     onSave(node.id, updatedData);
     onOpenChange(false);
   };
 
   if (!node) return null;
-  const dialogTitle = role === 'M' ? "编辑 主控容器 属性" : role === 'S' ? "编辑 出口(s) 属性" : role === 'C' ? "编辑 入口(c) 属性" : "编辑 落地 属性";
+  const dialogTitle = role === 'M' ? "编辑 主控容器 属性" 
+    : role === 'S' ? "编辑 出口(s) 属性" 
+    : role === 'C' ? "编辑 入口(c) 属性" 
+    : role === 'T' ? "编辑 落地 属性"
+    : "编辑 用户 属性";
   const watchedMasterSubRole = role === 'M' ? form.watch('masterSubRoleM') : undefined;
 
   const renderClientAsSingleEnded = canClientBeSingleEnded ? form.watch('isSingleEndedForwardC') : false;
 
   const watchedClientTlsMode = role === 'C' ? form.watch('tlsModeC') : undefined;
   const watchedServerTlsMode = role === 'S' ? form.watch('tlsModeS') : undefined;
-
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -286,15 +292,16 @@ export function EditTopologyNodeDialog({
               <>
                 <FormField control={form.control} name="masterSubRoleM" render={({ field }) => (
                   <FormItem><FormLabel className="font-sans">主控画布角色</FormLabel><Select onValueChange={field.onChange} value={field.value as string}><FormControl><SelectTrigger className="font-sans"><SelectValue /></SelectTrigger></FormControl><SelectContent>
-                    <SelectItem value="generic">通用 (仅容器)</SelectItem>
-                    <SelectItem value="server-role">服务主机 (Server Role)</SelectItem>
-                    <SelectItem value="client-role">客户主机 (Client Role - 定义隧道)</SelectItem>
-                    <SelectItem value="primary">主要 (Primary)</SelectItem>
+                    <SelectItem value="container">容器 (Advanced Topology Default)</SelectItem>
+                    <SelectItem value="generic">通用 (Legacy/Basic)</SelectItem>
+                    <SelectItem value="server-role">服务主机 (Basic Topology)</SelectItem>
+                    <SelectItem value="client-role">客户主机 (Basic Topology - 定义隧道)</SelectItem>
+                    <SelectItem value="primary">主要 (Basic Topology)</SelectItem>
                   </SelectContent></Select>
                   <FormDescription className="font-sans text-xs">定义此主控在画布上的行为和连接语义。</FormDescription>
                   <FormMessage /></FormItem>)}
                 />
-                {watchedMasterSubRole === 'client-role' && (
+                {watchedMasterSubRole === 'client-role' && ( // Only show for basic topology client-role
                   <>
                     <FormField control={form.control} name="targetAddressM" render={({ field }) => (
                       <FormItem><FormLabel className="font-sans">客户端本地服务地址</FormLabel><FormControl><Input {...field} placeholder="例: 127.0.0.1:8080" className="font-mono" /></FormControl>
@@ -317,12 +324,12 @@ export function EditTopologyNodeDialog({
                   </>
                 )}
                  <FormField control={form.control} name="logLevelM" render={({ field }) => (
-                  <FormItem><FormLabel className="font-sans">日志级别 (隧道实例)</FormLabel><Select onValueChange={field.onChange} value={field.value as string}><FormControl><SelectTrigger className="font-sans"><SelectValue /></SelectTrigger></FormControl><SelectContent><SelectItem value="master">主控默认</SelectItem><SelectItem value="debug">Debug</SelectItem><SelectItem value="info">Info</SelectItem><SelectItem value="warn">Warn</SelectItem><SelectItem value="error">Error</SelectItem><SelectItem value="event">Event</SelectItem></SelectContent></Select>
-                   <FormDescription className="font-sans text-xs">{watchedMasterSubRole === 'client-role' ? "用于此隧道相关的入口(c)和出口(s)实例。" : "用于此主控相关的实例。"}</FormDescription>
+                  <FormItem><FormLabel className="font-sans">日志级别 (默认)</FormLabel><Select onValueChange={field.onChange} value={field.value as string}><FormControl><SelectTrigger className="font-sans"><SelectValue /></SelectTrigger></FormControl><SelectContent><SelectItem value="master">主控默认</SelectItem><SelectItem value="debug">Debug</SelectItem><SelectItem value="info">Info</SelectItem><SelectItem value="warn">Warn</SelectItem><SelectItem value="error">Error</SelectItem><SelectItem value="event">Event</SelectItem></SelectContent></Select>
+                   <FormDescription className="font-sans text-xs">此主控内S/C节点的默认日志级别。</FormDescription>
                   <FormMessage /></FormItem>)} />
                 <FormField control={form.control} name="tlsModeM" render={({ field }) => (
-                  <FormItem><FormLabel className="font-sans">TLS模式 (隧道实例)</FormLabel><Select onValueChange={field.onChange} value={field.value as string}><FormControl><SelectTrigger className="font-sans"><SelectValue /></SelectTrigger></FormControl><SelectContent>{Object.entries(MASTER_TLS_MODE_DISPLAY_MAP).map(([val, lab]) => (<SelectItem key={val} value={val}>{lab}</SelectItem>))}</SelectContent></Select>
-                  <FormDescription className="font-sans text-xs">{watchedMasterSubRole === 'client-role' ? "用于此隧道相关的出口(s)实例的数据通道。" : "用于此主控相关的实例。"}</FormDescription>
+                  <FormItem><FormLabel className="font-sans">TLS模式 (默认)</FormLabel><Select onValueChange={field.onChange} value={field.value as string}><FormControl><SelectTrigger className="font-sans"><SelectValue /></SelectTrigger></FormControl><SelectContent>{Object.entries(MASTER_TLS_MODE_DISPLAY_MAP).map(([val, lab]) => (<SelectItem key={val} value={val}>{lab}</SelectItem>))}</SelectContent></Select>
+                  <FormDescription className="font-sans text-xs">此主控内S/C节点的默认TLS模式。</FormDescription>
                   <FormMessage /></FormItem>)} />
               </>
             )}
@@ -422,11 +429,25 @@ export function EditTopologyNodeDialog({
             )}
 
             {role === 'T' && (
-              <>
-                 <FormDescription className="font-sans text-xs">
-                    落地节点的“流量转发地址”通过连接的其上游节点 (如 出口(s) 或 单端转发模式的入口(c)) 自动同步，此处不可直接编辑。
+              <FormField
+                control={form.control}
+                name="targetAddressTU"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="font-sans">转发地址 (落地)</FormLabel>
+                    <FormControl><Input {...field} placeholder="例: 192.168.1.10:80" className="font-mono" /></FormControl>
+                    <FormDescription className="font-sans text-xs">
+                      落地节点的“流量转发地址”。
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
+             {role === 'U' && (
+                <FormDescription className="font-sans text-xs">
+                  用户节点目前仅支持标签修改。
                 </FormDescription>
-              </>
             )}
             <DialogFooter className="pt-4">
               <DialogClose asChild><Button type="button" variant="outline">取消</Button></DialogClose>
@@ -438,5 +459,3 @@ export function EditTopologyNodeDialog({
     </Dialog>
   );
 }
-
-    

@@ -11,6 +11,7 @@ import ReactFlow, {
   type Edge,
   type OnNodesChange,
   type OnEdgesChange,
+  type NodeMouseHandler,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { useTheme } from 'next-themes';
@@ -18,12 +19,13 @@ import { TopologyToolbar } from './components/TopologyToolbar';
 import type { DraggableNodeType } from './components/ComponentsPalette';
 import type { NamedApiConfig } from '@/hooks/use-api-key';
 import type { Node } from './topologyTypes';
-import { nodeTypes } from './NodeRenderer'; // Import nodeTypes from its new location
+import { nodeTypes } from './NodeRenderer';
 
-const initialZoomLevel = 0.5; // Adjusted initial zoom, was complex calculation
+const initialZoomLevel = 0.5;
 
 interface ToolbarWrapperProps {
   onCenterView: (instance: ReturnType<typeof useReactFlow>) => void;
+  onFormatLayout: () => void;
   onClearCanvas: () => void;
   onSubmitTopology: () => void;
   canSubmit: boolean;
@@ -32,6 +34,7 @@ interface ToolbarWrapperProps {
 
 const ToolbarWrapper: React.FC<ToolbarWrapperProps> = ({
   onCenterView,
+  onFormatLayout,
   onClearCanvas,
   onSubmitTopology,
   canSubmit,
@@ -41,6 +44,7 @@ const ToolbarWrapper: React.FC<ToolbarWrapperProps> = ({
   return (
     <TopologyToolbar
       onCenterView={() => onCenterView(reactFlowInstance)}
+      onFormatLayout={onFormatLayout}
       onClearCanvas={onClearCanvas}
       onSubmitTopology={onSubmitTopology}
       canSubmit={canSubmit}
@@ -58,6 +62,7 @@ interface TopologyCanvasWrapperProps {
   onSelectionChange: ({ nodes, edges }: { nodes: Node[]; edges: Edge[] }) => void;
   reactFlowWrapperRef: React.RefObject<HTMLDivElement>;
   onCenterView: (instance: ReturnType<typeof useReactFlow>) => void;
+  onFormatLayout: () => void; 
   onClearCanvas: () => void;
   onTriggerSubmitTopology: () => void;
   canSubmit: boolean;
@@ -70,13 +75,14 @@ interface TopologyCanvasWrapperProps {
   onNodeContextMenu: (event: React.MouseEvent, node: Node) => void;
   onEdgeContextMenu: (event: React.MouseEvent, edge: Edge) => void;
   onPaneClick: () => void;
+  onNodeClick?: NodeMouseHandler; // Added for S/C expansion
 }
 
 export const TopologyCanvasWrapper: React.FC<TopologyCanvasWrapperProps> = ({
   nodes, edges, onNodesChange, onEdgesChange, onConnect, onSelectionChange,
-  reactFlowWrapperRef, onCenterView, onClearCanvas, onTriggerSubmitTopology,
+  reactFlowWrapperRef, onCenterView, onFormatLayout, onClearCanvas, onTriggerSubmitTopology,
   canSubmit, isSubmitting, onNodeDropOnCanvas, onNodeContextMenu,
-  onEdgeContextMenu, onPaneClick,
+  onEdgeContextMenu, onPaneClick, onNodeClick
 }) => {
   const { resolvedTheme } = useTheme();
   const [isClient, setIsClient] = useState(false);
@@ -135,6 +141,7 @@ export const TopologyCanvasWrapper: React.FC<TopologyCanvasWrapperProps> = ({
         onNodeContextMenu={onNodeContextMenu}
         onEdgeContextMenu={onEdgeContextMenu}
         onPaneClick={onPaneClick}
+        onNodeClick={onNodeClick} 
         defaultViewport={{ x: 0, y: 0, zoom: initialZoomLevel }}
         nodesDraggable={!isSubmitting}
         nodesConnectable={!isSubmitting}
@@ -146,11 +153,12 @@ export const TopologyCanvasWrapper: React.FC<TopologyCanvasWrapperProps> = ({
         selectionOnDrag
         className="h-full w-full"
         nodeOrigin={[0, 0]}
-        nodeTypes={nodeTypes} // Use imported nodeTypes
+        nodeTypes={nodeTypes}
       >
         <Panel position="top-right" className="!m-0 !p-2 bg-transparent">
           <ToolbarWrapper
             onCenterView={onCenterView}
+            onFormatLayout={onFormatLayout}
             onClearCanvas={onClearCanvas}
             onSubmitTopology={onTriggerSubmitTopology}
             canSubmit={canSubmit}
