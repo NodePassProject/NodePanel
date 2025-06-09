@@ -247,48 +247,67 @@ export function AdvancedTopologyEditor() {
       };
 
       let nodesToUpdate: Node[] | null = null;
-      if (sourceNode.data.role === 'S' && targetNode.data.role === 'C') {
-        const serverNode = sourceNode;
-        const clientNode = targetNode;
-        const sourceParentNode = allCurrentNodes.find(n => n.id === serverNode.parentNode);
-        const targetParentNode = allCurrentNodes.find(n => n.id === clientNode.parentNode);
+      let clientNodeForUpdate: Node | null = null;
+      let serverNodeForClientConfig: Node | null = null;
 
-        if (sourceParentNode && targetParentNode && sourceParentNode.data.masterId !== targetParentNode.data.masterId) {
-            const serverMasterConfig = getApiConfigById(sourceParentNode.data.masterId!);
-            const newClientTunnelAddress = calculateClientTunnelAddressForServer(serverNode.data, serverMasterConfig);
+      if (sourceNode.data.role === 'S' && targetNode.data.role === 'C') {
+        serverNodeForClientConfig = sourceNode;
+        clientNodeForUpdate = targetNode;
+      } else if (sourceNode.data.role === 'C' && targetNode.data.role === 'S') {
+        clientNodeForUpdate = sourceNode;
+        serverNodeForClientConfig = targetNode;
+      }
+
+      if (clientNodeForUpdate && serverNodeForClientConfig) {
+        const clientParentNode = allCurrentNodes.find(n => n.id === clientNodeForUpdate!.parentNode);
+        const serverParentNode = allCurrentNodes.find(n => n.id === serverNodeForClientConfig!.parentNode);
+
+        if (clientParentNode && serverParentNode && clientParentNode.data.masterId !== serverParentNode.data.masterId) {
+            const serverMasterConfig = getApiConfigById(serverParentNode.data.masterId!);
+            const newClientTunnelAddress = calculateClientTunnelAddressForServer(serverNodeForClientConfig.data, serverMasterConfig);
 
             if (newClientTunnelAddress && newClientTunnelAddress.trim() !== "") {
-                nodesToUpdate = allCurrentNodes.map(n => {
-                    if (n.id === clientNode.id) {
-                        let newClientLocalTargetPort = parseInt(extractPort(serverNode.data.tunnelAddress || "0") || "0", 10);
-                        if (newClientLocalTargetPort > 0) newClientLocalTargetPort++; else newClientLocalTargetPort = 3001; 
-                        const newClientTargetAddress = `[::]:${newClientLocalTargetPort.toString()}`;
+                let newClientLocalTargetPort = parseInt(extractPort(serverNodeForClientConfig.data.tunnelAddress || "0") || "0", 10);
+                if (newClientLocalTargetPort > 0) newClientLocalTargetPort++; else newClientLocalTargetPort = 3001; 
+                const newClientTargetAddress = `[::]:${newClientLocalTargetPort.toString()}`;
 
+                nodesToUpdate = allCurrentNodes.map(n => {
+                    if (n.id === clientNodeForUpdate!.id) {
                         return { 
                             ...n, 
                             data: { 
                                 ...n.data, 
                                 tunnelAddress: newClientTunnelAddress, 
                                 targetAddress: newClientTargetAddress, 
-                                isSingleEndedForwardC: false,
-                                tlsMode: clientNode.data.tlsMode || 'master' // Preserve client's existing TLS choice, or default
+                                isSingleEndedForwardC: false, // Force tunnel mode
+                                tlsMode: n.data.tlsMode || 'master' // Preserve client's TLS or default
                             } 
                         };
                     }
                     return n;
                 });
-                toast({ title: "跨主控入口(C)地址已自动更新", description: `入口(C) ${clientNode.data.label} 已自动配置连接到 出口(S) ${serverNode.data.label}。` });
-            } else if (!newClientTunnelAddress || newClientTunnelAddress.trim() === "") {
+                toast({ title: "跨主控入口(C)地址已自动更新", description: `入口(C) ${clientNodeForUpdate.data.label} 已自动配置连接到 出口(S) ${serverNodeForClientConfig.data.label}。` });
+            } else {
                  nodesToUpdate = allCurrentNodes.map(n => {
-                    if (n.id === clientNode.id) {
-                        return { ...n, data: { ...n.data, isSingleEndedForwardC: false, tlsMode: clientNode.data.tlsMode || 'master' } };
+                    if (n.id === clientNodeForUpdate!.id) {
+                        return { 
+                          ...n, 
+                          data: { 
+                            ...n.data, 
+                            isSingleEndedForwardC: false, // Force tunnel mode even if address calc fails
+                            tlsMode: n.data.tlsMode || 'master' 
+                          } 
+                        };
                     }
                     return n;
                 });
                 toast({ title: "警告: 无法自动配置跨主控入口(C)地址", description: "未能计算出有效的服务端隧道地址。请检查源S节点及其主控配置。入口(C)已设为隧道模式，请手动配置其隧道地址。", variant: "warning" });
             }
         }
+        // If S and C are in the same M container, no automatic address changes, just connect.
+        // The user can manually configure if needed.
       } else if ((sourceNode.data.role === 'S' || sourceNode.data.role === 'C') && targetNode.data.role === 'T') {
+        // Logic for S/C -> T connection (target address sync)
         let tNodeUpdated = false;
         let scNodeUpdated = false;
         let tempNodes = [...allCurrentNodes];
@@ -304,6 +323,7 @@ export function AdvancedTopologyEditor() {
         if (tNodeUpdated) toast({ title: `落地 (T) ${targetNode.data.label} 已同步上游目标地址。`});
         if (scNodeUpdated) toast({ title: `${sourceNode.data.label} 已同步落地 (T) 目标地址。`});
       }
+
 
       if (nodesToUpdate) {
         setNodesInternal(nodesToUpdate);
@@ -678,30 +698,37 @@ export function AdvancedTopologyEditor() {
         }
 
         const incomingEdge = allEdges.find(edge => edge.target === node.id);
+        const outgoingEdge = allEdges.find(edge => edge.source === node.id);
 
-        if (incomingEdge) {
-            const sourceNode = allNodes.find(n => n.id === incomingEdge.source);
-            const sourceParentNode = sourceNode ? allNodes.find(n => n.id === sourceNode.parentNode) : undefined;
+
+        if (incomingEdge && allNodes.find(n=> n.id === incomingEdge.source)?.data.role === 'S') { // C is target of an S
+            const sourceSNode = allNodes.find(n => n.id === incomingEdge.source)!;
+            const sourceParentNode = sourceSNode.parentNode ? allNodes.find(n => n.id === sourceSNode.parentNode) : undefined;
             const cNodeParentNode = node.parentNode ? allNodes.find(n => n.id === node.parentNode) : undefined;
             
-            if (sourceNode && sourceNode.data.role === 'S' && sourceParentNode && cNodeParentNode) {
-                const sourceMasterId = sourceParentNode.data.masterId;
-                const targetMasterId = cNodeParentNode.data.masterId;
+            if (sourceParentNode && cNodeParentNode && sourceParentNode.data.masterId !== cNodeParentNode.data.masterId) {
+                isInterMaster = true;
+                const sourceMasterConfig = getApiConfigById(sourceParentNode.data.masterId!);
+                const newClientTunnelAddress = calculateClientTunnelAddressForServer(sourceSNode.data, sourceMasterConfig);
+                if (newClientTunnelAddress && newClientTunnelAddress.trim() !== "") {
+                    sourceInfo = { serverTunnelAddress: newClientTunnelAddress };
+                } else {
+                    toast({ title: '无法确定隧道地址', description: '无法自动计算源 S 节点的隧道地址。', variant: "warning" });
+                }
+            }
+        } else if (outgoingEdge && allNodes.find(n=> n.id === outgoingEdge.target)?.data.role === 'S') { // C is source to an S
+            const targetSNode = allNodes.find(n => n.id === outgoingEdge.target)!;
+            const targetParentNode = targetSNode.parentNode ? allNodes.find(n => n.id === targetSNode.parentNode) : undefined;
+            const cNodeParentNode = node.parentNode ? allNodes.find(n => n.id === node.parentNode) : undefined;
 
-                if (sourceMasterId && targetMasterId && sourceMasterId !== targetMasterId) {
-                    isInterMaster = true;
-                    const sourceMasterConfig = getApiConfigById(sourceMasterId);
-                    const newClientTunnelAddress = calculateClientTunnelAddressForServer(sourceNode.data, sourceMasterConfig);
-
-                    if (newClientTunnelAddress && newClientTunnelAddress.trim() !== "") {
-                        sourceInfo = { serverTunnelAddress: newClientTunnelAddress };
-                    } else {
-                        toast({
-                            title: '无法确定隧道地址',
-                            description: '无法自动计算源 S 节点的隧道地址。请检查 S 节点及其主控配置。',
-                            variant: "warning",
-                        });
-                    }
+            if (targetParentNode && cNodeParentNode && targetParentNode.data.masterId !== cNodeParentNode.data.masterId) {
+                 isInterMaster = true;
+                 const targetMasterConfig = getApiConfigById(targetParentNode.data.masterId!);
+                 const newClientTunnelAddress = calculateClientTunnelAddressForServer(targetSNode.data, targetMasterConfig);
+                 if (newClientTunnelAddress && newClientTunnelAddress.trim() !== "") {
+                    sourceInfo = { serverTunnelAddress: newClientTunnelAddress };
+                } else {
+                    toast({ title: '无法确定隧道地址', description: '无法自动计算目标 S 节点的隧道地址。', variant: "warning" });
                 }
             }
         }
@@ -723,18 +750,36 @@ export function AdvancedTopologyEditor() {
     if (nodeIndex === -1) return;
 
     const originalNodeDataFromState = newNodes[nodeIndex].data;
-    const mergedData = { ...originalNodeDataFromState, ...updatedDataFromDialog };
+    let mergedData = { ...originalNodeDataFromState, ...updatedDataFromDialog };
     
     if (mergedData.role === 'C') {
-        const targetParentNode = allCurrentNodes.find(n => n.id === newNodes[nodeIndex].parentNode);
-        const incomingEdge = getEdges().find(edge => edge.target === nodeId);
-        if (incomingEdge) {
-            const sourceNode = allCurrentNodes.find(n => n.id === incomingEdge.source);
-            const sourceParentNode = sourceNode ? allCurrentNodes.find(n => n.id === sourceNode.parentNode) : undefined;
-            if (sourceNode && sourceNode.data.role === 'S' && sourceParentNode && targetParentNode && 
-                sourceParentNode.data.masterId !== targetParentNode.data.masterId) {
-                mergedData.isSingleEndedForwardC = false; 
+        const clientNode = newNodes[nodeIndex];
+        const clientParentNode = allCurrentNodes.find(n => n.id === clientNode.parentNode);
+        let isInterMasterLinkForThisC = false;
+        
+        const incomingEdgeToC = getEdges().find(edge => edge.target === clientNode.id && allCurrentNodes.find(n => n.id === edge.source)?.data.role === 'S');
+        if (incomingEdgeToC) {
+            const sourceSNode = allCurrentNodes.find(n => n.id === incomingEdgeToC.source)!;
+            const sourceSParentNode = allCurrentNodes.find(n => n.id === sourceSNode.parentNode);
+            if(clientParentNode && sourceSParentNode && clientParentNode.data.masterId !== sourceSParentNode.data.masterId) {
+                isInterMasterLinkForThisC = true;
             }
+        } else {
+            const outgoingEdgeFromC = getEdges().find(edge => edge.source === clientNode.id && allCurrentNodes.find(n => n.id === edge.target)?.data.role === 'S');
+            if (outgoingEdgeFromC) {
+                const targetSNode = allCurrentNodes.find(n => n.id === outgoingEdgeFromC.target)!;
+                const targetSParentNode = allCurrentNodes.find(n => n.id === targetSNode.parentNode);
+                if (clientParentNode && targetSParentNode && clientParentNode.data.masterId !== targetSParentNode.data.masterId) {
+                    isInterMasterLinkForThisC = true;
+                }
+            }
+        }
+        
+        if (isInterMasterLinkForThisC) {
+            mergedData.isSingleEndedForwardC = false; 
+            // TLS mode for inter-master C is usually 'master' or what the user explicitly sets for client behavior
+            // It's not derived from the S node's data channel TLS.
+            // mergedData.tlsMode = mergedData.tlsMode || 'master'; // Keep existing or default
         }
     }
     
@@ -743,6 +788,7 @@ export function AdvancedTopologyEditor() {
 
     if (editedNode.data.role === 'S') {
         getEdges().forEach(edge => {
+            // S is source, C is target
             if (edge.source === editedNode.id) { 
                 const clientNodeIndex = newNodes.findIndex(n => n.id === edge.target && n.data.role === 'C');
                 if (clientNodeIndex !== -1) {
@@ -765,8 +811,44 @@ export function AdvancedTopologyEditor() {
                                         ...clientNode.data, 
                                         tunnelAddress: newClientTunnelAddr, 
                                         targetAddress: newClientTargetAddress, 
-                                        isSingleEndedForwardC: false,
-                                        tlsMode: clientNode.data.tlsMode || 'master'
+                                        isSingleEndedForwardC: false, // Reinforce tunnel mode
+                                        tlsMode: clientNode.data.tlsMode || 'master' // Preserve client's TLS
+                                    }
+                                };
+                                toast({ title: `跨主控入口(C) ${clientNode.data.label} 的地址已自动更新。` });
+                            } else if (!newClientTunnelAddr || newClientTunnelAddr.trim() === "") {
+                                toast({ title: `警告: 更新出口(S)后无法重新计算入口(C) ${clientNode.data.label} 的隧道地址。`, variant: "warning" });
+                            }
+                        }
+                    }
+                    // If S and C are in the same M, no auto-update of C's addresses based on S edit.
+                }
+            } 
+            // S is target, C is source
+            else if (edge.target === editedNode.id) {
+                const clientNodeIndex = newNodes.findIndex(n => n.id === edge.source && n.data.role === 'C');
+                 if (clientNodeIndex !== -1) {
+                    const clientNode = newNodes[clientNodeIndex];
+                    const serverParentMNode = allCurrentNodes.find(n => n.id === editedNode.parentNode); // S's parent
+                    const clientParentMNode = allCurrentNodes.find(n => n.id === clientNode.parentNode); // C's parent
+
+                    if (serverParentMNode && clientParentMNode && serverParentMNode.data.masterId !== clientParentMNode.data.masterId) {
+                        const serverMasterConfig = getApiConfigById(serverParentMNode.data.masterId!); // S's master config
+                        if (serverMasterConfig) {
+                            const newClientTunnelAddr = calculateClientTunnelAddressForServer(editedNode.data, serverMasterConfig); // Use S's data and S's master
+                            if (newClientTunnelAddr && newClientTunnelAddr.trim() !== "" && newClientTunnelAddr !== clientNode.data.tunnelAddress) {
+                                let newClientLocalTargetPort = parseInt(extractPort(editedNode.data.tunnelAddress || "0") || "0", 10);
+                                if (newClientLocalTargetPort > 0) newClientLocalTargetPort++; else newClientLocalTargetPort = 3001;
+                                const newClientTargetAddress = `[::]:${newClientLocalTargetPort.toString()}`;
+
+                                newNodes[clientNodeIndex] = {
+                                    ...clientNode,
+                                    data: {
+                                        ...clientNode.data,
+                                        tunnelAddress: newClientTunnelAddr,
+                                        targetAddress: newClientTargetAddress,
+                                        isSingleEndedForwardC: false, // Reinforce tunnel mode
+                                        tlsMode: clientNode.data.tlsMode || 'master' // Preserve client's TLS
                                     }
                                 };
                                 toast({ title: `跨主控入口(C) ${clientNode.data.label} 的地址已自动更新。` });
@@ -1004,7 +1086,3 @@ export function AdvancedTopologyEditor() {
     </div>
   );
 }
-
-    
-
-    
