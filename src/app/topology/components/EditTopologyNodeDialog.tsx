@@ -20,7 +20,8 @@ interface EditTopologyNodeDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   node: Node | null;
-  hasServerNodesInParentContainer: boolean; // New prop
+  hasServerNodesInParentContainer: boolean;
+  isInterMasterClientLink?: boolean; // True if C node is linked from an S in another M
   onSave: (nodeId: string, updatedData: Partial<CustomNodeData>) => void;
 }
 
@@ -61,8 +62,8 @@ const clientSchema = z.object({
   localHostC_Normal: z.optional(z.string().default("[::]")),
   localPortC_Normal: z.optional(z.string()),
   // For single-ended client (isSingleEndedForwardC = true)
-  localListenPortC_Single: z.optional(z.string()),
-  remoteTargetAddressC_Single: z.optional(z.string()),
+  localListenPortC_Single: z.optional(z.string()), // Only port
+  remoteTargetAddressC_Single: z.optional(z.string()), // host:port
   // Common for client
   logLevelC: z.enum(["master", "debug", "info", "warn", "error", "event"]),
   tlsModeC: z.enum(["master", "0", "1", "2"]),
@@ -71,29 +72,41 @@ const clientSchema = z.object({
 });
 
 
-const landingSchema = baseSchema.extend({}); // No specific fields for T node, targetAddress is synced.
+const landingSchema = baseSchema.extend({});
 
 type FormValues = z.infer<typeof masterSchema> | z.infer<typeof serverSchema> | z.infer<typeof clientSchema> | z.infer<typeof landingSchema>;
 
-export function EditTopologyNodeDialog({ open, onOpenChange, node, hasServerNodesInParentContainer, onSave }: EditTopologyNodeDialogProps) {
+export function EditTopologyNodeDialog({
+  open,
+  onOpenChange,
+  node,
+  hasServerNodesInParentContainer,
+  isInterMasterClientLink = false, // Default to false
+  onSave
+}: EditTopologyNodeDialogProps) {
   const role = node?.data.role;
   const { apiConfigsList, activeApiConfig, getApiConfigById } = useApiConfig();
+
+  // Determine if the "Single-Ended Forward" checkbox should even be available for a C node
+  const canClientBeSingleEnded = role === 'C' ? !hasServerNodesInParentContainer && !isInterMasterClientLink : false;
 
   const currentSchema = useMemo(() => {
     if (role === 'M') return masterSchema;
     if (role === 'S') return serverSchema;
     if (role === 'C') {
-        // Dynamically build client schema based on hasServerNodesInParentContainer
         return clientSchema.superRefine((data, ctx) => {
-            const isSingleEnded = hasServerNodesInParentContainer ? false : data.isSingleEndedForwardC;
-            if (isSingleEnded) {
+            // effectiveIsSingleEnded will be false if checkbox not shown (due to canClientBeSingleEnded being false)
+            // or if checkbox is shown and unchecked.
+            const effectiveIsSingleEnded = canClientBeSingleEnded ? data.isSingleEndedForwardC : false;
+
+            if (effectiveIsSingleEnded) { // Validating for Single-Ended Client fields
                 if (!data.localListenPortC_Single || !portRegex.test(data.localListenPortC_Single)) {
                   ctx.addIssue({ code: z.ZodIssueCode.custom, message: `本地监听端口无效 (${portErrorMsg})。`, path: ["localListenPortC_Single"] });
                 }
                 if (!data.remoteTargetAddressC_Single || !hostPortRegex.test(data.remoteTargetAddressC_Single)) {
                   ctx.addIssue({ code: z.ZodIssueCode.custom, message: `远程目标地址无效 (${hostPortErrorMsg})。`, path: ["remoteTargetAddressC_Single"] });
                 }
-            } else { // Normal client (connected to S)
+            } else { // Validating for Normal Client (connected to S) fields
                 if (!data.tunnelAddressC_Normal || !hostPortRegex.test(data.tunnelAddressC_Normal)) {
                   ctx.addIssue({ code: z.ZodIssueCode.custom, message: `服务端隧道地址无效 (${hostPortErrorMsg})。`, path: ["tunnelAddressC_Normal"] });
                 }
@@ -113,7 +126,7 @@ export function EditTopologyNodeDialog({ open, onOpenChange, node, hasServerNode
         });
     }
     return landingSchema;
-  }, [role, hasServerNodesInParentContainer]);
+  }, [role, canClientBeSingleEnded]);
 
 
   const otherApiConfigs = apiConfigsList.filter(c => c.id !== node?.data.masterId && c.id !== activeApiConfig?.id);
@@ -151,18 +164,17 @@ export function EditTopologyNodeDialog({ open, onOpenChange, node, hasServerNode
           keyPathS: data.keyPath || "",
         };
       } else if (role === 'C') {
-        const isEffectivelySingleEnded = hasServerNodesInParentContainer ? false : !!data.isSingleEndedForwardC;
-        const parentMasterConfig = data.parentNode ? getApiConfigById(node.data.parentNode ? getNodeById(node.data.parentNode)?.data.masterId || "" : "") : null;
+        const isEffectivelySingleEndedForDefaults = canClientBeSingleEnded ? !!data.isSingleEndedForwardC : false;
 
         defaultVals = {
           ...defaultVals,
-          isSingleEndedForwardC: isEffectivelySingleEnded,
-          logLevelC: (data.logLevel as any) || parentMasterConfig?.masterDefaultLogLevel || "master",
-          tlsModeC: (data.tlsMode as any) || (isEffectivelySingleEnded ? "0" : (parentMasterConfig?.masterDefaultTlsMode || "master")),
+          isSingleEndedForwardC: isEffectivelySingleEndedForDefaults,
+          logLevelC: (data.logLevel as any) || "master", // Master config for C node defaults removed for simplicity
+          tlsModeC: (data.tlsMode as any) || (isEffectivelySingleEndedForDefaults ? "0" : "master"),
           certPathC: data.certPath || "",
           keyPathC: data.keyPath || "",
         };
-        if (isEffectivelySingleEnded) {
+        if (isEffectivelySingleEndedForDefaults) {
           (defaultVals as any).localListenPortC_Single = extractPort(data.tunnelAddress || "[::]:0") || "";
           (defaultVals as any).remoteTargetAddressC_Single = data.targetAddress || "";
         } else {
@@ -175,8 +187,7 @@ export function EditTopologyNodeDialog({ open, onOpenChange, node, hasServerNode
       }
       form.reset(defaultVals as any);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [node, open, form, role, hasServerNodesInParentContainer, currentSchema]); // Added currentSchema to deps
+  }, [node, open, form, role, currentSchema, canClientBeSingleEnded]);
 
   const onSubmit = (values: FormValues) => {
     if (!node) return;
@@ -210,20 +221,23 @@ export function EditTopologyNodeDialog({ open, onOpenChange, node, hasServerNode
         certPath: values.tlsModeS === "2" ? values.certPathS : "",
         keyPath: values.tlsModeS === "2" ? values.keyPathS : "",
       };
-    } else if (role === 'C' && 'logLevelC' in values) { // Check for a common client field
-      const isEffectivelySingleEnded = hasServerNodesInParentContainer ? false : values.isSingleEndedForwardC;
+    } else if (role === 'C' && 'logLevelC' in values) {
+      // Determine the true single-ended state for the *data model*
+      const finalIsSingleEndedDataValue = canClientBeSingleEnded ? values.isSingleEndedForwardC : false;
+
       updatedData = {
         ...updatedData,
-        isSingleEndedForwardC: isEffectivelySingleEnded,
+        isSingleEndedForwardC: finalIsSingleEndedDataValue,
         logLevel: values.logLevelC,
         tlsMode: values.tlsModeC,
         certPath: values.tlsModeC === "2" ? values.certPathC : "",
         keyPath: values.tlsModeC === "2" ? values.keyPathC : "",
       };
-      if (isEffectivelySingleEnded) {
+
+      if (finalIsSingleEndedDataValue) {
         updatedData.tunnelAddress = `${formatHostForDisplay("[::]")}:${values.localListenPortC_Single}`;
         updatedData.targetAddress = values.remoteTargetAddressC_Single;
-      } else {
+      } else { // Normal client (or inter-master client treated as normal)
         updatedData.tunnelAddress = values.tunnelAddressC_Normal;
         updatedData.targetAddress = `${formatHostForDisplay(values.localHostC_Normal || "[::]")}:${values.localPortC_Normal}`;
       }
@@ -233,25 +247,15 @@ export function EditTopologyNodeDialog({ open, onOpenChange, node, hasServerNode
     onSave(node.id, updatedData);
     onOpenChange(false);
   };
-  
-  const getNodeById = (id: string): Node | undefined => {
-    // This is a placeholder. In a real scenario, TopologyEditor would pass `nodesInternal`
-    // or a specific getter function if this dialog needed to access other nodes.
-    // For now, it's primarily used by `useEffect` related to parent master config,
-    // which is already somewhat indirect.
-    console.warn("getNodeById called in EditTopologyNodeDialog, but it doesn't have access to all nodes. This might limit some dynamic default value calculations if they depend on other nodes beyond the parent master.");
-    return undefined;
-  }
-
 
   if (!node) return null;
   const dialogTitle = role === 'M' ? "编辑 主控容器 属性" : role === 'S' ? "编辑 出口(s) 属性" : role === 'C' ? "编辑 入口(c) 属性" : "编辑 落地 属性";
   const watchedMasterSubRole = role === 'M' ? form.watch('masterSubRoleM') : undefined;
-  
-  // For client nodes, determine if single-ended mode is effectively active for UI display
-  // If servers exist in parent, it's NOT single-ended. Otherwise, respect the checkbox.
-  const clientIsEffectivelySingleEnded = role === 'C' ? (hasServerNodesInParentContainer ? false : form.watch('isSingleEndedForwardC')) : false;
-  
+
+  // This variable determines which set of form fields to RENDER for a C node.
+  // If it cannot be single-ended (e.g., inter-master link), then it's effectively a normal client for UI.
+  const renderClientAsSingleEnded = canClientBeSingleEnded ? form.watch('isSingleEndedForwardC') : false;
+
   const watchedClientTlsMode = role === 'C' ? form.watch('tlsModeC') : undefined;
   const watchedServerTlsMode = role === 'S' ? form.watch('tlsModeS') : undefined;
 
@@ -345,7 +349,7 @@ export function EditTopologyNodeDialog({ open, onOpenChange, node, hasServerNode
 
             {role === 'C' && (
               <>
-                {!hasServerNodesInParentContainer && (
+                {canClientBeSingleEnded ? (
                   <FormField
                     control={form.control}
                     name="isSingleEndedForwardC"
@@ -359,8 +363,13 @@ export function EditTopologyNodeDialog({ open, onOpenChange, node, hasServerNode
                       </FormItem>
                     )}
                   />
+                ) : (
+                  <div className="p-2 text-xs text-muted-foreground border rounded-md bg-muted/50 font-sans">
+                    {hasServerNodesInParentContainer && "此入口(c)的父主控容器内已有出口(s)节点，不能设为单端转发模式。"}
+                    {isInterMasterClientLink && "此入口(c)已连接到另一主控的出口(s)，为隧道模式，不能设为单端转发。"}
+                  </div>
                 )}
-                {clientIsEffectivelySingleEnded ? (
+                {renderClientAsSingleEnded ? (
                   <>
                     <FormField control={form.control} name="localListenPortC_Single" render={({ field }) => (
                       <FormItem><FormLabel className="font-sans">本地监听端口</FormLabel><FormControl><Input {...field} placeholder="例: 10101" className="font-mono" /></FormControl><FormMessage /></FormItem>)} />
@@ -381,7 +390,7 @@ export function EditTopologyNodeDialog({ open, onOpenChange, node, hasServerNode
                   <FormItem><FormLabel className="font-sans">日志级别</FormLabel><Select onValueChange={field.onChange} value={field.value as string}><FormControl><SelectTrigger className="font-sans"><SelectValue /></SelectTrigger></FormControl><SelectContent><SelectItem value="master">主控默认</SelectItem><SelectItem value="debug">Debug</SelectItem><SelectItem value="info">Info</SelectItem><SelectItem value="warn">Warn</SelectItem><SelectItem value="error">Error</SelectItem><SelectItem value="event">Event</SelectItem></SelectContent></Select><FormMessage /></FormItem>)} />
                  <FormField control={form.control} name="tlsModeC" render={({ field }) => (
                   <FormItem>
-                    <FormLabel className="font-sans">TLS模式 {clientIsEffectivelySingleEnded ? "(连接到远程目标)" : "(连接到出口(s))"}</FormLabel>
+                    <FormLabel className="font-sans">TLS模式 {renderClientAsSingleEnded ? "(连接到远程目标)" : "(连接到出口(s))"}</FormLabel>
                     <Select onValueChange={field.onChange} value={field.value as string}>
                       <FormControl><SelectTrigger className="font-sans"><SelectValue /></SelectTrigger></FormControl>
                       <SelectContent>{Object.entries(MASTER_TLS_MODE_DISPLAY_MAP).map(([val, lab]) => (<SelectItem key={val} value={val}>{lab}</SelectItem>))}</SelectContent>
@@ -413,4 +422,3 @@ export function EditTopologyNodeDialog({ open, onOpenChange, node, hasServerNode
     </Dialog>
   );
 }
-
