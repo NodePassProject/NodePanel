@@ -21,7 +21,10 @@ interface EditTopologyNodeDialogProps {
   onOpenChange: (open: boolean) => void;
   node: Node | null;
   hasServerNodesInParentContainer: boolean;
-  isInterMasterClientLink?: boolean; // True if C node is linked from an S in another M
+  isInterMasterClientLink?: boolean;
+  interMasterLinkSourceInfo?: {
+    serverTunnelAddress: string;
+  };
   onSave: (nodeId: string, updatedData: Partial<CustomNodeData>) => void;
 }
 
@@ -57,14 +60,11 @@ const serverSchema = baseSchema.extend({
 const clientSchema = z.object({
   label: z.string().min(1, "标签不能为空。"),
   isSingleEndedForwardC: z.boolean().default(false),
-  // For normal client (isSingleEndedForwardC = false)
   tunnelAddressC_Normal: z.optional(z.string()),
   localHostC_Normal: z.optional(z.string().default("[::]")),
   localPortC_Normal: z.optional(z.string()),
-  // For single-ended client (isSingleEndedForwardC = true)
-  localListenPortC_Single: z.optional(z.string()), // Only port
-  remoteTargetAddressC_Single: z.optional(z.string()), // host:port
-  // Common for client
+  localListenPortC_Single: z.optional(z.string()), 
+  remoteTargetAddressC_Single: z.optional(z.string()), 
   logLevelC: z.enum(["master", "debug", "info", "warn", "error", "event"]),
   tlsModeC: z.enum(["master", "0", "1", "2"]),
   certPathC: z.optional(z.string()),
@@ -81,13 +81,13 @@ export function EditTopologyNodeDialog({
   onOpenChange,
   node,
   hasServerNodesInParentContainer,
-  isInterMasterClientLink = false, // Default to false
+  isInterMasterClientLink = false,
+  interMasterLinkSourceInfo,
   onSave
 }: EditTopologyNodeDialogProps) {
   const role = node?.data.role;
   const { apiConfigsList, activeApiConfig, getApiConfigById } = useApiConfig();
 
-  // Determine if the "Single-Ended Forward" checkbox should even be available for a C node
   const canClientBeSingleEnded = role === 'C' ? !hasServerNodesInParentContainer && !isInterMasterClientLink : false;
 
   const currentSchema = useMemo(() => {
@@ -95,18 +95,16 @@ export function EditTopologyNodeDialog({
     if (role === 'S') return serverSchema;
     if (role === 'C') {
         return clientSchema.superRefine((data, ctx) => {
-            // effectiveIsSingleEnded will be false if checkbox not shown (due to canClientBeSingleEnded being false)
-            // or if checkbox is shown and unchecked.
             const effectiveIsSingleEnded = canClientBeSingleEnded ? data.isSingleEndedForwardC : false;
 
-            if (effectiveIsSingleEnded) { // Validating for Single-Ended Client fields
+            if (effectiveIsSingleEnded) { 
                 if (!data.localListenPortC_Single || !portRegex.test(data.localListenPortC_Single)) {
                   ctx.addIssue({ code: z.ZodIssueCode.custom, message: `本地监听端口无效 (${portErrorMsg})。`, path: ["localListenPortC_Single"] });
                 }
                 if (!data.remoteTargetAddressC_Single || !hostPortRegex.test(data.remoteTargetAddressC_Single)) {
                   ctx.addIssue({ code: z.ZodIssueCode.custom, message: `远程目标地址无效 (${hostPortErrorMsg})。`, path: ["remoteTargetAddressC_Single"] });
                 }
-            } else { // Validating for Normal Client (connected to S) fields
+            } else { 
                 if (!data.tunnelAddressC_Normal || !hostPortRegex.test(data.tunnelAddressC_Normal)) {
                   ctx.addIssue({ code: z.ZodIssueCode.custom, message: `服务端隧道地址无效 (${hostPortErrorMsg})。`, path: ["tunnelAddressC_Normal"] });
                 }
@@ -169,7 +167,7 @@ export function EditTopologyNodeDialog({
         defaultVals = {
           ...defaultVals,
           isSingleEndedForwardC: isEffectivelySingleEndedForDefaults,
-          logLevelC: (data.logLevel as any) || "master", // Master config for C node defaults removed for simplicity
+          logLevelC: (data.logLevel as any) || "master", 
           tlsModeC: (data.tlsMode as any) || (isEffectivelySingleEndedForDefaults ? "0" : "master"),
           certPathC: data.certPath || "",
           keyPathC: data.keyPath || "",
@@ -178,7 +176,11 @@ export function EditTopologyNodeDialog({
           (defaultVals as any).localListenPortC_Single = extractPort(data.tunnelAddress || "[::]:0") || "";
           (defaultVals as any).remoteTargetAddressC_Single = data.targetAddress || "";
         } else {
-          (defaultVals as any).tunnelAddressC_Normal = data.tunnelAddress || "";
+          if (isInterMasterClientLink && interMasterLinkSourceInfo) {
+            (defaultVals as any).tunnelAddressC_Normal = interMasterLinkSourceInfo.serverTunnelAddress;
+          } else {
+            (defaultVals as any).tunnelAddressC_Normal = data.tunnelAddress || "";
+          }
           (defaultVals as any).localHostC_Normal = extractHostname(data.targetAddress || "[::]:0") || "[::]";
           (defaultVals as any).localPortC_Normal = extractPort(data.targetAddress || "[::]:0") || "";
         }
@@ -187,7 +189,7 @@ export function EditTopologyNodeDialog({
       }
       form.reset(defaultVals as any);
     }
-  }, [node, open, form, role, currentSchema, canClientBeSingleEnded]);
+  }, [node, open, form, role, hasServerNodesInParentContainer, isInterMasterClientLink, currentSchema, interMasterLinkSourceInfo, canClientBeSingleEnded]);
 
   const onSubmit = (values: FormValues) => {
     if (!node) return;
@@ -222,7 +224,6 @@ export function EditTopologyNodeDialog({
         keyPath: values.tlsModeS === "2" ? values.keyPathS : "",
       };
     } else if (role === 'C' && 'logLevelC' in values) {
-      // Determine the true single-ended state for the *data model*
       const finalIsSingleEndedDataValue = canClientBeSingleEnded ? values.isSingleEndedForwardC : false;
 
       updatedData = {
@@ -237,7 +238,7 @@ export function EditTopologyNodeDialog({
       if (finalIsSingleEndedDataValue) {
         updatedData.tunnelAddress = `${formatHostForDisplay("[::]")}:${values.localListenPortC_Single}`;
         updatedData.targetAddress = values.remoteTargetAddressC_Single;
-      } else { // Normal client (or inter-master client treated as normal)
+      } else { 
         updatedData.tunnelAddress = values.tunnelAddressC_Normal;
         updatedData.targetAddress = `${formatHostForDisplay(values.localHostC_Normal || "[::]")}:${values.localPortC_Normal}`;
       }
@@ -252,8 +253,6 @@ export function EditTopologyNodeDialog({
   const dialogTitle = role === 'M' ? "编辑 主控容器 属性" : role === 'S' ? "编辑 出口(s) 属性" : role === 'C' ? "编辑 入口(c) 属性" : "编辑 落地 属性";
   const watchedMasterSubRole = role === 'M' ? form.watch('masterSubRoleM') : undefined;
 
-  // This variable determines which set of form fields to RENDER for a C node.
-  // If it cannot be single-ended (e.g., inter-master link), then it's effectively a normal client for UI.
   const renderClientAsSingleEnded = canClientBeSingleEnded ? form.watch('isSingleEndedForwardC') : false;
 
   const watchedClientTlsMode = role === 'C' ? form.watch('tlsModeC') : undefined;
@@ -365,7 +364,7 @@ export function EditTopologyNodeDialog({
                   />
                 ) : (
                   <div className="p-2 text-xs text-muted-foreground border rounded-md bg-muted/50 font-sans">
-                    {hasServerNodesInParentContainer && "此入口(c)的父主控容器内已有出口(s)节点，不能设为单端转发模式。"}
+                    {hasServerNodesInParentContainer && !isInterMasterClientLink && "此入口(c)的父主控容器内已有出口(s)节点，不能设为单端转发模式。"}
                     {isInterMasterClientLink && "此入口(c)已连接到另一主控的出口(s)，为隧道模式，不能设为单端转发。"}
                   </div>
                 )}
@@ -376,10 +375,27 @@ export function EditTopologyNodeDialog({
                     <FormField control={form.control} name="remoteTargetAddressC_Single" render={({ field }) => (
                       <FormItem><FormLabel className="font-sans">转发地址 (远程目标)</FormLabel><FormControl><Input {...field} placeholder="例: remote.host:8000" className="font-mono" /></FormControl><FormMessage /></FormItem>)} />
                   </>
-                ) : ( // Normal client mode (connecting to an S node)
+                ) : ( 
                   <>
                     <FormField control={form.control} name="tunnelAddressC_Normal" render={({ field }) => (
-                      <FormItem><FormLabel className="font-sans">服务端隧道地址</FormLabel><FormControl><Input {...field} placeholder="例: server.example.com:10101" className="font-mono" /></FormControl><FormMessage /></FormItem>)} />
+                      <FormItem>
+                        <FormLabel className="font-sans">服务端隧道地址</FormLabel>
+                        <FormControl>
+                          <Input
+                            {...field}
+                            placeholder="例: server.example.com:10101"
+                            className="font-mono"
+                            disabled={isInterMasterClientLink && !!interMasterLinkSourceInfo?.serverTunnelAddress}
+                          />
+                        </FormControl>
+                        {isInterMasterClientLink && !!interMasterLinkSourceInfo?.serverTunnelAddress && (
+                          <FormDescription className="font-sans text-xs">
+                            此地址由跨主控连接自动确定。
+                          </FormDescription>
+                        )}
+                        <FormMessage />
+                      </FormItem>
+                    )} />
                     <FormField control={form.control} name="localHostC_Normal" render={({ field }) => (
                       <FormItem><FormLabel className="font-sans">本地监听主机</FormLabel><FormControl><Input {...field} placeholder="例: [::] 或 127.0.0.1" className="font-mono" /></FormControl><FormMessage /></FormItem>)} />
                     <FormField control={form.control} name="localPortC_Normal" render={({ field }) => (
@@ -422,3 +438,5 @@ export function EditTopologyNodeDialog({
     </Dialog>
   );
 }
+
+    
