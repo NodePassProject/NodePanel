@@ -87,7 +87,6 @@ export function AdvancedTopologyEditor() {
 
   const updateMasterNodeDimensions = useCallback((masterNodeId: string, currentNodes: Node[]): Node[] => {
     const masterNode = currentNodes.find(n => n.id === masterNodeId);
-    // Apply scaling only to M-type container nodes
     if (!masterNode || !masterNode.data.isContainer || masterNode.data.role !== 'M') {
       return currentNodes;
     }
@@ -99,19 +98,17 @@ export function AdvancedTopologyEditor() {
     let newHeight: number;
 
     if (numChildren === 0) {
-      newWidth = MIN_MASTER_NODE_WIDTH; // Base size when no children
+      newWidth = MIN_MASTER_NODE_WIDTH;
       newHeight = MIN_MASTER_NODE_HEIGHT;
     } else {
-      // Scale based on the number of children: base_size * (SCALE_FACTOR ^ num_children)
+      // Scale cumulatively: base * factor^numChildren
       newWidth = MIN_MASTER_NODE_WIDTH * Math.pow(M_NODE_SCALE_FACTOR_PER_CHILD, numChildren);
       newHeight = MIN_MASTER_NODE_HEIGHT * Math.pow(M_NODE_SCALE_FACTOR_PER_CHILD, numChildren);
     }
 
-    // Round to nearest integer
     newWidth = Math.round(newWidth);
     newHeight = Math.round(newHeight);
 
-    // Check if dimensions actually changed to avoid unnecessary re-renders
     if (masterNode.width === newWidth && masterNode.height === newHeight) {
       return currentNodes;
     }
@@ -124,7 +121,7 @@ export function AdvancedTopologyEditor() {
     };
 
     return currentNodes.map(n => (n.id === masterNodeId ? updatedMasterNode : n));
-  }, [MIN_MASTER_NODE_WIDTH, MIN_MASTER_NODE_HEIGHT]); // M_NODE_SCALE_FACTOR_PER_CHILD is a const
+  }, []);
 
 
   const onNodesChangeInternal: OnNodesChange = useCallback((changes: NodeChange[]) => {
@@ -134,27 +131,18 @@ export function AdvancedTopologyEditor() {
 
       const parentIdsToUpdate = new Set<string>();
       changes.forEach(change => {
-        let affectedNodeId: string | undefined = undefined;
         if (change.type === 'remove') {
-          // If a child node is removed, its parent M node needs resizing.
           const removedNode = nds.find(n => n.id === change.id);
           if (removedNode && removedNode.parentNode) {
             parentIdsToUpdate.add(removedNode.parentNode);
           }
-        } else if ('id' in change && (change.type === 'position' || change.type === 'dimensions')) {
-          // If a child node's position/dimensions change, its parent M node might need resizing
-          // (though new logic ignores child positions for M size, it's good to keep this for future).
-          // For add operations (which also fall here if position is set), update parent.
-          const originalNode = nds.find(n => n.id === change.id);
-          const changedNode = finalNodes.find(n => n.id === change.id);
-          if (changedNode && changedNode.parentNode) {
-             parentIdsToUpdate.add(changedNode.parentNode);
-          } else if (originalNode && originalNode.parentNode) {
-            // This handles cases where a node might be moved out of a parent (parentNode becomes null)
-            parentIdsToUpdate.add(originalNode.parentNode);
-          }
         } else if (change.type === 'add' && change.item.parentNode) {
             parentIdsToUpdate.add(change.item.parentNode);
+        } else if (change.type === 'dimensions') {
+            const changedNode = finalNodes.find(n => n.id === change.id);
+            if (changedNode && changedNode.parentNode) {
+                 parentIdsToUpdate.add(changedNode.parentNode);
+            }
         }
       });
 
@@ -384,6 +372,7 @@ export function AdvancedTopologyEditor() {
             }
             return n;
         });
+
         if (parentToUpdate) {
             return updateMasterNodeDimensions(parentToUpdate, updatedNodes);
         }
@@ -412,17 +401,17 @@ export function AdvancedTopologyEditor() {
  const onPaneClick = useCallback(() => {
     setContextMenu(null);
 
-    let wasSelectedNodeCollapsed = false;
-    let parentsToUpdateSet = new Set<string>();
+    let wasSelectedNodeActuallyCollapsed = false;
+    let parentsToUpdateDueToCollapse = new Set<string>();
 
     setNodesInternal(nds => {
       const updatedNodes = nds.map(n => {
         if ((n.data.role === 'S' || n.data.role === 'C' || n.data.role === 'T' || n.data.role === 'U') && n.data.isExpanded) {
           if (n.parentNode) {
-            parentsToUpdateSet.add(n.parentNode);
+            parentsToUpdateDueToCollapse.add(n.parentNode);
           }
           if (selectedNode && selectedNode.id === n.id) {
-            wasSelectedNodeCollapsed = true;
+            wasSelectedNodeActuallyCollapsed = true;
           }
           return {
             ...n,
@@ -435,15 +424,15 @@ export function AdvancedTopologyEditor() {
         return n;
       });
 
-      let finalNodes = updatedNodes;
-      parentsToUpdateSet.forEach(parentId => {
-        finalNodes = updateMasterNodeDimensions(parentId, finalNodes);
+      let finalNodesAfterCollapse = updatedNodes;
+      parentsToUpdateDueToCollapse.forEach(parentId => {
+        finalNodesAfterCollapse = updateMasterNodeDimensions(parentId, finalNodesAfterCollapse);
       });
 
-      return finalNodes;
+      return finalNodesAfterCollapse;
     });
 
-    if (wasSelectedNodeCollapsed) {
+    if (wasSelectedNodeActuallyCollapsed) {
       setSelectedNode(null);
     }
   }, [setContextMenu, setNodesInternal, updateMasterNodeDimensions, selectedNode, setSelectedNode]);
@@ -453,7 +442,7 @@ export function AdvancedTopologyEditor() {
     const handleClickOutside = (event: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(event.target as HTMLElement)) setContextMenu(null);
     };
-    if (contextMenu) document.addEventListener('mousedown', handleClickOutside');
+    if (contextMenu) document.addEventListener('mousedown', handleClickOutside);
     else document.removeEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [contextMenu]);
@@ -467,7 +456,7 @@ export function AdvancedTopologyEditor() {
       let currentCounter = nodeIdCounter;
       let newNodesList: Node[] = [];
 
-      const M_NODE_CHILD_PADDING_VISUAL = 25; // Visual padding inside M, not for size calculation
+      const M_NODE_CHILD_PADDING_VISUAL = 25;
 
       const parentMContainer = allCurrentNodes.find(n => {
           if (n.data.role !== 'M' || !n.data.isContainer) return false;
@@ -553,7 +542,6 @@ export function AdvancedTopologyEditor() {
 
               const parentX = parentMContainer.position.x;
               const parentY = parentMContainer.position.y;
-              // Use current M width/height for child positioning, not its scaled future size
               const currentParentWidth = parentMContainer.width || MIN_MASTER_NODE_WIDTH;
               const currentParentHeight = parentMContainer.height || MIN_MASTER_NODE_HEIGHT;
 
@@ -563,7 +551,6 @@ export function AdvancedTopologyEditor() {
 
               setNodesInternal(nds => {
                 const nodesWithNewChild = nds.concat([newNode]);
-                // updateMasterNodeDimensions will now use the new scaling logic
                 return updateMasterNodeDimensions(parentMContainer.id, nodesWithNewChild);
               });
               toast({ title: `${labelPrefix} 节点已添加至 ${parentMContainer.data.label}` });
@@ -575,7 +562,7 @@ export function AdvancedTopologyEditor() {
           }
       }
       setNodeIdCounter(currentCounter);
-  }, [nodeIdCounter, getNodes, toast, setNodesInternal, fitView, updateMasterNodeDimensions, MIN_MASTER_NODE_WIDTH, MIN_MASTER_NODE_HEIGHT]);
+  }, [nodeIdCounter, getNodes, toast, setNodesInternal, fitView, updateMasterNodeDimensions]);
 
 
   const handleChangeNodeRole = useCallback((nodeId: string, newRole: 'S' | 'C') => {
@@ -659,7 +646,7 @@ export function AdvancedTopologyEditor() {
 
     setTimeout(() => fitView({ duration: 400, padding: 0.1 }), 100);
     toast({ title: '布局已格式化' });
-  }, [getNodes, getEdges, setReactFlowNodes, setReactFlowEdges, fitView, toast, updateMasterNodeDimensions, MIN_MASTER_NODE_WIDTH, MIN_MASTER_NODE_HEIGHT]);
+  }, [getNodes, getEdges, setReactFlowNodes, setReactFlowEdges, fitView, toast, updateMasterNodeDimensions]);
 
 
   const prepareInstancesForSubmission = useCallback((): InstanceUrlConfigWithName[] => {
@@ -1043,6 +1030,7 @@ export function AdvancedTopologyEditor() {
     }
 
     setNodesInternal(newNodes);
+
     if (editedNode.data.role === 'M' && editedNode.data.isContainer) {
       setNodesInternal(prevNodes => updateMasterNodeDimensions(editedNode.id, prevNodes));
     } else if (editedNode.parentNode) {
@@ -1056,16 +1044,13 @@ export function AdvancedTopologyEditor() {
 
   const handleDeleteNode = (nodeToDelete: Node) => {
     const parentId = nodeToDelete.parentNode;
-    deleteElements({ nodes: [nodeToDelete] }); // This triggers onNodesChange, which then calls updateMasterNodeDimensions
+    deleteElements({ nodes: [nodeToDelete] });
     toast({ title: `节点 "${nodeToDelete.data.label || nodeToDelete.id}" 已删除` });
     if (selectedNode?.id === nodeToDelete.id) setSelectedNode(null);
     setContextMenu(null);
-    // No need to explicitly call updateMasterNodeDimensions here IF onNodesChange correctly identifies parent for update on 'remove'
-    // The onNodesChangeInternal callback should already handle parent resizing upon child removal.
-    // If not, this would be the place:
-    // if (parentId) {
-    //     setNodesInternal(prevNodes => updateMasterNodeDimensions(parentId, prevNodes.filter(n => n.id !== nodeToDelete.id)));
-    // }
+    if (parentId) {
+        setNodesInternal(prevNodes => updateMasterNodeDimensions(parentId, prevNodes.filter(n => n.id !== nodeToDelete.id)));
+    }
   };
   const handleDeleteEdge = (edgeToDelete: Edge) => { deleteElements({ edges: [edgeToDelete] }); toast({ title: '链路已删除' }); setContextMenu(null); };
 
@@ -1087,7 +1072,7 @@ export function AdvancedTopologyEditor() {
         const newRenderedNodes: Node[] = [];
 
         const mContainerNodeId = `adv-master-container-${masterConfig.id.substring(0, 8)}-${++currentIdCounter}`;
-        const M_NODE_CHILD_PADDING_VISUAL = 25; // Visual padding
+        const M_NODE_CHILD_PADDING_VISUAL = 25;
         const mContainerNode: Node = {
             id: mContainerNodeId, type: 'masterNode', position: { x: 100, y: 50 },
             data: {
@@ -1148,7 +1133,7 @@ export function AdvancedTopologyEditor() {
       toast({ title: `渲染主控 ${masterConfig.name} 实例失败`, description: error.message, variant: "destructive" });
       setNodesInternal([]); setEdgesInternal([]);
     }
-  }, [getApiConfigById, getApiRootUrl, getToken, toast, setNodesInternal, setEdgesInternal, fitView, updateMasterNodeDimensions, handleFormatLayout, MIN_MASTER_NODE_WIDTH, MIN_MASTER_NODE_HEIGHT]);
+  }, [getApiConfigById, getApiRootUrl, getToken, toast, setNodesInternal, setEdgesInternal, fitView, updateMasterNodeDimensions, handleFormatLayout]);
 
 
   return (
@@ -1248,5 +1233,6 @@ export function AdvancedTopologyEditor() {
     </div>
   );
 }
+
 
     
