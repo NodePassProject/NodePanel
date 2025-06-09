@@ -25,7 +25,7 @@ const initialZoomLevel = 0.5;
 
 interface ToolbarWrapperProps {
   onCenterView: (instance: ReturnType<typeof useReactFlow>) => void;
-  onFormatLayout: () => void;
+  // onFormatLayout prop removed
   onClearCanvas: () => void;
   onSubmitTopology: () => void;
   canSubmit: boolean;
@@ -34,7 +34,7 @@ interface ToolbarWrapperProps {
 
 const ToolbarWrapper: React.FC<ToolbarWrapperProps> = ({
   onCenterView,
-  onFormatLayout,
+  // onFormatLayout removed
   onClearCanvas,
   onSubmitTopology,
   canSubmit,
@@ -44,7 +44,7 @@ const ToolbarWrapper: React.FC<ToolbarWrapperProps> = ({
   return (
     <TopologyToolbar
       onCenterView={() => onCenterView(reactFlowInstance)}
-      onFormatLayout={onFormatLayout}
+      // onFormatLayout removed
       onClearCanvas={onClearCanvas}
       onSubmitTopology={onSubmitTopology}
       canSubmit={canSubmit}
@@ -62,7 +62,7 @@ interface TopologyCanvasWrapperProps {
   onSelectionChange: ({ nodes, edges }: { nodes: Node[]; edges: Edge[] }) => void;
   reactFlowWrapperRef: React.RefObject<HTMLDivElement>;
   onCenterView: (instance: ReturnType<typeof useReactFlow>) => void;
-  onFormatLayout: () => void; 
+  // onFormatLayout prop removed
   onClearCanvas: () => void;
   onTriggerSubmitTopology: () => void;
   canSubmit: boolean;
@@ -80,7 +80,7 @@ interface TopologyCanvasWrapperProps {
 
 export const TopologyCanvasWrapper: React.FC<TopologyCanvasWrapperProps> = ({
   nodes, edges, onNodesChange, onEdgesChange, onConnect, onSelectionChange,
-  reactFlowWrapperRef, onCenterView, onFormatLayout, onClearCanvas, onTriggerSubmitTopology,
+  reactFlowWrapperRef, onCenterView, /* onFormatLayout removed */ onClearCanvas, onTriggerSubmitTopology,
   canSubmit, isSubmitting, onNodeDropOnCanvas, onNodeContextMenu,
   onEdgeContextMenu, onPaneClick, onNodeClick
 }) => {
@@ -158,7 +158,7 @@ export const TopologyCanvasWrapper: React.FC<TopologyCanvasWrapperProps> = ({
         <Panel position="top-right" className="!m-0 !p-2 bg-transparent">
           <ToolbarWrapper
             onCenterView={onCenterView}
-            onFormatLayout={onFormatLayout}
+            // onFormatLayout removed
             onClearCanvas={onClearCanvas}
             onSubmitTopology={onTriggerSubmitTopology}
             canSubmit={canSubmit}

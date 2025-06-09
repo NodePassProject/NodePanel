@@ -3,11 +3,11 @@
 
 import React from 'react';
 import { Button } from '@/components/ui/button';
-import { LocateFixed, Trash2, Send, LayoutGrid } from 'lucide-react'; 
+import { LocateFixed, Trash2, Send } from 'lucide-react'; 
 
 interface TopologyToolbarProps {
   onCenterView: () => void;
-  onFormatLayout: () => void; 
+  // onFormatLayout prop removed
   onClearCanvas: () => void;
   onSubmitTopology: () => void;
   canSubmit: boolean;
@@ -16,7 +16,7 @@ interface TopologyToolbarProps {
 
 export function TopologyToolbar({
   onCenterView,
-  onFormatLayout,
+  // onFormatLayout removed
   onClearCanvas,
   onSubmitTopology,
   canSubmit,
@@ -28,10 +28,7 @@ export function TopologyToolbar({
         <LocateFixed className="mr-2 h-4 w-4" />
         居中
       </Button>
-      <Button onClick={onFormatLayout} size="sm" variant="outline" className="font-sans" disabled={isSubmitting}>
-        <LayoutGrid className="mr-2 h-4 w-4" />
-        格式化
-      </Button>
+      {/* "Format Layout" button removed */}
       <Button onClick={onSubmitTopology} size="sm" variant="default" className="font-sans" disabled={!canSubmit || isSubmitting}>
         <Send className="mr-2 h-4 w-4" />
         {isSubmitting ? "提交中..." : "提交"}

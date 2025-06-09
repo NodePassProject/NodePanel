@@ -15,7 +15,7 @@ import {
   type NodeChange,
   type NodeMouseHandler,
 } from 'reactflow';
-import dagre from 'dagre';
+// dagre import removed as handleFormatLayout is removed
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Server, DatabaseZap, User, Globe, ListTree, Puzzle, Info as InfoIcon } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
@@ -47,16 +47,13 @@ const initialEdges: Edge[] = [];
 
 const MIN_MASTER_NODE_HEIGHT = 120;
 const MIN_MASTER_NODE_WIDTH = 200;
-const M_NODE_SCALE_FACTOR_PER_CHILD = 1.2; // Each child scales the M node by this factor
+const M_NODE_SCALE_FACTOR_PER_CHILD = 1.2; 
 
 
-const dagreGraph = new dagre.graphlib.Graph({ compound: true });
-dagreGraph.setDefaultEdgeLabel(() => ({}));
-dagreGraph.setGraph({ rankdir: 'LR', align: 'UL', nodesep: 60, ranksep: 70, edgesep: 20 });
-
+// dagreGraph related code removed as handleFormatLayout is removed
 
 export function AdvancedTopologyEditor() {
-  const { deleteElements, fitView, getNodes, getEdges, setNodes: setReactFlowNodes, setEdges: setReactFlowEdges } = useReactFlow();
+  const { deleteElements, fitView, getNodes, getEdges } = useReactFlow(); // setNodes and setEdges removed from useReactFlow if only used by format
 
   const [nodesInternal, setNodesInternal, onNodesChangeInternalCallback] = useNodesState<Node>(initialNodes);
   const [edgesInternal, setEdgesInternal, onEdgesChangeInternal] = useEdgesState(initialEdges);
@@ -101,7 +98,6 @@ export function AdvancedTopologyEditor() {
       newWidth = MIN_MASTER_NODE_WIDTH;
       newHeight = MIN_MASTER_NODE_HEIGHT;
     } else {
-      // Scale cumulatively: base * factor^numChildren
       newWidth = MIN_MASTER_NODE_WIDTH * Math.pow(M_NODE_SCALE_FACTOR_PER_CHILD, numChildren);
       newHeight = MIN_MASTER_NODE_HEIGHT * Math.pow(M_NODE_SCALE_FACTOR_PER_CHILD, numChildren);
     }
@@ -600,54 +596,7 @@ export function AdvancedTopologyEditor() {
     fitView({ duration: 300, padding: 0.2 });
   }, [fitView]);
 
-  const handleFormatLayout = useCallback(() => {
-    const currentNodes = getNodes();
-    const currentEdges = getEdges();
-    if (currentNodes.length === 0) return;
-
-    dagreGraph.setGraph({ rankdir: 'LR', align: 'UL', nodesep: 60, ranksep: 80, edgesep: 30 });
-
-    currentNodes.forEach((node) => {
-      dagreGraph.setNode(node.id, {
-        width: node.width || (node.data.role === 'M' ? MIN_MASTER_NODE_WIDTH : ICON_ONLY_NODE_SIZE),
-        height: node.height || (node.data.role === 'M' ? MIN_MASTER_NODE_HEIGHT : ICON_ONLY_NODE_SIZE),
-        label: node.data.label
-      });
-      if (node.parentNode && node.data.role !== 'M') {
-         dagreGraph.setParent(node.id, node.parentNode);
-      }
-    });
-
-    currentEdges.forEach((edge) => {
-      dagreGraph.setEdge(edge.source, edge.target);
-    });
-
-    dagre.layout(dagreGraph);
-
-    const layoutedNodes = currentNodes.map((node) => {
-      const nodeWithPosition = dagreGraph.node(node.id);
-      return {
-        ...node,
-        position: {
-          x: nodeWithPosition.x - (node.width || ICON_ONLY_NODE_SIZE) / 2,
-          y: nodeWithPosition.y - (node.height || ICON_ONLY_NODE_SIZE) / 2,
-        },
-      };
-    });
-
-    let finalNodes = layoutedNodes;
-    const masterNodeIds = layoutedNodes.filter(n => n.data.role === 'M' && n.data.isContainer).map(n => n.id);
-    masterNodeIds.forEach(masterId => {
-      finalNodes = updateMasterNodeDimensions(masterId, finalNodes);
-    });
-
-    setReactFlowNodes(finalNodes);
-    setReactFlowEdges(currentEdges);
-
-    setTimeout(() => fitView({ duration: 400, padding: 0.1 }), 100);
-    toast({ title: '布局已格式化' });
-  }, [getNodes, getEdges, setReactFlowNodes, setReactFlowEdges, fitView, toast, updateMasterNodeDimensions]);
-
+  // handleFormatLayout function removed
 
   const prepareInstancesForSubmission = useCallback((): InstanceUrlConfigWithName[] => {
     const instancesToCreate: InstanceUrlConfigWithName[] = [];
@@ -1125,7 +1074,7 @@ export function AdvancedTopologyEditor() {
         setNodesInternal(finalNodesWithChildren);
         setNodeIdCounter(currentIdCounter);
 
-        setTimeout(() => { fitView({ duration: 400, padding: 0.1 }); handleFormatLayout(); }, 100);
+        setTimeout(() => { fitView({ duration: 400, padding: 0.1 }); /* handleFormatLayout removed */ }, 100); // Removed handleFormatLayout
         toast({ title: `主控 ${masterConfig.name} 的实例已渲染。`, description: `共 ${instancesForThisMaster.length} 个实例。` });
 
     } catch (error: any) {
@@ -1133,7 +1082,7 @@ export function AdvancedTopologyEditor() {
       toast({ title: `渲染主控 ${masterConfig.name} 实例失败`, description: error.message, variant: "destructive" });
       setNodesInternal([]); setEdgesInternal([]);
     }
-  }, [getApiConfigById, getApiRootUrl, getToken, toast, setNodesInternal, setEdgesInternal, fitView, updateMasterNodeDimensions, handleFormatLayout]);
+  }, [getApiConfigById, getApiRootUrl, getToken, toast, setNodesInternal, setEdgesInternal, fitView, updateMasterNodeDimensions]);
 
 
   return (
@@ -1177,7 +1126,8 @@ export function AdvancedTopologyEditor() {
               <TopologyCanvasWrapper
                 nodes={nodesInternal} edges={edgesInternal} onNodesChange={onNodesChangeInternalCallback} onEdgesChange={onEdgesChangeInternal} onConnect={onConnect}
                 onSelectionChange={onSelectionChange} reactFlowWrapperRef={reactFlowWrapperRef} onNodeClick={onNodeClickHandler}
-                onCenterView={handleCenterViewCallback} onFormatLayout={handleFormatLayout}
+                onCenterView={handleCenterViewCallback} 
+                // onFormatLayout removed
                 onClearCanvas={handleClearCanvasCallback} onTriggerSubmitTopology={handleTriggerSubmitTopology}
                 canSubmit={(nodesInternal.length > 0 || edgesInternal.length > 0) && !isSubmitting}
                 isSubmitting={isSubmitting}
@@ -1233,6 +1183,3 @@ export function AdvancedTopologyEditor() {
     </div>
   );
 }
-
-
-    
