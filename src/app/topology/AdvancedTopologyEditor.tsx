@@ -100,7 +100,6 @@ export function AdvancedTopologyEditor() {
       children.forEach(child => {
         const childX = child.position.x;
         const childY = child.position.y;
-        // Use actual child width/height, which might vary if expanded
         const childWidth = child.width || ICON_ONLY_NODE_SIZE;
         const childHeight = child.height || ICON_ONLY_NODE_SIZE;
   
@@ -352,26 +351,32 @@ export function AdvancedTopologyEditor() {
 
 
   const onNodeClickHandler: NodeMouseHandler = useCallback((event, clickedNode) => {
-    setNodesInternal(nds => nds.map(n => {
-        if (n.id === clickedNode.id && (n.data.role === 'S' || n.data.role === 'C' || n.data.role === 'T' || n.data.role === 'U')) {
-            const newIsExpanded = !n.data.isExpanded;
-            const newWidth = newIsExpanded ? EXPANDED_SC_NODE_WIDTH : ICON_ONLY_NODE_SIZE;
-            const newHeight = newIsExpanded ? calculateExpandedNodeHeight(n.data) : ICON_ONLY_NODE_SIZE;
-            const updatedNode = { 
-                ...n, 
-                data: { ...n.data, isExpanded: newIsExpanded },
-                width: newWidth,
-                height: newHeight,
-                style: { ...n.style, width: newWidth, height: newHeight } // Update style for React Flow
-            };
-             if (n.parentNode) {
-                setTimeout(() => setNodesInternal(prevNodes => updateMasterNodeDimensions(n.parentNode!, prevNodes)), 0);
+    setNodesInternal(nds => {
+        let parentToUpdate: string | null = null;
+        const updatedNodes = nds.map(n => {
+            if (n.id === clickedNode.id && (n.data.role === 'S' || n.data.role === 'C' || n.data.role === 'T' || n.data.role === 'U')) {
+                const newIsExpanded = !n.data.isExpanded;
+                const newWidth = newIsExpanded ? EXPANDED_SC_NODE_WIDTH : ICON_ONLY_NODE_SIZE;
+                const newHeight = newIsExpanded ? calculateExpandedNodeHeight(n.data) : ICON_ONLY_NODE_SIZE;
+                if (n.parentNode) {
+                    parentToUpdate = n.parentNode;
+                }
+                return { 
+                    ...n, 
+                    data: { ...n.data, isExpanded: newIsExpanded },
+                    width: newWidth,
+                    height: newHeight,
+                    style: { ...n.style, width: newWidth, height: newHeight }
+                };
             }
-            return updatedNode;
+            return n;
+        });
+        if (parentToUpdate) {
+            return updateMasterNodeDimensions(parentToUpdate, updatedNodes);
         }
-        return n;
-    }));
-    setSelectedNode(clickedNode); // Also handle selection
+        return updatedNodes;
+    });
+    setSelectedNode(clickedNode);
   }, [setNodesInternal, updateMasterNodeDimensions, setSelectedNode]);
 
 
@@ -391,7 +396,45 @@ export function AdvancedTopologyEditor() {
     setContextMenu({ id: edge.id, type: 'edge', top, left, data: edge });
   }, [setContextMenu]);
 
-  const onPaneClick = useCallback(() => setContextMenu(null), [setContextMenu]);
+  const onPaneClick = useCallback(() => {
+    setContextMenu(null);
+    
+    let wasSelectedNodeCollapsed = false;
+    
+    setNodesInternal(nds => {
+      let parentsToUpdate = new Set<string>();
+      const updatedNodes = nds.map(n => {
+        if ((n.data.role === 'S' || n.data.role === 'C' || n.data.role === 'T' || n.data.role === 'U') && n.data.isExpanded) {
+          if (n.parentNode) {
+            parentsToUpdate.add(n.parentNode);
+          }
+          if (selectedNode && selectedNode.id === n.id) {
+            wasSelectedNodeCollapsed = true;
+          }
+          return {
+            ...n,
+            data: { ...n.data, isExpanded: false },
+            width: ICON_ONLY_NODE_SIZE,
+            height: ICON_ONLY_NODE_SIZE,
+            style: { ...n.style, width: ICON_ONLY_NODE_SIZE, height: ICON_ONLY_NODE_SIZE },
+          };
+        }
+        return n;
+      });
+
+      let finalNodes = updatedNodes;
+      parentsToUpdate.forEach(parentId => {
+        finalNodes = updateMasterNodeDimensions(parentId, finalNodes);
+      });
+      
+      return finalNodes;
+    });
+
+    if (wasSelectedNodeCollapsed) {
+      setSelectedNode(null);
+    }
+
+  }, [setContextMenu, setNodesInternal, updateMasterNodeDimensions, selectedNode, setSelectedNode]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -434,9 +477,9 @@ export function AdvancedTopologyEditor() {
                 apiUrl: draggedData.apiUrl,
                 defaultLogLevel: draggedData.masterDefaultLogLevel,
                 defaultTlsMode: draggedData.masterDefaultTlsMode,
-                masterSubRole: 'container', // For advanced editor, M is a container
+                masterSubRole: 'container', 
               },
-              style: { ...nodeStyles.m.base, width: MIN_MASTER_NODE_WIDTH, height: MIN_MASTER_NODE_HEIGHT }, // Start with min size
+              style: { ...nodeStyles.m.base, width: MIN_MASTER_NODE_WIDTH, height: MIN_MASTER_NODE_HEIGHT }, 
               width: MIN_MASTER_NODE_WIDTH, height: MIN_MASTER_NODE_HEIGHT,
           });
           toast({ title: "主控容器已创建" });
@@ -460,9 +503,9 @@ export function AdvancedTopologyEditor() {
           currentCounter++;
           const newNodeId = `${nodeRole.toLowerCase()}-${uuidv4().substring(0,8)}`;
           const newNodeData: CustomNodeData = {
-             label: `${labelPrefix} #${currentCounter}`, role: nodeRole, icon, // Keep label for properties panel & expanded view
+             label: `${labelPrefix} #${currentCounter}`, role: nodeRole, icon, 
              logLevel: 'master',
-             isExpanded: false, // Initially collapsed
+             isExpanded: false, 
           };
 
           if (nodeRole === 'S') {
@@ -485,7 +528,7 @@ export function AdvancedTopologyEditor() {
             type: 'cardNode', 
             position, 
             data: newNodeData, 
-            width: ICON_ONLY_NODE_SIZE, // Initial size for icon-only
+            width: ICON_ONLY_NODE_SIZE, 
             height: ICON_ONLY_NODE_SIZE 
           };
 
@@ -563,9 +606,9 @@ export function AdvancedTopologyEditor() {
       dagreGraph.setNode(node.id, { 
         width: node.width || (node.data.role === 'M' ? MIN_MASTER_NODE_WIDTH : ICON_ONLY_NODE_SIZE), 
         height: node.height || (node.data.role === 'M' ? MIN_MASTER_NODE_HEIGHT : ICON_ONLY_NODE_SIZE),
-        label: node.data.label // Dagre uses label for debug, not displayed by React Flow directly from here
+        label: node.data.label 
       });
-      if (node.parentNode && node.data.role !== 'M') { // S/C/T/U children of M
+      if (node.parentNode && node.data.role !== 'M') { 
          dagreGraph.setParent(node.id, node.parentNode);
       }
     });
@@ -587,16 +630,14 @@ export function AdvancedTopologyEditor() {
       };
     });
     
-    // Update M node dimensions AFTER dagre positions children, so dagre can use initial estimates
-    // then we refine M based on actual child positions from dagre.
     let finalNodes = layoutedNodes;
     const masterNodeIds = layoutedNodes.filter(n => n.data.role === 'M' && n.data.isContainer).map(n => n.id);
     masterNodeIds.forEach(masterId => {
       finalNodes = updateMasterNodeDimensions(masterId, finalNodes);
     });
 
-    setReactFlowNodes(finalNodes); // Use setNodes from useReactFlow for direct update
-    setReactFlowEdges(currentEdges); // Edges usually don't need position updates from dagre directly
+    setReactFlowNodes(finalNodes); 
+    setReactFlowEdges(currentEdges); 
     
     setTimeout(() => fitView({ duration: 400, padding: 0.1 }), 100);
     toast({ title: '布局已格式化' });
@@ -878,7 +919,6 @@ export function AdvancedTopologyEditor() {
     newNodes[nodeIndex] = { ...newNodes[nodeIndex], data: mergedData };
     const editedNode = newNodes[nodeIndex];
 
-    // Update node width/height if expanded state changed or role implies size change
     if (editedNode.data.role === 'S' || editedNode.data.role === 'C' || editedNode.data.role === 'T' || editedNode.data.role === 'U') {
         const isExpanded = !!editedNode.data.isExpanded;
         newNodes[nodeIndex].width = isExpanded ? EXPANDED_SC_NODE_WIDTH : ICON_ONLY_NODE_SIZE;
