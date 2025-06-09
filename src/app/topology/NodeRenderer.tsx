@@ -9,7 +9,9 @@ import type { CustomNodeData } from './topologyTypes';
 
 export const CARD_NODE_WIDTH = 100;
 export const CARD_NODE_HEIGHT = 40;
-// const ICON_NODE_SIZE = 40; // Not directly used for sizing, more for icon itself
+export const M_NODE_FOR_LINK_WIDTH = 300; // This might be used by basic topology
+export const M_NODE_FOR_LINK_HEIGHT = 200; // This might be used by basic topology
+
 
 export const nodeStyles = {
   m: { // Master Node Style
@@ -17,13 +19,17 @@ export const nodeStyles = {
       color: 'hsl(var(--foreground))',
       borderColor: 'hsl(var(--border))',
       borderWidth: 1.5,
-      background: 'hsl(var(--card) / 0.6)',
+      background: 'hsl(var(--card) / 0.6)', // semi-transparent for container feel
       boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)',
       borderRadius: '0.75rem',
       padding: '16px',
       fontSize: '0.8rem',
       fontWeight: 500,
       textAlign: 'center' as const,
+      display: 'flex', // For centering content
+      flexDirection: 'column' as const, // Stack title and children area
+      alignItems: 'center',
+      justifyContent: 'flex-start', // Align title to top
     }
   },
   s: { base: { background: 'hsl(210, 100%, 97%)', borderColor: 'hsl(210, 80%, 60%)', color: 'hsl(210, 90%, 30%)' } },
@@ -33,25 +39,39 @@ export const nodeStyles = {
 };
 
 export const MasterNode: React.FC<NodeProps<CustomNodeData>> = memo(({ data }) => {
+  const isAdvancedContainerRole = !data.masterSubRole || data.masterSubRole === 'generic' || data.masterSubRole === 'primary'; // Heuristic for advanced editor M nodes
+
   const subRoleText = data.masterSubRole === 'client-role' ? '(客户隧道)'
     : data.masterSubRole === 'server-role' ? '(服务主机)'
-    : data.masterSubRole === 'primary' ? '(主要)'
-    : data.masterSubRole === 'single-client-link' ? '(单客户端链路)'
+    : data.masterSubRole === 'primary' ? '(主要主控)'
+    : data.masterSubRole === 'single-client-link' ? '(单客户端链路)' // These might be from basic topology
     : data.masterSubRole === 'intra-master-tunnel' ? '(内部隧道)'
     : data.masterSubRole === 'external-client-link' ? '(外部客户端连接)'
     : data.masterSubRole === 'server-service-link' ? '(服务端服务)'
-    : '(通用)';
+    : '(通用容器)'; // Default for advanced
+  
   return (
     <>
-      <Handle type="target" position={Position.Left} id="m-left" className="!bg-cyan-500 w-2.5 h-2.5" />
-      <Handle type="source" position={Position.Right} id="m-right" className="!bg-cyan-500 w-2.5 h-2.5" />
-      <div className="font-semibold">{data.label} <span className="text-xs text-muted-foreground">{subRoleText}</span></div>
+      {/* Handles only for M nodes that act as tunnel endpoints (basic topology) */}
+      {!isAdvancedContainerRole && data.masterSubRole === 'client-role' && ( // Simplified condition
+        <>
+          <Handle type="target" position={Position.Left} id="m-left" className="!bg-cyan-500 w-2.5 h-2.5" />
+          <Handle type="source" position={Position.Right} id="m-right" className="!bg-cyan-500 w-2.5 h-2.5" />
+        </>
+      )}
+      {/* M nodes in advanced topology are containers and may not need data path handles */}
+      {/* They implicitly group S/C nodes that belong to them. */}
+
+      <div className="font-semibold text-sm mb-1">{data.label} 
+        {!isAdvancedContainerRole && <span className="text-xs text-muted-foreground"> {subRoleText}</span>}
+      </div>
       {data.submissionStatus && (
         <div className={`text-xs mt-1 p-0.5 rounded ${data.submissionStatus === 'success' ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300' : data.submissionStatus === 'error' ? 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300' : 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300'}`}>
           {data.submissionStatus === 'pending' && <Loader2 className="inline h-3 w-3 mr-1 animate-spin" />}
           {data.submissionMessage || data.submissionStatus}
         </div>
       )}
+      {/* Child nodes (S/C) will be rendered inside by React Flow if parentNode is set */}
     </>
   );
 });
@@ -76,7 +96,7 @@ export const CardNode: React.FC<NodeProps<CustomNodeData>> = memo(({ data, selec
   };
 
   const displayText = (data.role === 'S' || data.role === 'C') && data.representedMasterName
-    ? data.representedMasterName
+    ? data.representedMasterName // This might be less relevant if S/C always inside their true M
     : data.label;
 
   return (
@@ -106,10 +126,11 @@ export const CardNode: React.FC<NodeProps<CustomNodeData>> = memo(({ data, selec
         )}
       </div>
 
-      {data.role !== 'U' && (
+      {/* Handles for S, C, T, U nodes */}
+      {data.role !== 'U' && ( // U nodes are sources, no target handle generally
         <Handle type="target" position={Position.Left} className="!bg-slate-400 w-2 h-2" />
       )}
-      {data.role !== 'T' && (
+      {data.role !== 'T' && ( // T nodes are targets, no source handle generally
         <Handle type="source" position={Position.Right} className="!bg-slate-400 w-2 h-2" />
       )}
     </>

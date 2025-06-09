@@ -3,7 +3,7 @@
 
 import React from 'react';
 import Link from 'next/link';
-import { Moon, Sun, Settings, LogOut, PlusCircle, ListTree, BarChartHorizontalBig, Check, HelpCircle, Share2 } from 'lucide-react';
+import { Moon, Sun, Settings, LogOut, PlusCircle, ListTree, BarChartHorizontalBig, Check, HelpCircle, Share2, Grid2X2 } from 'lucide-react'; // Added Grid2X2 for Advanced Topology
 import { useTheme } from 'next-themes';
 import { Button } from '@/components/ui/button';
 import {
@@ -121,7 +121,13 @@ export function Header({ onManageApiConfigs, onClearActiveConfig, hasActiveApiCo
                <DropdownMenuItem asChild>
                 <Link href="/topology">
                   <Share2 className="mr-2 h-4 w-4" />
-                  <span>连接拓扑</span>
+                  <span>连接拓扑 (基础)</span>
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link href="/topology/advanced">
+                  <Grid2X2 className="mr-2 h-4 w-4" /> {/* Changed Icon */}
+                  <span>连接拓扑 (高级)</span>
                 </Link>
               </DropdownMenuItem>
               <DropdownMenuItem asChild>
