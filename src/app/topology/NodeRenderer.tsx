@@ -106,6 +106,9 @@ export const CardNode: React.FC<NodeProps<CustomNodeData>> = memo(({ data, selec
     height: `${calculatedHeight}px`,
   };
 
+  const handleBaseClasses = "w-3 h-3 !bg-slate-400 opacity-75 transition-opacity duration-150";
+  const handleHiddenClasses = "!opacity-0 !pointer-events-none";
+
   return (
     <>
       <div
@@ -158,11 +161,34 @@ export const CardNode: React.FC<NodeProps<CustomNodeData>> = memo(({ data, selec
         )}
       </div>
 
-      {data.role !== 'U' && (
-        <Handle type="target" position={Position.Left} className="!bg-slate-400 w-2 h-2" />
+      {/* Handles for S and C nodes (can be source or target on any side) */}
+      {(data.role === 'S' || data.role === 'C') && (
+        <>
+          <Handle type="target" position={Position.Top} id="top" className={cn(handleBaseClasses, !data.activeHandles?.top && handleHiddenClasses)} />
+          <Handle type="source" position={Position.Bottom} id="bottom" className={cn(handleBaseClasses, !data.activeHandles?.bottom && handleHiddenClasses)} />
+          <Handle type="target" position={Position.Left} id="left" className={cn(handleBaseClasses, !data.activeHandles?.left && handleHiddenClasses)} />
+          <Handle type="source" position={Position.Right} id="right" className={cn(handleBaseClasses, !data.activeHandles?.right && handleHiddenClasses)} />
+        </>
       )}
-      {data.role !== 'T' && (
-        <Handle type="source" position={Position.Right} className="!bg-slate-400 w-2 h-2" />
+
+      {/* Handles for U node (only source) */}
+      {data.role === 'U' && (
+        <>
+          <Handle type="source" position={Position.Top} id="top" className={cn(handleBaseClasses, !data.activeHandles?.top && handleHiddenClasses)} />
+          <Handle type="source" position={Position.Bottom} id="bottom" className={cn(handleBaseClasses, !data.activeHandles?.bottom && handleHiddenClasses)} />
+          <Handle type="source" position={Position.Left} id="left" className={cn(handleBaseClasses, !data.activeHandles?.left && handleHiddenClasses)} />
+          <Handle type="source" position={Position.Right} id="right" className={cn(handleBaseClasses, !data.activeHandles?.right && handleHiddenClasses)} />
+        </>
+      )}
+
+      {/* Handles for T node (only target) */}
+      {data.role === 'T' && (
+        <>
+          <Handle type="target" position={Position.Top} id="top" className={cn(handleBaseClasses, !data.activeHandles?.top && handleHiddenClasses)} />
+          <Handle type="target" position={Position.Bottom} id="bottom" className={cn(handleBaseClasses, !data.activeHandles?.bottom && handleHiddenClasses)} />
+          <Handle type="target" position={Position.Left} id="left" className={cn(handleBaseClasses, !data.activeHandles?.left && handleHiddenClasses)} />
+          <Handle type="target" position={Position.Right} id="right" className={cn(handleBaseClasses, !data.activeHandles?.right && handleHiddenClasses)} />
+        </>
       )}
     </>
   );

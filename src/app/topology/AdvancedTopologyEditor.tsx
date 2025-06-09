@@ -14,8 +14,8 @@ import {
   type OnNodesChange,
   type NodeChange,
   type NodeMouseHandler,
+  Position,
 } from 'reactflow';
-// dagre import removed as handleFormatLayout is removed
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Server, DatabaseZap, User, Globe, ListTree, Puzzle, Info as InfoIcon } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
@@ -49,12 +49,16 @@ const MIN_MASTER_NODE_HEIGHT = 120;
 const MIN_MASTER_NODE_WIDTH = 200;
 const M_NODE_SCALE_FACTOR_PER_CHILD = 1.2; 
 
-
-// dagreGraph related code removed as handleFormatLayout is removed
+const initialActiveHandles = {
+  S: { top: true, bottom: true, left: true, right: true },
+  C: { top: true, bottom: true, left: true, right: true },
+  U: { top: false, bottom: true, left: false, right: true },
+  T: { top: true, bottom: false, left: true, right: false },
+  M: { top: true, bottom: true, left: true, right: true }, // Master nodes for direct connections
+};
 
 export function AdvancedTopologyEditor() {
-  const { deleteElements, fitView, getNodes, getEdges } = useReactFlow(); // setNodes and setEdges removed from useReactFlow if only used by format
-
+  const { deleteElements, fitView, getNodes, getEdges, setEdges: setReactFlowEdges } = useReactFlow();
   const [nodesInternal, setNodesInternal, onNodesChangeInternalCallback] = useNodesState<Node>(initialNodes);
   const [edgesInternal, setEdgesInternal, onEdgesChangeInternal] = useEdgesState(initialEdges);
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
@@ -119,6 +123,91 @@ export function AdvancedTopologyEditor() {
     return currentNodes.map(n => (n.id === masterNodeId ? updatedMasterNode : n));
   }, []);
 
+  const getOptimalHandlesForConnection = useCallback((sourceNode: Node, targetNode: Node): { sourceHandle: string, targetHandle: string } => {
+    const sourceCenter = {
+      x: sourceNode.positionAbsolute!.x + (sourceNode.width! / 2),
+      y: sourceNode.positionAbsolute!.y + (sourceNode.height! / 2),
+    };
+    const targetCenter = {
+      x: targetNode.positionAbsolute!.x + (targetNode.width! / 2),
+      y: targetNode.positionAbsolute!.y + (targetNode.height! / 2),
+    };
+
+    const dx = targetCenter.x - sourceCenter.x;
+    const dy = targetCenter.y - sourceCenter.y;
+
+    let sourceHandle: string, targetHandle: string;
+
+    if (Math.abs(dy) >= Math.abs(dx)) { // Prioritize vertical connection
+      if (dy > 0) { // target is below source
+        sourceHandle = Position.Bottom; targetHandle = Position.Top;
+      } else { // target is above source
+        sourceHandle = Position.Top; targetHandle = Position.Bottom;
+      }
+    } else { // Horizontal connection is shorter or primary axis choice
+      if (dx > 0) { // target is to the right of source
+        sourceHandle = Position.Right; targetHandle = Position.Left;
+      } else { // target is to the left of source
+        sourceHandle = Position.Left; targetHandle = Position.Right;
+      }
+    }
+    
+    // For U nodes, only allow 'right' or 'bottom' as source handles
+    if (sourceNode.data.role === 'U') {
+        if (sourceHandle === Position.Left) sourceHandle = Position.Right;
+        if (sourceHandle === Position.Top) sourceHandle = Position.Bottom;
+    }
+    // For T nodes, only allow 'left' or 'top' as target handles
+    if (targetNode.data.role === 'T') {
+        if (targetHandle === Position.Right) targetHandle = Position.Left;
+        if (targetHandle === Position.Bottom) targetHandle = Position.Top;
+    }
+
+    return { sourceHandle, targetHandle };
+  }, []);
+
+  const updateAffectedNodeHandles = useCallback((nodeId: string, currentNodes: Node[], currentEdges: Edge[]): Node[] => {
+    return currentNodes.map(n => {
+      if (n.id === nodeId && (n.data.role === 'U' || n.data.role === 'T' || n.data.role === 'S' || n.data.role === 'C')) {
+        const connectedEdges = currentEdges.filter(edge => edge.source === n.id || edge.target === n.id);
+        const relevantConnections = connectedEdges.filter(edge => {
+            const otherNodeId = edge.source === n.id ? edge.target : edge.source;
+            const otherNode = currentNodes.find(cn => cn.id === otherNodeId);
+            return otherNode && (otherNode.data.role === 'U' || otherNode.data.role === 'T' || otherNode.data.role === 'S' || otherNode.data.role === 'C');
+        });
+
+        let newActiveHandles = { ...initialActiveHandles[n.data.role as keyof typeof initialActiveHandles] };
+
+        if (relevantConnections.length === 0) {
+           // No relevant connections, use initial defaults
+        } else if (n.data.role === 'U') {
+            const edge = relevantConnections[0]; // U can only have one connection
+            if (edge.sourceHandle === Position.Right) newActiveHandles = { top: false, bottom: false, left: false, right: true };
+            else if (edge.sourceHandle === Position.Bottom) newActiveHandles = { top: false, bottom: true, left: false, right: false };
+        } else if (n.data.role === 'T') {
+            const edge = relevantConnections[0]; // T can only have one connection
+            if (edge.targetHandle === Position.Left) newActiveHandles = { top: false, bottom: false, left: true, right: false };
+            else if (edge.targetHandle === Position.Top) newActiveHandles = { top: true, bottom: false, left: false, right: false };
+        } else if (n.data.role === 'S' || n.data.role === 'C') {
+            let hasHorizontal = false;
+            let hasVertical = false;
+            relevantConnections.forEach(edge => {
+                const handle = edge.source === n.id ? edge.sourceHandle : edge.targetHandle;
+                if (handle === Position.Left || handle === Position.Right) hasHorizontal = true;
+                if (handle === Position.Top || handle === Position.Bottom) hasVertical = true;
+            });
+
+            if (hasHorizontal && !hasVertical) newActiveHandles = { top: false, bottom: false, left: true, right: true };
+            else if (!hasHorizontal && hasVertical) newActiveHandles = { top: true, bottom: true, left: false, right: false };
+            else newActiveHandles = { top: true, bottom: true, left: true, right: true }; // Both or none specific to U/T
+        }
+        
+        return { ...n, data: { ...n.data, activeHandles: newActiveHandles } };
+      }
+      return n;
+    });
+  }, []);
+
 
   const onNodesChangeInternal: OnNodesChange = useCallback((changes: NodeChange[]) => {
     setNodesInternal((nds) => {
@@ -126,6 +215,9 @@ export function AdvancedTopologyEditor() {
       let finalNodes = appliedChanges;
 
       const parentIdsToUpdate = new Set<string>();
+      let nodesMoved = false;
+      const movedNodeIds = new Set<string>();
+
       changes.forEach(change => {
         if (change.type === 'remove') {
           const removedNode = nds.find(n => n.id === change.id);
@@ -134,21 +226,93 @@ export function AdvancedTopologyEditor() {
           }
         } else if (change.type === 'add' && change.item.parentNode) {
             parentIdsToUpdate.add(change.item.parentNode);
-        } else if (change.type === 'dimensions') {
+        } else if (change.type === 'dimensions' && change.dragging === false) { // Dimension changes often follow drag
             const changedNode = finalNodes.find(n => n.id === change.id);
-            if (changedNode && changedNode.parentNode) {
+            if (changedNode && (changedNode.data.role === 'U' || changedNode.data.role === 'T' || changedNode.data.role === 'S' || changedNode.data.role === 'C')) {
+                nodesMoved = true;
+                movedNodeIds.add(change.id);
+            }
+             if (changedNode && changedNode.parentNode) {
                  parentIdsToUpdate.add(changedNode.parentNode);
+            }
+        } else if (change.type === 'position' && change.dragging === false && change.positionAbsolute) {
+            const movedNode = finalNodes.find(n => n.id === change.id);
+            if (movedNode && (movedNode.data.role === 'U' || movedNode.data.role === 'T' || movedNode.data.role === 'S' || movedNode.data.role === 'C')) {
+                nodesMoved = true;
+                movedNodeIds.add(change.id);
             }
         }
       });
-
+      
       parentIdsToUpdate.forEach(parentId => {
         finalNodes = updateMasterNodeDimensions(parentId, finalNodes);
       });
 
+      if (nodesMoved) {
+        let currentEdges = getEdges();
+        const edgesToUpdate: Edge[] = [];
+        const affectedNodeIdsForHandleUpdate = new Set<string>(movedNodeIds);
+
+        currentEdges.forEach(edge => {
+          const sourceNode = finalNodes.find(n => n.id === edge.source);
+          const targetNode = finalNodes.find(n => n.id === edge.target);
+
+          if (sourceNode && targetNode && (movedNodeIds.has(sourceNode.id) || movedNodeIds.has(targetNode.id)) &&
+              (sourceNode.data.role === 'U' || sourceNode.data.role === 'T' || sourceNode.data.role === 'S' || sourceNode.data.role === 'C') &&
+              (targetNode.data.role === 'U' || targetNode.data.role === 'T' || targetNode.data.role === 'S' || targetNode.data.role === 'C')) {
+            
+            const { sourceHandle, targetHandle } = getOptimalHandlesForConnection(sourceNode, targetNode);
+            if (edge.sourceHandle !== sourceHandle || edge.targetHandle !== targetHandle) {
+              edgesToUpdate.push({ ...edge, sourceHandle, targetHandle });
+            }
+            affectedNodeIdsForHandleUpdate.add(sourceNode.id);
+            affectedNodeIdsForHandleUpdate.add(targetNode.id);
+          }
+        });
+
+        if (edgesToUpdate.length > 0) {
+          setReactFlowEdges(eds => eds.map(ed => edgesToUpdate.find(uEd => uEd.id === ed.id) || ed));
+          currentEdges = getEdges(); // Re-fetch after state update from setReactFlowEdges
+        }
+        
+        affectedNodeIdsForHandleUpdate.forEach(nodeId => {
+            finalNodes = updateAffectedNodeHandles(nodeId, finalNodes, currentEdges);
+        });
+      }
       return finalNodes;
     });
-  }, [setNodesInternal, updateMasterNodeDimensions]);
+  }, [setNodesInternal, updateMasterNodeDimensions, getEdges, setReactFlowEdges, getOptimalHandlesForConnection, updateAffectedNodeHandles]);
+
+
+  const setEdgesAndUpdateHandles = useCallback((newEdges: Edge[] | ((prevEdges: Edge[]) => Edge[])) => {
+    const resolvedEdges = typeof newEdges === 'function' ? newEdges(getEdges()) : newEdges;
+    setEdgesInternal(resolvedEdges);
+
+    setNodesInternal(nds => {
+        let finalNodes = [...nds];
+        const allNodeIdsInvolvedInEdges = new Set<string>();
+        resolvedEdges.forEach(edge => {
+            allNodeIdsInvolvedInEdges.add(edge.source);
+            allNodeIdsInvolvedInEdges.add(edge.target);
+        });
+
+        // Also update nodes that might have had edges removed implicitly by addEdge
+        const currentEdgeNodeIds = new Set<string>();
+         getEdges().forEach(edge => { // Use getEdges to get the latest state if newEdges was a function
+            currentEdgeNodeIds.add(edge.source);
+            currentEdgeNodeIds.add(edge.target);
+        });
+        
+        const nodesToPotentiallyResetHandles = new Set([...allNodeIdsInvolvedInEdges, ...currentEdgeNodeIds]);
+
+        nodesToPotentiallyResetHandles.forEach(nodeId => {
+           finalNodes = updateAffectedNodeHandles(nodeId, finalNodes, resolvedEdges);
+        });
+        return finalNodes;
+    });
+
+  }, [setEdgesInternal, setNodesInternal, updateAffectedNodeHandles, getEdges]);
+
 
   const createInstanceMutation = useMutation({
     mutationFn: (params: { data: { url: string }, useApiRoot: string, useApiToken: string, originalNodeId: string }) => {
@@ -212,15 +376,16 @@ export function AdvancedTopologyEditor() {
       const sourceRole = sourceNode.data.role;
       const targetRole = targetNode.data.role;
 
+      // Role-based connection validation
       if (sourceRole === 'M' || targetRole === 'M') {
           toast({ title: '连接无效', description: '主控 (M) 节点是容器，不能直接连接。请连接其内部的 S/C 节点。', variant: 'destructive'});
           return;
       }
-      if (targetRole === 'U') {
-        toast({ title: '连接无效', description: '用户 (U) 节点不能被其他节点链接 (作为目标)。', variant: 'destructive' });
+      if (targetRole === 'U') { // U cannot be a target
+        toast({ title: '连接无效', description: '用户 (U) 节点不能被其他节点链接。', variant: 'destructive' });
         return;
       }
-      if (sourceRole === 'T') {
+      if (sourceRole === 'T') { // T cannot be a source
         toast({ title: '连接无效', description: '目标 (T) 节点不能作为连接的起点。', variant: 'destructive' });
         return;
       }
@@ -228,21 +393,35 @@ export function AdvancedTopologyEditor() {
         toast({ title: '连接无效', description: '用户 (U) 节点只能连接到 出口(S) 或 入口(C) 节点。', variant: 'destructive' });
         return;
       }
-      if ((targetRole === 'T') && !(sourceRole === 'S' || sourceRole === 'C')) {
+      if (targetRole === 'T' && !(sourceRole === 'S' || sourceRole === 'C')) {
          toast({ title: '连接无效', description: '目标 (T) 节点只能被 出口(S) 或 入口(C) 连接。', variant: 'destructive'});
          return;
       }
-      if (sourceRole === 'S' && targetRole !== 'C' && targetRole !== 'T') {
+      if (sourceRole === 'S' && !(targetRole === 'C' || targetRole === 'T')) { // S can connect to C or T
          toast({ title: '连接无效', description: '出口(S) 节点只能连接到 入口(C) 或 目标(T)。', variant: 'destructive'});
          return;
       }
-      if (sourceRole === 'C' && !(targetRole === 'S' || targetRole === 'C' || targetRole === 'T')) {
+      if (sourceRole === 'C' && !(targetRole === 'S' || targetRole === 'C' || targetRole === 'T')) { // C can connect to S, C, or T
          toast({ title: '连接无效', description: '入口(C) 节点只能连接到 出口(S), 入口(C), 或 目标(T)。', variant: 'destructive'});
          return;
       }
+      
+      // U and T nodes can only have one connection
+      if (sourceRole === 'U' && allCurrentEdges.some(edge => edge.source === sourceNode.id)) {
+        toast({ title: '连接无效', description: '用户 (U) 节点只能有一个传出连接。', variant: 'destructive' });
+        return;
+      }
+      if (targetRole === 'T' && allCurrentEdges.some(edge => edge.target === targetNode.id)) {
+        toast({ title: '连接无效', description: '目标 (T) 节点只能有一个传入连接。', variant: 'destructive' });
+        return;
+      }
 
+
+      const { sourceHandle, targetHandle } = getOptimalHandlesForConnection(sourceNode, targetNode);
       const newEdgeBase = {
-        ...params,
+        ...params, // This includes the sourceHandle/targetHandle from user drag IF DIFFERENT from optimal
+        sourceHandle, // Override with optimal
+        targetHandle, // Override with optimal
         id: `edge-${uuidv4()}`,
         animated: true,
         style: { strokeDasharray: '5 5' },
@@ -250,7 +429,7 @@ export function AdvancedTopologyEditor() {
         markerEnd: { type: MarkerType.ArrowClosed },
       };
 
-      let nodesToUpdate: Node[] | null = null;
+      let nodesToUpdateForAddress: Node[] = [];
       let clientNodeForUpdate: Node | null = null;
       let serverNodeForClientConfig: Node | null = null;
 
@@ -275,7 +454,7 @@ export function AdvancedTopologyEditor() {
                 if (newClientLocalTargetPort > 0) newClientLocalTargetPort++; else newClientLocalTargetPort = 3001;
                 const newClientTargetAddress = `[::]:${newClientLocalTargetPort.toString()}`;
 
-                nodesToUpdate = allCurrentNodes.map(n => {
+                nodesToUpdateForAddress = allCurrentNodes.map(n => {
                     if (n.id === clientNodeForUpdate!.id) {
                         return {
                             ...n,
@@ -292,14 +471,14 @@ export function AdvancedTopologyEditor() {
                 });
                 toast({ title: "跨主控入口(C)地址已自动更新", description: `入口(C) ${clientNodeForUpdate.data.label} 已自动配置连接到 出口(S) ${serverNodeForClientConfig.data.label}。` });
             } else {
-                 nodesToUpdate = allCurrentNodes.map(n => {
+                 nodesToUpdateForAddress = allCurrentNodes.map(n => {
                     if (n.id === clientNodeForUpdate!.id) {
                         return {
                           ...n,
                           data: {
                             ...n.data,
-                            isSingleEndedForwardC: false,
-                            tlsMode: n.data.tlsMode || 'master'
+                            isSingleEndedForwardC: false, // Ensure it's not single-ended
+                            tlsMode: n.data.tlsMode || 'master' // Keep existing or default TLS
                           }
                         };
                     }
@@ -320,17 +499,19 @@ export function AdvancedTopologyEditor() {
             tempNodes = tempNodes.map(n => n.id === sourceNode.id ? { ...n, data: { ...n.data, targetAddress: targetNode.data.targetAddress } } : n);
             scNodeUpdated = true;
         }
-        if (tNodeUpdated || scNodeUpdated) nodesToUpdate = tempNodes;
+        if (tNodeUpdated || scNodeUpdated) nodesToUpdateForAddress = tempNodes;
         if (tNodeUpdated) toast({ title: `落地 (T) ${targetNode.data.label} 已同步上游目标地址。`});
         if (scNodeUpdated) toast({ title: `${sourceNode.data.label} 已同步落地 (T) 目标地址。`});
       }
 
-      if (nodesToUpdate) {
-        setNodesInternal(nodesToUpdate);
+      if (nodesToUpdateForAddress.length > 0) {
+        setNodesInternal(nodesToUpdateForAddress); // Apply address updates first
+        setEdgesAndUpdateHandles((eds) => addEdge(newEdgeBase, eds)); // Then add edge and update handles
+      } else {
+        setEdgesAndUpdateHandles((eds) => addEdge(newEdgeBase, eds));
       }
-      setEdgesInternal((eds) => addEdge(newEdgeBase, eds));
     },
-    [getNodes, getEdges, setNodesInternal, setEdgesInternal, toast, getApiConfigById]
+    [getNodes, getEdges, setNodesInternal, setEdgesAndUpdateHandles, toast, getApiConfigById, getOptimalHandlesForConnection]
   );
 
   const onSelectionChange = useCallback(({ nodes: selectedNodesList }: { nodes: Node[]; edges: Edge[] }) => {
@@ -478,6 +659,7 @@ export function AdvancedTopologyEditor() {
                 defaultLogLevel: draggedData.masterDefaultLogLevel,
                 defaultTlsMode: draggedData.masterDefaultTlsMode,
                 masterSubRole: 'container',
+                activeHandles: { ...initialActiveHandles.M }
               },
               style: { ...nodeStyles.m.base, width: MIN_MASTER_NODE_WIDTH, height: MIN_MASTER_NODE_HEIGHT },
               width: MIN_MASTER_NODE_WIDTH, height: MIN_MASTER_NODE_HEIGHT,
@@ -506,6 +688,7 @@ export function AdvancedTopologyEditor() {
              label: `${labelPrefix} #${currentCounter}`, role: nodeRole, icon,
              logLevel: 'master',
              isExpanded: false,
+             activeHandles: { ...initialActiveHandles[nodeRole as keyof typeof initialActiveHandles] },
           };
 
           if (nodeRole === 'S') {
@@ -566,14 +749,20 @@ export function AdvancedTopologyEditor() {
         if (node.id === nodeId && (node.data.role === 'S' || node.data.role === 'C')) {
             const newLabelPrefix = newRole === 'S' ? '出口(s)' : '入口(c)';
             const newIcon = newRole === 'S' ? Server : DatabaseZap;
-            let newData: CustomNodeData = { ...node.data, role: newRole, icon: newIcon, label: `${newLabelPrefix} ${node.data.label.split(' ').pop()}` };
+            let newData: CustomNodeData = { 
+                ...node.data, 
+                role: newRole, 
+                icon: newIcon, 
+                label: `${newLabelPrefix} ${node.data.label.split(' ').pop()}`,
+                activeHandles: { ...initialActiveHandles[newRole as keyof typeof initialActiveHandles] } // Reset handles for new role
+            };
 
             if (newRole === 'S') {
                 newData.isSingleEndedForwardC = undefined;
                 if (!newData.tunnelAddress || newData.tunnelAddress.startsWith("remote")) newData.tunnelAddress = `[::]:${10000 + nodeIdCounter}`;
                 if (!newData.targetAddress || newData.targetAddress.startsWith("[")) newData.targetAddress = `127.0.0.1:${3000 + nodeIdCounter}`;
-            } else {
-                newData.isSingleEndedForwardC = false;
+            } else { // newRole is 'C'
+                newData.isSingleEndedForwardC = false; // Default for C
                 if (!newData.tunnelAddress || newData.tunnelAddress.startsWith("[")) newData.tunnelAddress = `remote.server.com:${10000 + nodeIdCounter}`;
                 if (!newData.targetAddress || newData.targetAddress.startsWith("127")) newData.targetAddress = `[::]:${3000 + nodeIdCounter + 1}`;
             }
@@ -596,7 +785,6 @@ export function AdvancedTopologyEditor() {
     fitView({ duration: 300, padding: 0.2 });
   }, [fitView]);
 
-  // handleFormatLayout function removed
 
   const prepareInstancesForSubmission = useCallback((): InstanceUrlConfigWithName[] => {
     const instancesToCreate: InstanceUrlConfigWithName[] = [];
@@ -978,30 +1166,71 @@ export function AdvancedTopologyEditor() {
         });
     }
 
-    setNodesInternal(newNodes);
-
+    let finalNodesAfterSave = newNodes;
     if (editedNode.data.role === 'M' && editedNode.data.isContainer) {
-      setNodesInternal(prevNodes => updateMasterNodeDimensions(editedNode.id, prevNodes));
+      finalNodesAfterSave = updateMasterNodeDimensions(editedNode.id, finalNodesAfterSave);
     } else if (editedNode.parentNode) {
-      setNodesInternal(prevNodes => updateMasterNodeDimensions(editedNode.parentNode!, prevNodes));
+      finalNodesAfterSave = updateMasterNodeDimensions(editedNode.parentNode!, finalNodesAfterSave);
     }
+    
+    // After all potential node data changes, update handles
+    const affectedNodeIdsForHandleUpdate = new Set<string>([nodeId]);
+     getEdges().forEach(edge => {
+        if(edge.source === nodeId) affectedNodeIdsForHandleUpdate.add(edge.target);
+        if(edge.target === nodeId) affectedNodeIdsForHandleUpdate.add(edge.source);
+    });
+
+    affectedNodeIdsForHandleUpdate.forEach(idToUpdateHandles => {
+        finalNodesAfterSave = updateAffectedNodeHandles(idToUpdateHandles, finalNodesAfterSave, getEdges());
+    });
+
+    setNodesInternal(finalNodesAfterSave);
 
     toast({ title: `节点 "${mergedData.label || nodeId.substring(0,8)}" 属性已更新`});
     setIsEditNodeDialogOpen(false); setEditingNodeContext(null);
-  }, [getNodes, getEdges, setNodesInternal, toast, getApiConfigById, updateMasterNodeDimensions]);
+  }, [getNodes, getEdges, setNodesInternal, toast, getApiConfigById, updateMasterNodeDimensions, updateAffectedNodeHandles]);
 
 
   const handleDeleteNode = (nodeToDelete: Node) => {
     const parentId = nodeToDelete.parentNode;
-    deleteElements({ nodes: [nodeToDelete] });
+    const edgesToRemove = getEdges().filter(edge => edge.source === nodeToDelete.id || edge.target === nodeToDelete.id);
+    const nodeIdsToUpdateHandles = new Set<string>();
+    edgesToRemove.forEach(edge => {
+        if (edge.source !== nodeToDelete.id) nodeIdsToUpdateHandles.add(edge.source);
+        if (edge.target !== nodeToDelete.id) nodeIdsToUpdateHandles.add(edge.target);
+    });
+    
+    deleteElements({ nodes: [nodeToDelete], edges: edgesToRemove });
     toast({ title: `节点 "${nodeToDelete.data.label || nodeToDelete.id}" 已删除` });
+    
     if (selectedNode?.id === nodeToDelete.id) setSelectedNode(null);
     setContextMenu(null);
-    if (parentId) {
-        setNodesInternal(prevNodes => updateMasterNodeDimensions(parentId, prevNodes.filter(n => n.id !== nodeToDelete.id)));
-    }
+
+    setNodesInternal(prevNodes => {
+        let currentNodes = prevNodes.filter(n => n.id !== nodeToDelete.id);
+        if (parentId) {
+            currentNodes = updateMasterNodeDimensions(parentId, currentNodes);
+        }
+        nodeIdsToUpdateHandles.forEach(nodeId => {
+            currentNodes = updateAffectedNodeHandles(nodeId, currentNodes, getEdges());
+        });
+        return currentNodes;
+    });
   };
-  const handleDeleteEdge = (edgeToDelete: Edge) => { deleteElements({ edges: [edgeToDelete] }); toast({ title: '链路已删除' }); setContextMenu(null); };
+
+  const handleDeleteEdge = (edgeToDelete: Edge) => {
+    const sourceNodeId = edgeToDelete.source;
+    const targetNodeId = edgeToDelete.target;
+    deleteElements({ edges: [edgeToDelete] });
+    toast({ title: '链路已删除' });
+    setContextMenu(null);
+    setNodesInternal(prevNodes => {
+        let currentNodes = [...prevNodes];
+        currentNodes = updateAffectedNodeHandles(sourceNodeId, currentNodes, getEdges());
+        currentNodes = updateAffectedNodeHandles(targetNodeId, currentNodes, getEdges());
+        return currentNodes;
+    });
+  };
 
   const handleRenderMasterInstancesOnCanvas = useCallback(async (masterIdToRender: string) => {
     const masterConfig = getApiConfigById(masterIdToRender);
@@ -1029,6 +1258,7 @@ export function AdvancedTopologyEditor() {
                 masterId: masterConfig.id, masterName: masterConfig.name,
                 apiUrl: masterConfig.apiUrl, defaultLogLevel: masterConfig.masterDefaultLogLevel,
                 defaultTlsMode: masterConfig.masterDefaultTlsMode, masterSubRole: 'container',
+                activeHandles: { ...initialActiveHandles.M },
             },
             style: { ...nodeStyles.m.base, width: MIN_MASTER_NODE_WIDTH, height: MIN_MASTER_NODE_HEIGHT },
             width: MIN_MASTER_NODE_WIDTH, height: MIN_MASTER_NODE_HEIGHT,
@@ -1040,6 +1270,7 @@ export function AdvancedTopologyEditor() {
 
         for (const inst of instancesForThisMaster) {
             const parsedUrl = parseNodePassUrl(inst.url);
+            const nodeRole = inst.type === 'server' ? 'S' : 'C';
             const commonNodeData: Partial<CustomNodeData> = {
                 originalInstanceId: inst.id, originalInstanceUrl: inst.url,
                 tunnelAddress: parsedUrl.tunnelAddress || '', targetAddress: parsedUrl.targetAddress || '',
@@ -1048,10 +1279,10 @@ export function AdvancedTopologyEditor() {
                 certPath: parsedUrl.certPath || '', keyPath: parsedUrl.keyPath || '',
                 parentNode: mContainerNodeId,
                 isExpanded: false,
+                activeHandles: { ...initialActiveHandles[nodeRole as keyof typeof initialActiveHandles] },
             };
 
             const nodeTypeIcon = inst.type === 'server' ? Server : DatabaseZap;
-            const nodeRole = inst.type === 'server' ? 'S' : 'C';
             const instanceNodeId = `${nodeRole.toLowerCase()}-${inst.id.substring(0,8)}-${++currentIdCounter}`;
 
             const instanceNode: Node = {
@@ -1074,7 +1305,7 @@ export function AdvancedTopologyEditor() {
         setNodesInternal(finalNodesWithChildren);
         setNodeIdCounter(currentIdCounter);
 
-        setTimeout(() => { fitView({ duration: 400, padding: 0.1 }); /* handleFormatLayout removed */ }, 100); // Removed handleFormatLayout
+        setTimeout(() => { fitView({ duration: 400, padding: 0.1 }); }, 100);
         toast({ title: `主控 ${masterConfig.name} 的实例已渲染。`, description: `共 ${instancesForThisMaster.length} 个实例。` });
 
     } catch (error: any) {
@@ -1127,7 +1358,6 @@ export function AdvancedTopologyEditor() {
                 nodes={nodesInternal} edges={edgesInternal} onNodesChange={onNodesChangeInternalCallback} onEdgesChange={onEdgesChangeInternal} onConnect={onConnect}
                 onSelectionChange={onSelectionChange} reactFlowWrapperRef={reactFlowWrapperRef} onNodeClick={onNodeClickHandler}
                 onCenterView={handleCenterViewCallback} 
-                // onFormatLayout removed
                 onClearCanvas={handleClearCanvasCallback} onTriggerSubmitTopology={handleTriggerSubmitTopology}
                 canSubmit={(nodesInternal.length > 0 || edgesInternal.length > 0) && !isSubmitting}
                 isSubmitting={isSubmitting}
