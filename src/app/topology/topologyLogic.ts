@@ -31,35 +31,47 @@ export function calculateClientTunnelAddressForServer(
   let masterApiHost: string | null = null;
   if (effectiveServerMasterConfig?.apiUrl) {
     masterApiHost = extractHostname(effectiveServerMasterConfig.apiUrl);
+  } else {
+    console.warn(`Cannot determine master API host for server ${serverNodeData.label}: effectiveServerMasterConfig or its apiUrl is missing.`);
   }
 
   const serverListenHost = extractHostname(serverNodeData.tunnelAddress || "");
-  const serverListenPort = extractPort(serverNodeData.tunnelAddress || ""); // If only port provided for server, tunnelAddress is port
+  const serverListenPort = extractPort(serverNodeData.tunnelAddress || "");
+
+  if (!serverListenPort) {
+    console.warn(`Cannot determine listen port for server ${serverNodeData.label} from tunnelAddress: ${serverNodeData.tunnelAddress}`);
+    return ""; // Cannot form address without a port
+  }
 
   let clientEffectiveTunnelHost = serverListenHost;
 
-  if (serverListenHost && isWildcardHostname(serverListenHost) && masterApiHost && masterApiHost.trim() !== "") {
-    clientEffectiveTunnelHost = masterApiHost;
+  if (serverListenHost && isWildcardHostname(serverListenHost)) {
+    if (masterApiHost && masterApiHost.trim() !== "") {
+      clientEffectiveTunnelHost = masterApiHost;
+    } else {
+      // Server listening on wildcard, but master API host is unknown. Client cannot connect reliably.
+      console.warn(`Server ${serverNodeData.label} listens on wildcard, but its master API host is unknown. Cannot form reliable client tunnel address.`);
+      return "";
+    }
   } else if (serverListenHost && !isWildcardHostname(serverListenHost)) {
-    // Use server's specific IP
-  } else if (!serverListenHost && masterApiHost && masterApiHost.trim() !== "") {
-    clientEffectiveTunnelHost = masterApiHost;
+    // Server listens on a specific IP, client should use that.
+    // clientEffectiveTunnelHost is already serverListenHost.
+  } else if (!serverListenHost) { // serverListenHost is null or empty (e.g. tunnelAddress was just ":port")
+    if (masterApiHost && masterApiHost.trim() !== "") {
+      clientEffectiveTunnelHost = masterApiHost;
+    } else {
+      // Server listen address has no host, and master API host is unknown.
+      console.warn(`Server ${serverNodeData.label} listen address has no host part, and its master API host is unknown. Cannot form client tunnel address.`);
+      return "";
+    }
   }
+  // At this point, clientEffectiveTunnelHost should be determined if possible.
 
-  if (serverListenPort && clientEffectiveTunnelHost && clientEffectiveTunnelHost.trim() !== "") {
+  if (clientEffectiveTunnelHost && clientEffectiveTunnelHost.trim() !== "") {
     return `${formatHostForUrl(clientEffectiveTunnelHost)}:${serverListenPort}`;
   }
   
-  // Fallback if port or host couldn't be determined for construction, return original or empty.
-  // This case might happen if serverNodeData.tunnelAddress is only a port number.
-  if (serverListenPort && (!clientEffectiveTunnelHost || clientEffectiveTunnelHost.trim() === "")) {
-    // If we have a port but no host, it implies a local server, usually represented as [::]:port or 0.0.0.0:port
-    // However, for a client connecting, this isn't enough.
-    // If the original tunnelAddress was just a port, this function might not be able to resolve it to a full address
-    // without more context or assumptions. Returning the original tunnelAddress in such edge cases.
-    return serverNodeData.tunnelAddress || "";
-  }
-  
-  return serverNodeData.tunnelAddress || "";
+  // Fallback: if clientEffectiveTunnelHost is still empty or null, something went wrong.
+  console.warn(`Failed to determine a valid host for client tunnel address to server ${serverNodeData.label}.`);
+  return ""; 
 }
-
