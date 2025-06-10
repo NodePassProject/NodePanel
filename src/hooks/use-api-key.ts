@@ -163,9 +163,9 @@ export function useApiConfig() {
     
     let base = schemedApiUrl.replace(/\/+$/, ''); // Remove trailing slashes
 
-    // If the user's apiUrl ALREADY ends with '/api', don't append it again.
-    if (!base.endsWith('/api')) {
-      base += '/api';
+    // Check if the base URL, in a case-insensitive manner, already ends with '/api'
+    if (!base.toLowerCase().endsWith('/api')) { 
+      base += '/api'; // Append '/api' (lowercase) only if it's not already there (case-insensitively)
     }
     return base;
   }, [getApiConfigById]);
