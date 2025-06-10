@@ -154,11 +154,16 @@ export function useApiConfig() {
   const getApiRootUrl = useCallback((id: string): string | null => {
     const config = getApiConfigById(id);
     if (!config?.apiUrl) return null;
-    
-    let base = config.apiUrl.replace(/\/+$/, ''); // Remove trailing slashes
 
-    // If the user's apiUrl already ends with '/api', don't append it again.
-    // Otherwise, append '/api'.
+    let schemedApiUrl = config.apiUrl.trim();
+    // Ensure the URL has a scheme, defaulting to http
+    if (schemedApiUrl && !schemedApiUrl.includes('://')) {
+      schemedApiUrl = `http://${schemedApiUrl}`;
+    }
+    
+    let base = schemedApiUrl.replace(/\/+$/, ''); // Remove trailing slashes
+
+    // If the user's apiUrl ALREADY ends with '/api', don't append it again.
     if (!base.endsWith('/api')) {
       base += '/api';
     }
