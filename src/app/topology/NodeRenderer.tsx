@@ -4,10 +4,11 @@
 import React, { memo } from 'react';
 import type { NodeProps } from 'reactflow';
 import { Handle, Position } from 'reactflow';
-import { Loader2, Server, DatabaseZap, Globe, UserCircle2 } from 'lucide-react';
-import type { CustomNodeData } from './topologyTypes';
+import { Loader2, Server, DatabaseZap, Globe, UserCircle2, Pencil, Trash2 } from 'lucide-react';
+import type { CustomNodeData, Node } from './topologyTypes'; // Added Node import
 import { ICON_ONLY_NODE_SIZE, EXPANDED_SC_NODE_WIDTH, EXPANDED_SC_NODE_BASE_HEIGHT, DETAIL_LINE_HEIGHT } from './topologyTypes';
 import { cn } from '@/lib/utils';
+import { Button } from '@/components/ui/button';
 
 export const nodeStyles = {
   m: {
@@ -68,12 +69,17 @@ export const MasterNode: React.FC<NodeProps<CustomNodeData>> = memo(({ data }) =
 });
 MasterNode.displayName = 'MasterNode';
 
-export const CardNode: React.FC<NodeProps<CustomNodeData>> = memo(({ data, selected, width, height }) => {
+export const CardNode: React.FC<
+  NodeProps<CustomNodeData> & {
+    onEditRequest?: (node: Node) => void;
+    onDeleteRequest?: (node: Node) => void;
+  }
+> = memo(({ data, selected, width, height, onEditRequest, onDeleteRequest, ...restOfNodeProps }) => {
   const IconComponent = data.icon || (data.role === 'S' ? Server : data.role === 'C' ? DatabaseZap : data.role === 'T' ? Globe : UserCircle2);
   const roleStyle = nodeStyles[data.role.toLowerCase() as keyof typeof nodeStyles];
   const isExpanded = !!data.isExpanded;
 
-  const baseCardClasses = `flex rounded-lg border-2 shadow-sm transition-all duration-200 ease-in-out`;
+  const baseCardClasses = `flex rounded-lg border-2 shadow-sm transition-all duration-200 ease-in-out relative`; // Added position: relative
   
   const nodeWidth = width || (isExpanded ? EXPANDED_SC_NODE_WIDTH : ICON_ONLY_NODE_SIZE);
   
@@ -89,6 +95,8 @@ export const CardNode: React.FC<NodeProps<CustomNodeData>> = memo(({ data, selec
       calculatedHeight = ICON_ONLY_NODE_SIZE;
     }
   }
+
+  const fullNodeProps = { ...restOfNodeProps, data, selected, width, height } as Node;
 
 
   const dynamicStyle: React.CSSProperties = {
@@ -111,6 +119,29 @@ export const CardNode: React.FC<NodeProps<CustomNodeData>> = memo(({ data, selec
         )}
         style={dynamicStyle}
       >
+        {isExpanded && data.role !== 'U' && ( // 'U' nodes typically don't have editable tunnel/target addresses
+          <div className="absolute top-1 right-1 flex space-x-0.5 z-10">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6"
+              onClick={(e) => { e.stopPropagation(); onEditRequest?.(fullNodeProps); }}
+              title="编辑属性"
+            >
+              <Pencil size={12} />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6 text-destructive hover:text-destructive hover:bg-destructive/10"
+              onClick={(e) => { e.stopPropagation(); onDeleteRequest?.(fullNodeProps); }}
+              title="删除角色"
+            >
+              <Trash2 size={12} />
+            </Button>
+          </div>
+        )}
+
         <div className={cn("flex items-center", isExpanded ? 'w-full mb-1' : '')}>
           {IconComponent && (
             <div
@@ -188,6 +219,8 @@ export const CardNode: React.FC<NodeProps<CustomNodeData>> = memo(({ data, selec
 });
 CardNode.displayName = 'CardNode';
 
+// Original nodeTypes export is kept for cases where no extra props are needed or for reference.
+// AdvancedTopologyEditor will define its own enhanced nodeTypes.
 export const nodeTypes = {
   cardNode: CardNode,
   masterNode: MasterNode,

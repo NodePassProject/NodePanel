@@ -15,15 +15,15 @@ import {
   type NodeChange,
   type NodeMouseHandler,
   Position,
+  type NodeProps, // Import NodeProps
 } from 'reactflow';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Server, Smartphone as ClientIcon, Globe, UserCircle2 as UserIcon, ListTree, Puzzle, Info as InfoIcon } from 'lucide-react'; // Renamed Smartphone to ClientIcon for clarity
+import { Server, Smartphone as ClientIcon, Globe, UserCircle2 as UserIcon, ListTree, Puzzle, Info as InfoIcon, Edit3, Trash2 } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 
 import { TopologyCanvasWrapper } from './TopologyCanvas';
 import { MastersPalette } from './components/MastersPalette';
 import { ComponentsPalette, type DraggableNodeType } from './components/ComponentsPalette';
-// PropertiesDisplayPanel removed as per previous request
 import type { NamedApiConfig } from '@/hooks/use-api-key';
 import { useApiConfig } from '@/hooks/use-api-key';
 import { useToast } from '@/hooks/use-toast';
@@ -37,7 +37,7 @@ import { SubmitTopologyConfirmationDialog, type InstanceUrlConfigWithName } from
 import { EditTopologyNodeDialog } from './components/EditTopologyNodeDialog';
 
 import type { Node, CustomNodeData, NodeRole, TopologyContextMenu } from './topologyTypes';
-import { nodeStyles } from './NodeRenderer';
+import { CardNode, MasterNode, nodeStyles } from './NodeRenderer'; // Import CardNode and MasterNode specifically
 import { ICON_ONLY_NODE_SIZE, EXPANDED_SC_NODE_WIDTH, EXPANDED_SC_NODE_BASE_HEIGHT, DETAIL_LINE_HEIGHT } from './topologyTypes';
 import { calculateClientTunnelAddressForServer } from './topologyLogic';
 
@@ -54,14 +54,13 @@ const initialActiveHandles = {
   C: { top: true, bottom: true, left: true, right: true },
   U: { top: false, bottom: true, left: false, right: true },
   T: { top: true, bottom: false, left: true, right: false },
-  M: { top: true, bottom: true, left: true, right: true }, // Master nodes for direct connections
+  M: { top: true, bottom: true, left: true, right: true },
 };
 
 export function AdvancedTopologyEditor() {
   const { deleteElements, fitView, getNodes, getEdges, setEdges: setReactFlowEdges } = useReactFlow();
   const [nodesInternal, setNodesInternal, onNodesChangeInternalCallback] = useNodesState<Node>(initialNodes);
   const [edgesInternal, setEdgesInternal, onEdgesChangeInternal] = useEdgesState(initialEdges);
-  // selectedNode state removed as PropertiesDisplayPanel is gone
   const [nodeIdCounter, setNodeIdCounter] = useState(0);
   const { toast } = useToast();
   const reactFlowWrapperRef = useRef<HTMLDivElement>(null);
@@ -85,6 +84,108 @@ export function AdvancedTopologyEditor() {
 
   const handshakeLogRegex = /Tunnel handshaked:.*?in\s+(\d+)\s*ms/i;
   const sseHandshakeAbortControllerRef = useRef<AbortController | null>(null);
+
+
+  const handleOpenEditNodeDialog = useCallback((node: Node) => {
+    setContextMenu(null);
+
+    const allNodes = getNodes(); // Use getNodes() to get current state from ReactFlow
+    const allEdges = getEdges();
+
+    let hasS = false;
+    let isInterMaster = false;
+    let sourceInfo: { serverTunnelAddress: string } | undefined = undefined;
+
+    if (node.data.role === 'C') {
+        const targetParentNode = allNodes.find(n => n.id === node.parentNode);
+
+        if (targetParentNode) {
+            hasS = allNodes.some(n => n.parentNode === targetParentNode.id && n.data.role === 'S');
+        }
+
+        const incomingEdge = allEdges.find(edge => edge.target === node.id);
+        const outgoingEdge = allEdges.find(edge => edge.source === node.id);
+
+        if (incomingEdge && allNodes.find(n=> n.id === incomingEdge.source)?.data.role === 'S') {
+            const sourceSNode = allNodes.find(n => n.id === incomingEdge.source)!;
+            const sourceParentNode = sourceSNode.parentNode ? allNodes.find(n => n.id === sourceSNode.parentNode) : undefined;
+            const cNodeParentNode = node.parentNode ? allNodes.find(n => n.id === node.parentNode) : undefined;
+
+            if (sourceParentNode && cNodeParentNode && sourceParentNode.data.masterId !== cNodeParentNode.data.masterId) {
+                isInterMaster = true;
+                const sourceMasterConfig = getApiConfigById(sourceParentNode.data.masterId!);
+                const newClientTunnelAddress = calculateClientTunnelAddressForServer(sourceSNode.data, sourceMasterConfig);
+                if (newClientTunnelAddress && newClientTunnelAddress.trim() !== "") {
+                    sourceInfo = { serverTunnelAddress: newClientTunnelAddress };
+                } else {
+                    toast({ title: '无法确定隧道地址', description: '无法自动计算源 S 节点的隧道地址。', variant: "warning" });
+                }
+            }
+        } else if (outgoingEdge && allNodes.find(n=> n.id === outgoingEdge.target)?.data.role === 'S') {
+            const targetSNode = allNodes.find(n => n.id === outgoingEdge.target)!;
+            const targetParentNode = targetSNode.parentNode ? allNodes.find(n => n.id === targetSNode.parentNode) : undefined;
+            const cNodeParentNode = node.parentNode ? allNodes.find(n => n.id === node.parentNode) : undefined;
+
+            if (targetParentNode && cNodeParentNode && targetParentNode.data.masterId !== cNodeParentNode.data.masterId) {
+                 isInterMaster = true;
+                 const targetMasterConfig = getApiConfigById(targetParentNode.data.masterId!);
+                 const newClientTunnelAddress = calculateClientTunnelAddressForServer(targetSNode.data, targetMasterConfig);
+                 if (newClientTunnelAddress && newClientTunnelAddress.trim() !== "") {
+                    sourceInfo = { serverTunnelAddress: newClientTunnelAddress };
+                } else {
+                    toast({ title: '无法确定隧道地址', description: '无法自动计算目标 S 节点的隧道地址。', variant: "warning" });
+                }
+            }
+        }
+    }
+
+    setEditingNodeContext({
+        node,
+        hasS,
+        isInterMasterLink: isInterMaster,
+        sourceInfo: sourceInfo,
+    });
+    setIsEditNodeDialogOpen(true);
+  }, [getNodes, getEdges, getApiConfigById, toast]);
+
+  const handleDeleteNode = useCallback((nodeToDelete: Node) => {
+    const parentId = nodeToDelete.parentNode;
+    const edgesToRemove = getEdges().filter(edge => edge.source === nodeToDelete.id || edge.target === nodeToDelete.id);
+    const nodeIdsToUpdateHandles = new Set<string>();
+    edgesToRemove.forEach(edge => {
+        if (edge.source !== nodeToDelete.id) nodeIdsToUpdateHandles.add(edge.source);
+        if (edge.target !== nodeToDelete.id) nodeIdsToUpdateHandles.add(edge.target);
+    });
+    
+    deleteElements({ nodes: [{ id: nodeToDelete.id }], edges: edgesToRemove }); // Pass only node ID for deletion
+    toast({ title: `节点 "${nodeToDelete.data.label || nodeToDelete.id}" 已删除` });
+    
+    setContextMenu(null);
+
+    setNodesInternal(prevNodes => {
+        let currentNodes = prevNodes.filter(n => n.id !== nodeToDelete.id);
+        if (parentId) {
+            currentNodes = updateMasterNodeDimensions(parentId, currentNodes);
+        }
+        nodeIdsToUpdateHandles.forEach(nodeId => {
+            currentNodes = updateAffectedNodeHandles(nodeId, currentNodes, getEdges());
+        });
+        return currentNodes;
+    });
+  }, [getEdges, deleteElements, toast, setNodesInternal, updateMasterNodeDimensions, updateAffectedNodeHandles]);
+
+
+  const memoizedNodeTypes = useMemo(() => ({
+    cardNode: (props: NodeProps<CustomNodeData>) => (
+      <CardNode
+        {...props}
+        onEditRequest={handleOpenEditNodeDialog}
+        onDeleteRequest={handleDeleteNode}
+      />
+    ),
+    masterNode: MasterNode,
+  }), [handleOpenEditNodeDialog, handleDeleteNode]);
+
 
   const updateMasterNodeDimensions = useCallback((masterNodeId: string, currentNodes: Node[]): Node[] => {
     const masterNode = currentNodes.find(n => n.id === masterNodeId);
@@ -138,26 +239,24 @@ export function AdvancedTopologyEditor() {
 
     let sourceHandle: string, targetHandle: string;
 
-    if (Math.abs(dy) >= Math.abs(dx)) { // Prioritize vertical connection
-      if (dy > 0) { // target is below source
+    if (Math.abs(dy) >= Math.abs(dx)) { 
+      if (dy > 0) { 
         sourceHandle = Position.Bottom; targetHandle = Position.Top;
-      } else { // target is above source
+      } else { 
         sourceHandle = Position.Top; targetHandle = Position.Bottom;
       }
-    } else { // Horizontal connection is shorter or primary axis choice
-      if (dx > 0) { // target is to the right of source
+    } else { 
+      if (dx > 0) { 
         sourceHandle = Position.Right; targetHandle = Position.Left;
-      } else { // target is to the left of source
+      } else { 
         sourceHandle = Position.Left; targetHandle = Position.Right;
       }
     }
     
-    // For U nodes, only allow 'right' or 'bottom' as source handles
     if (sourceNode.data.role === 'U') {
         if (sourceHandle === Position.Left) sourceHandle = Position.Right;
         if (sourceHandle === Position.Top) sourceHandle = Position.Bottom;
     }
-    // For T nodes, only allow 'left' or 'top' as target handles
     if (targetNode.data.role === 'T') {
         if (targetHandle === Position.Right) targetHandle = Position.Left;
         if (targetHandle === Position.Bottom) targetHandle = Position.Top;
@@ -179,13 +278,12 @@ export function AdvancedTopologyEditor() {
         let newActiveHandles = { ...initialActiveHandles[n.data.role as keyof typeof initialActiveHandles] };
 
         if (relevantConnections.length === 0) {
-           // No relevant connections, use initial defaults
         } else if (n.data.role === 'U') {
-            const edge = relevantConnections[0]; // U can only have one connection
+            const edge = relevantConnections[0]; 
             if (edge.sourceHandle === Position.Right) newActiveHandles = { top: false, bottom: false, left: false, right: true };
             else if (edge.sourceHandle === Position.Bottom) newActiveHandles = { top: false, bottom: true, left: false, right: false };
         } else if (n.data.role === 'T') {
-            const edge = relevantConnections[0]; // T can only have one connection
+            const edge = relevantConnections[0]; 
             if (edge.targetHandle === Position.Left) newActiveHandles = { top: false, bottom: false, left: true, right: false };
             else if (edge.targetHandle === Position.Top) newActiveHandles = { top: true, bottom: false, left: false, right: false };
         } else if (n.data.role === 'S' || n.data.role === 'C') {
@@ -199,7 +297,7 @@ export function AdvancedTopologyEditor() {
 
             if (hasHorizontal && !hasVertical) newActiveHandles = { top: false, bottom: false, left: true, right: true };
             else if (!hasHorizontal && hasVertical) newActiveHandles = { top: true, bottom: true, left: false, right: false };
-            else newActiveHandles = { top: true, bottom: true, left: true, right: true }; // Both or none specific to U/T
+            else newActiveHandles = { top: true, bottom: true, left: true, right: true }; 
         }
         
         return { ...n, data: { ...n.data, activeHandles: newActiveHandles } };
@@ -226,7 +324,7 @@ export function AdvancedTopologyEditor() {
           }
         } else if (change.type === 'add' && change.item.parentNode) {
             parentIdsToUpdate.add(change.item.parentNode);
-        } else if (change.type === 'dimensions' && change.dragging === false) { // Dimension changes often follow drag
+        } else if (change.type === 'dimensions' && change.dragging === false) { 
             const changedNode = finalNodes.find(n => n.id === change.id);
             if (changedNode && (changedNode.data.role === 'U' || changedNode.data.role === 'T' || changedNode.data.role === 'S' || changedNode.data.role === 'C')) {
                 nodesMoved = true;
@@ -272,7 +370,7 @@ export function AdvancedTopologyEditor() {
 
         if (edgesToUpdate.length > 0) {
           setReactFlowEdges(eds => eds.map(ed => edgesToUpdate.find(uEd => uEd.id === ed.id) || ed));
-          currentEdges = getEdges(); // Re-fetch after state update from setReactFlowEdges
+          currentEdges = getEdges(); 
         }
         
         affectedNodeIdsForHandleUpdate.forEach(nodeId => {
@@ -296,9 +394,8 @@ export function AdvancedTopologyEditor() {
             allNodeIdsInvolvedInEdges.add(edge.target);
         });
 
-        // Also update nodes that might have had edges removed implicitly by addEdge
         const currentEdgeNodeIds = new Set<string>();
-         getEdges().forEach(edge => { // Use getEdges to get the latest state if newEdges was a function
+         getEdges().forEach(edge => { 
             currentEdgeNodeIds.add(edge.source);
             currentEdgeNodeIds.add(edge.target);
         });
@@ -376,16 +473,15 @@ export function AdvancedTopologyEditor() {
       const sourceRole = sourceNode.data.role;
       const targetRole = targetNode.data.role;
 
-      // Role-based connection validation
       if (sourceRole === 'M' || targetRole === 'M') {
           toast({ title: '连接无效', description: '主控 (M) 节点是容器，不能直接连接。请连接其内部的 S/C 节点。', variant: 'destructive'});
           return;
       }
-      if (targetRole === 'U') { // U cannot be a target
+      if (targetRole === 'U') { 
         toast({ title: '连接无效', description: '用户入口 (U) 节点不能被其他节点链接。', variant: 'destructive' });
         return;
       }
-      if (sourceRole === 'T') { // T cannot be a source
+      if (sourceRole === 'T') { 
         toast({ title: '连接无效', description: '目标服务 (T) 节点不能作为连接的起点。', variant: 'destructive' });
         return;
       }
@@ -397,16 +493,15 @@ export function AdvancedTopologyEditor() {
          toast({ title: '连接无效', description: '目标服务 (T) 节点只能被 服务端(S) 或 客户端(C) 连接。', variant: 'destructive'});
          return;
       }
-      if (sourceRole === 'S' && !(targetRole === 'C' || targetRole === 'T')) { // S can connect to C or T
+      if (sourceRole === 'S' && !(targetRole === 'C' || targetRole === 'T')) { 
          toast({ title: '连接无效', description: '服务端(S) 节点只能连接到 客户端(C) 或 目标服务(T)。', variant: 'destructive'});
          return;
       }
-      if (sourceRole === 'C' && !(targetRole === 'S' || targetRole === 'C' || targetRole === 'T')) { // C can connect to S, C, or T
+      if (sourceRole === 'C' && !(targetRole === 'S' || targetRole === 'C' || targetRole === 'T')) { 
          toast({ title: '连接无效', description: '客户端(C) 节点只能连接到 服务端(S), 客户端(C), 或 目标服务(T)。', variant: 'destructive'});
          return;
       }
       
-      // U and T nodes can only have one connection
       if (sourceRole === 'U' && allCurrentEdges.some(edge => edge.source === sourceNode.id)) {
         toast({ title: '连接无效', description: '用户入口 (U) 节点只能有一个传出连接。', variant: 'destructive' });
         return;
@@ -419,9 +514,9 @@ export function AdvancedTopologyEditor() {
 
       const { sourceHandle, targetHandle } = getOptimalHandlesForConnection(sourceNode, targetNode);
       const newEdgeBase = {
-        ...params, // This includes the sourceHandle/targetHandle from user drag IF DIFFERENT from optimal
-        sourceHandle, // Override with optimal
-        targetHandle, // Override with optimal
+        ...params, 
+        sourceHandle, 
+        targetHandle, 
         id: `edge-${uuidv4()}`,
         animated: true,
         style: { strokeDasharray: '5 5' },
@@ -477,8 +572,8 @@ export function AdvancedTopologyEditor() {
                           ...n,
                           data: {
                             ...n.data,
-                            isSingleEndedForwardC: false, // Ensure it's not single-ended
-                            tlsMode: n.data.tlsMode || 'master' // Keep existing or default TLS
+                            isSingleEndedForwardC: false, 
+                            tlsMode: n.data.tlsMode || 'master' 
                           }
                         };
                     }
@@ -505,8 +600,8 @@ export function AdvancedTopologyEditor() {
       }
 
       if (nodesToUpdateForAddress.length > 0) {
-        setNodesInternal(nodesToUpdateForAddress); // Apply address updates first
-        setEdgesAndUpdateHandles((eds) => addEdge(newEdgeBase, eds)); // Then add edge and update handles
+        setNodesInternal(nodesToUpdateForAddress); 
+        setEdgesAndUpdateHandles((eds) => addEdge(newEdgeBase, eds)); 
       } else {
         setEdgesAndUpdateHandles((eds) => addEdge(newEdgeBase, eds));
       }
@@ -515,16 +610,15 @@ export function AdvancedTopologyEditor() {
   );
 
   const onSelectionChange = useCallback(({ nodes: selectedNodesList }: { nodes: Node[]; edges: Edge[] }) => {
-    // setSelectedNode(selectedNodesList.length === 1 ? selectedNodesList[0] : null); // No longer needed
     if (selectedNodesList.length !== 1) setContextMenu(null);
   }, []);
 
   const calculateExpandedNodeHeight = (data: CustomNodeData): number => {
-    let numDetails = 2; // Base for Label, Role
+    let numDetails = 2; 
     if (data.tunnelAddress) numDetails++;
     if (data.targetAddress) numDetails++;
     if (data.submissionStatus) numDetails++;
-    return EXPANDED_SC_NODE_BASE_HEIGHT + (numDetails * DETAIL_LINE_HEIGHT) + (data.submissionStatus ? 5 : 0); // Extra padding for submission status
+    return EXPANDED_SC_NODE_BASE_HEIGHT + (numDetails * DETAIL_LINE_HEIGHT) + (data.submissionStatus ? 5 : 0); 
   };
 
 
@@ -555,7 +649,6 @@ export function AdvancedTopologyEditor() {
         }
         return updatedNodes;
     });
-    // setSelectedNode(clickedNode); // No longer needed
   }, [setNodesInternal, updateMasterNodeDimensions]);
 
 
@@ -577,8 +670,6 @@ export function AdvancedTopologyEditor() {
 
  const onPaneClick = useCallback(() => {
     setContextMenu(null);
-
-    // let wasSelectedNodeActuallyCollapsed = false; // Not needed as selectedNode is removed
     let parentsToUpdateDueToCollapse = new Set<string>();
 
     setNodesInternal(nds => {
@@ -587,9 +678,6 @@ export function AdvancedTopologyEditor() {
           if (n.parentNode) {
             parentsToUpdateDueToCollapse.add(n.parentNode);
           }
-          // if (selectedNode && selectedNode.id === n.id) { // Not needed
-          //   wasSelectedNodeActuallyCollapsed = true;
-          // }
           return {
             ...n,
             data: { ...n.data, isExpanded: false },
@@ -608,10 +696,6 @@ export function AdvancedTopologyEditor() {
 
       return finalNodesAfterCollapse;
     });
-
-    // if (wasSelectedNodeActuallyCollapsed) { // Not needed
-    //   setSelectedNode(null);
-    // }
   }, [setContextMenu, setNodesInternal, updateMasterNodeDimensions]);
 
 
@@ -754,15 +838,15 @@ export function AdvancedTopologyEditor() {
                 role: newRole, 
                 icon: newIcon, 
                 label: `${newLabelPrefix} ${node.data.label.split(' ').pop()}`,
-                activeHandles: { ...initialActiveHandles[newRole as keyof typeof initialActiveHandles] } // Reset handles for new role
+                activeHandles: { ...initialActiveHandles[newRole as keyof typeof initialActiveHandles] } 
             };
 
             if (newRole === 'S') {
                 newData.isSingleEndedForwardC = undefined;
                 if (!newData.tunnelAddress || newData.tunnelAddress.startsWith("remote")) newData.tunnelAddress = `[::]:${10000 + nodeIdCounter}`;
                 if (!newData.targetAddress || newData.targetAddress.startsWith("[")) newData.targetAddress = `127.0.0.1:${3000 + nodeIdCounter}`;
-            } else { // newRole is 'C'
-                newData.isSingleEndedForwardC = false; // Default for C
+            } else { 
+                newData.isSingleEndedForwardC = false; 
                 if (!newData.tunnelAddress || newData.tunnelAddress.startsWith("[")) newData.tunnelAddress = `remote.server.com:${10000 + nodeIdCounter}`;
                 if (!newData.targetAddress || newData.targetAddress.startsWith("127")) newData.targetAddress = `[::]:${3000 + nodeIdCounter + 1}`;
             }
@@ -776,7 +860,7 @@ export function AdvancedTopologyEditor() {
 
 
   const handleClearCanvasCallback = useCallback(() => {
-    setNodesInternal([]); setEdgesInternal([]); setNodeIdCounter(0); /* setSelectedNode(null); */ setContextMenu(null);
+    setNodesInternal([]); setEdgesInternal([]); setNodeIdCounter(0); setContextMenu(null);
     toast({ title: '画布已清空' });
   }, [setNodesInternal, setEdgesInternal, toast]);
 
@@ -865,7 +949,7 @@ export function AdvancedTopologyEditor() {
             masterId: masterConfigForNode.id,
             masterName: masterConfigForNode.name,
             url: finalUrl,
-            instanceType: instanceTypeForBuild
+            instanceType: node.data.role === 'S' ? '出口(s)' : '入口(c)'
           });
         }
       }
@@ -891,7 +975,7 @@ export function AdvancedTopologyEditor() {
         const apiRootForCheck = getApiRootUrl(masterForSseCheck.id); const tokenForCheck = getToken(masterForSseCheck.id);
         if (!apiRootForCheck || !tokenForCheck) throw new Error("API配置不完整。");
         const eventsUrl = getEventsUrl(apiRootForCheck); if (!eventsUrl) throw new Error("无法生成事件URL。");
-        const response = await fetch(eventsUrl, { method: 'GET', headers: { 'X-API-Key': tokenForCheck, 'Accept': 'text/event-stream', 'Cache-Control': 'no-cache' }, signal: ssePreCheckAbortController.signal });
+        const response = await fetch(eventsUrl, { method: 'GET', headers: { 'X-API-Key': tokenForCheck, 'Accept': 'text/event-stream', 'Cache-Control': 'no-cache', 'mode': 'cors', 'credentials': 'omit' }, signal: ssePreCheckAbortController.signal });
         if (!response.ok || !response.body) { const errorText = response.statusText || `HTTP error ${response.status}`; throw new Error(errorText); }
         const reader = response.body.getReader(); const { done } = await reader.read(); if (!done) sseCheckSuccess = true;
         if (!ssePreCheckAbortController.signal.aborted) ssePreCheckAbortController.abort("Pre-check complete");
@@ -916,7 +1000,7 @@ export function AdvancedTopologyEditor() {
     if (!sseApiRoot || !sseApiToken) { toast({ title: "SSE 错误", description: `无法监听握手: 主控 ${masterForSse.name} 的API配置无效。`, variant: "destructive" }); return; }
     const eventsSSEUrl = getEventsUrl(sseApiRoot); if (!eventsSSEUrl) return;
     try {
-        const response = await fetch(eventsSSEUrl, { method: 'GET', headers: { 'X-API-Key': sseApiToken, 'Accept': 'text/event-stream', 'Cache-Control': 'no-cache' }, signal });
+        const response = await fetch(eventsSSEUrl, { method: 'GET', headers: { 'X-API-Key': sseApiToken, 'Accept': 'text/event-stream', 'Cache-Control': 'no-cache', 'mode': 'cors', 'credentials': 'omit' }, signal });
         if (!response.ok || !response.body) { const errorText = response.statusText || `HTTP error ${response.status}`; throw new Error(errorText); }
         const reader = response.body.getReader(); const decoder = new TextDecoder(); let buffer = '';
         while (true) {
@@ -958,69 +1042,7 @@ export function AdvancedTopologyEditor() {
   }, [instancesForConfirmation, getApiRootUrl, getToken, toast, createInstanceMutation, setNodesInternal, activeApiConfig, apiConfigsList, listenForHandshakeViaSSE]);
 
   useEffect(() => { return () => { if (sseHandshakeAbortControllerRef.current && !sseHandshakeAbortControllerRef.current.signal.aborted) { sseHandshakeAbortControllerRef.current.abort("Component unmounting"); sseHandshakeAbortControllerRef.current = null; } }; }, []);
-
-  const handleOpenEditNodeDialog = (node: Node) => {
-    setContextMenu(null);
-
-    const allNodes = getNodes();
-    const allEdges = getEdges();
-
-    let hasS = false;
-    let isInterMaster = false;
-    let sourceInfo: { serverTunnelAddress: string } | undefined = undefined;
-
-    if (node.data.role === 'C') {
-        const targetParentNode = allNodes.find(n => n.id === node.parentNode);
-
-        if (targetParentNode) {
-            hasS = allNodes.some(n => n.parentNode === targetParentNode.id && n.data.role === 'S');
-        }
-
-        const incomingEdge = allEdges.find(edge => edge.target === node.id);
-        const outgoingEdge = allEdges.find(edge => edge.source === node.id);
-
-        if (incomingEdge && allNodes.find(n=> n.id === incomingEdge.source)?.data.role === 'S') {
-            const sourceSNode = allNodes.find(n => n.id === incomingEdge.source)!;
-            const sourceParentNode = sourceSNode.parentNode ? allNodes.find(n => n.id === sourceSNode.parentNode) : undefined;
-            const cNodeParentNode = node.parentNode ? allNodes.find(n => n.id === node.parentNode) : undefined;
-
-            if (sourceParentNode && cNodeParentNode && sourceParentNode.data.masterId !== cNodeParentNode.data.masterId) {
-                isInterMaster = true;
-                const sourceMasterConfig = getApiConfigById(sourceParentNode.data.masterId!);
-                const newClientTunnelAddress = calculateClientTunnelAddressForServer(sourceSNode.data, sourceMasterConfig);
-                if (newClientTunnelAddress && newClientTunnelAddress.trim() !== "") {
-                    sourceInfo = { serverTunnelAddress: newClientTunnelAddress };
-                } else {
-                    toast({ title: '无法确定隧道地址', description: '无法自动计算源 S 节点的隧道地址。', variant: "warning" });
-                }
-            }
-        } else if (outgoingEdge && allNodes.find(n=> n.id === outgoingEdge.target)?.data.role === 'S') {
-            const targetSNode = allNodes.find(n => n.id === outgoingEdge.target)!;
-            const targetParentNode = targetSNode.parentNode ? allNodes.find(n => n.id === targetSNode.parentNode) : undefined;
-            const cNodeParentNode = node.parentNode ? allNodes.find(n => n.id === node.parentNode) : undefined;
-
-            if (targetParentNode && cNodeParentNode && targetParentNode.data.masterId !== cNodeParentNode.data.masterId) {
-                 isInterMaster = true;
-                 const targetMasterConfig = getApiConfigById(targetParentNode.data.masterId!);
-                 const newClientTunnelAddress = calculateClientTunnelAddressForServer(targetSNode.data, targetMasterConfig);
-                 if (newClientTunnelAddress && newClientTunnelAddress.trim() !== "") {
-                    sourceInfo = { serverTunnelAddress: newClientTunnelAddress };
-                } else {
-                    toast({ title: '无法确定隧道地址', description: '无法自动计算目标 S 节点的隧道地址。', variant: "warning" });
-                }
-            }
-        }
-    }
-
-    setEditingNodeContext({
-        node,
-        hasS,
-        isInterMasterLink: isInterMaster,
-        sourceInfo: sourceInfo,
-    });
-    setIsEditNodeDialogOpen(true);
-  };
-
+  
   const handleSaveNodeProperties = useCallback((nodeId: string, updatedDataFromDialog: Partial<CustomNodeData>) => {
     const allCurrentNodes = getNodes();
     let newNodes = [...allCurrentNodes];
@@ -1173,7 +1195,6 @@ export function AdvancedTopologyEditor() {
       finalNodesAfterSave = updateMasterNodeDimensions(editedNode.parentNode!, finalNodesAfterSave);
     }
     
-    // After all potential node data changes, update handles
     const affectedNodeIdsForHandleUpdate = new Set<string>([nodeId]);
      getEdges().forEach(edge => {
         if(edge.source === nodeId) affectedNodeIdsForHandleUpdate.add(edge.target);
@@ -1189,34 +1210,6 @@ export function AdvancedTopologyEditor() {
     toast({ title: `节点 "${mergedData.label || nodeId.substring(0,8)}" 属性已更新`});
     setIsEditNodeDialogOpen(false); setEditingNodeContext(null);
   }, [getNodes, getEdges, setNodesInternal, toast, getApiConfigById, updateMasterNodeDimensions, updateAffectedNodeHandles]);
-
-
-  const handleDeleteNode = (nodeToDelete: Node) => {
-    const parentId = nodeToDelete.parentNode;
-    const edgesToRemove = getEdges().filter(edge => edge.source === nodeToDelete.id || edge.target === nodeToDelete.id);
-    const nodeIdsToUpdateHandles = new Set<string>();
-    edgesToRemove.forEach(edge => {
-        if (edge.source !== nodeToDelete.id) nodeIdsToUpdateHandles.add(edge.source);
-        if (edge.target !== nodeToDelete.id) nodeIdsToUpdateHandles.add(edge.target);
-    });
-    
-    deleteElements({ nodes: [nodeToDelete], edges: edgesToRemove });
-    toast({ title: `节点 "${nodeToDelete.data.label || nodeToDelete.id}" 已删除` });
-    
-    // if (selectedNode?.id === nodeToDelete.id) setSelectedNode(null); // Not needed
-    setContextMenu(null);
-
-    setNodesInternal(prevNodes => {
-        let currentNodes = prevNodes.filter(n => n.id !== nodeToDelete.id);
-        if (parentId) {
-            currentNodes = updateMasterNodeDimensions(parentId, currentNodes);
-        }
-        nodeIdsToUpdateHandles.forEach(nodeId => {
-            currentNodes = updateAffectedNodeHandles(nodeId, currentNodes, getEdges());
-        });
-        return currentNodes;
-    });
-  };
 
   const handleDeleteEdge = (edgeToDelete: Edge) => {
     const sourceNodeId = edgeToDelete.source;
@@ -1238,7 +1231,7 @@ export function AdvancedTopologyEditor() {
     const apiR = getApiRootUrl(masterIdToRender); const apiT = getToken(masterIdToRender);
     if (!apiR || !apiT) { toast({ title: "错误", description: `主控 "${masterConfig.name}" 的API配置不完整。`, variant: "destructive" }); return; }
 
-    setNodesInternal([]); setEdgesInternal([]); setNodeIdCounter(0); /* setSelectedNode(null); */ setContextMenu(null);
+    setNodesInternal([]); setEdgesInternal([]); setNodeIdCounter(0); setContextMenu(null);
     let currentIdCounter = 0;
 
     toast({ title: `正在加载主控 ${masterConfig.name} 的实例...` });
@@ -1341,7 +1334,6 @@ export function AdvancedTopologyEditor() {
               <p className="text-xs text-muted-foreground font-sans mb-2">拖拽实例到主控内部。</p>
               <div className="flex-grow overflow-y-auto pr-1"><ComponentsPalette /></div>
             </div>
-            {/* PropertiesDisplayPanel and its container div removed */}
           </div>
         </ScrollArea>
         <div className="flex-grow flex flex-col overflow-hidden p-2">
@@ -1355,6 +1347,7 @@ export function AdvancedTopologyEditor() {
                 canSubmit={(nodesInternal.length > 0 || edgesInternal.length > 0) && !isSubmitting}
                 isSubmitting={isSubmitting}
                 onNodeDropOnCanvas={handleNodeDroppedOnCanvas} onNodeContextMenu={onNodeContextMenu} onEdgeContextMenu={onEdgeContextMenu} onPaneClick={onPaneClick}
+                customNodeTypes={memoizedNodeTypes} // Pass the memoized node types with callbacks
               />
             </div>
           </div>

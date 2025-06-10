@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
@@ -10,10 +9,10 @@ const ACTIVE_API_CONFIG_ID_STORAGE_KEY = 'nodepass_active_api_config_id';
 export type MasterLogLevel = 'debug' | 'info' | 'warn' | 'error' | 'event' | 'master';
 export type MasterTlsMode = '0' | '1' | '2' | 'master';
 
+// 1. 从 ApiConfig 接口中彻底移除 prefixPath
 export interface ApiConfig {
-  apiUrl: string;
+  apiUrl: string; // apiUrl 现在是用户提供的完整 API 根路径
   token: string;
-  prefixPath: string | null;
 }
 
 export interface NamedApiConfig extends ApiConfig {
@@ -21,7 +20,6 @@ export interface NamedApiConfig extends ApiConfig {
   name: string;
   masterDefaultLogLevel?: MasterLogLevel;
   masterDefaultTlsMode?: MasterTlsMode;
-  // ignoreSslErrors removed
 }
 
 export function useApiConfig() {
@@ -29,20 +27,24 @@ export function useApiConfig() {
   const [activeConfigId, setActiveConfigId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  // 3. 辅助函数，用于清理配置对象中的旧字段
+  const getCleanConfig = (config: NamedApiConfig | null): NamedApiConfig | null => {
+    if (!config) return null;
+    const { ignoreSslErrors, prefixPath, ...restConfig } = config as any; // 显式移除旧字段
+    return {
+      ...restConfig,
+      masterDefaultLogLevel: config.masterDefaultLogLevel || 'master',
+      masterDefaultTlsMode: config.masterDefaultTlsMode || 'master',
+    };
+  };
+
   useEffect(() => {
     try {
       const storedConfigsList = localStorage.getItem(API_CONFIGS_LIST_STORAGE_KEY);
       if (storedConfigsList) {
         const parsedConfigs = JSON.parse(storedConfigsList) as NamedApiConfig[];
-        // Ensure new optional fields have default values if missing from old storage
-        const migratedConfigs = parsedConfigs.map(config => {
-          const { ignoreSslErrors, ...restConfig } = config as any; // explicitly remove ignoreSslErrors
-          return {
-            ...restConfig,
-            masterDefaultLogLevel: config.masterDefaultLogLevel || 'master',
-            masterDefaultTlsMode: config.masterDefaultTlsMode || 'master',
-          };
-        });
+        // 数据迁移：确保从旧存储中加载的配置是干净的
+        const migratedConfigs = parsedConfigs.map(config => getCleanConfig(config)).filter(Boolean) as NamedApiConfig[];
         setApiConfigsList(migratedConfigs);
       }
       const storedActiveConfigId = localStorage.getItem(ACTIVE_API_CONFIG_ID_STORAGE_KEY);
@@ -58,8 +60,10 @@ export function useApiConfig() {
 
   const saveApiConfigsList = useCallback((configs: NamedApiConfig[]) => {
     try {
-      localStorage.setItem(API_CONFIGS_LIST_STORAGE_KEY, JSON.stringify(configs));
-      setApiConfigsList(configs);
+      // 确保保存到 localStorage 的数据也是干净的
+      const cleanConfigs = configs.map(config => getCleanConfig(config)).filter(Boolean) as NamedApiConfig[];
+      localStorage.setItem(API_CONFIGS_LIST_STORAGE_KEY, JSON.stringify(cleanConfigs));
+      setApiConfigsList(cleanConfigs);
     } catch (error) {
       console.error("无法将主控配置列表保存到 localStorage:", error);
     }
@@ -80,27 +84,23 @@ export function useApiConfig() {
 
   const addOrUpdateApiConfig = useCallback((config: Omit<NamedApiConfig, 'id'> & { id?: string }) => {
     const newId = config.id || uuidv4();
-    const { ignoreSslErrors, ...restConfig } = config as any; // remove ignoreSslErrors if present
-    const newConfigWithIdAndDefaults: NamedApiConfig = {
-      ...restConfig,
-      id: newId,
-      masterDefaultLogLevel: config.masterDefaultLogLevel || 'master',
-      masterDefaultTlsMode: config.masterDefaultTlsMode || 'master',
-    };
-    
+    // 确保传入的配置对象被清理
+    const cleanConfig = getCleanConfig({ ...config, id: newId } as NamedApiConfig);
+    if (!cleanConfig) return config as NamedApiConfig; // 安全检查，理论上不会发生
+
     setApiConfigsList(prevList => {
       const existingIndex = prevList.findIndex(c => c.id === newId);
       let newList;
       if (existingIndex > -1) {
         newList = [...prevList];
-        newList[existingIndex] = newConfigWithIdAndDefaults;
+        newList[existingIndex] = cleanConfig;
       } else {
-        newList = [...prevList, newConfigWithIdAndDefaults];
+        newList = [...prevList, cleanConfig];
       }
       saveApiConfigsList(newList);
       return newList;
     });
-    return newConfigWithIdAndDefaults;
+    return cleanConfig;
   }, [saveApiConfigsList]);
 
   const deleteApiConfig = useCallback((id: string) => {
@@ -121,41 +121,21 @@ export function useApiConfig() {
   const activeApiConfig = useMemo(() => {
     if (!activeConfigId) return null;
     const config = apiConfigsList.find(c => c.id === activeConfigId) || null;
-    if (config) {
-      const { ignoreSslErrors, ...restConfig } = config as any;
-      return {
-        ...restConfig,
-        masterDefaultLogLevel: config.masterDefaultLogLevel || 'master',
-        masterDefaultTlsMode: config.masterDefaultTlsMode || 'master',
-      };
-    }
-    return null;
+    return getCleanConfig(config);
   }, [apiConfigsList, activeConfigId]);
 
   const getApiConfigById = useCallback((id: string): NamedApiConfig | null => {
     const config = apiConfigsList.find(c => c.id === id) || null;
-    if (config) {
-      const { ignoreSslErrors, ...restConfig } = config as any;
-      return {
-        ...restConfig,
-        masterDefaultLogLevel: config.masterDefaultLogLevel || 'master',
-        masterDefaultTlsMode: config.masterDefaultTlsMode || 'master',
-      };
-    }
-    return null;
+    return getCleanConfig(config);
   }, [apiConfigsList]);
 
+  // 2. 简化 getApiRootUrl，直接返回用户提供的 apiUrl
   const getApiRootUrl = useCallback((id: string): string | null => {
     const config = getApiConfigById(id);
     if (!config?.apiUrl) return null;
-    const { apiUrl, prefixPath } = config;
-    let base = apiUrl.replace(/\/+$/, ''); 
-    if (prefixPath && prefixPath.trim() !== '') {
-      base += `/${prefixPath.replace(/^\/+|\/+$/g, '').trim()}`; 
-    } else {
-      base += '/api'; // Default to /api if prefixPath is empty or null
-    }
-    return base;
+    
+    // 直接返回 apiUrl，并移除末尾的斜杠以保持统一
+    return config.apiUrl.replace(/\/+$/, '');
   }, [getApiConfigById]);
 
   const getToken = useCallback((id: string): string | null => {
