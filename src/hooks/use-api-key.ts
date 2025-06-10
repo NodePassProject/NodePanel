@@ -13,7 +13,7 @@ export type MasterTlsMode = '0' | '1' | '2' | 'master';
 export interface ApiConfig {
   apiUrl: string;
   token: string;
-  prefixPath: string | null;
+  // prefixPath removed
 }
 
 export interface NamedApiConfig extends ApiConfig {
@@ -21,7 +21,6 @@ export interface NamedApiConfig extends ApiConfig {
   name: string;
   masterDefaultLogLevel?: MasterLogLevel;
   masterDefaultTlsMode?: MasterTlsMode;
-  // ignoreSslErrors removed
 }
 
 export function useApiConfig() {
@@ -35,8 +34,9 @@ export function useApiConfig() {
       if (storedConfigsList) {
         const parsedConfigs = JSON.parse(storedConfigsList) as NamedApiConfig[];
         // Ensure new optional fields have default values if missing from old storage
+        // And remove prefixPath if it exists from old storage
         const migratedConfigs = parsedConfigs.map(config => {
-          const { ignoreSslErrors, ...restConfig } = config as any; // explicitly remove ignoreSslErrors
+          const { ignoreSslErrors, prefixPath, ...restConfig } = config as any; 
           return {
             ...restConfig,
             masterDefaultLogLevel: config.masterDefaultLogLevel || 'master',
@@ -78,9 +78,9 @@ export function useApiConfig() {
     }
   }, []);
 
-  const addOrUpdateApiConfig = useCallback((config: Omit<NamedApiConfig, 'id'> & { id?: string }) => {
+  const addOrUpdateApiConfig = useCallback((config: Omit<NamedApiConfig, 'id' | 'prefixPath'> & { id?: string; prefixPath?: string | null }) => {
     const newId = config.id || uuidv4();
-    const { ignoreSslErrors, ...restConfig } = config as any; // remove ignoreSslErrors if present
+    const { ignoreSslErrors, prefixPath, ...restConfig } = config as any; 
     const newConfigWithIdAndDefaults: NamedApiConfig = {
       ...restConfig,
       id: newId,
@@ -122,7 +122,7 @@ export function useApiConfig() {
     if (!activeConfigId) return null;
     const config = apiConfigsList.find(c => c.id === activeConfigId) || null;
     if (config) {
-      const { ignoreSslErrors, ...restConfig } = config as any;
+      const { ignoreSslErrors, prefixPath, ...restConfig } = config as any;
       return {
         ...restConfig,
         masterDefaultLogLevel: config.masterDefaultLogLevel || 'master',
@@ -135,7 +135,7 @@ export function useApiConfig() {
   const getApiConfigById = useCallback((id: string): NamedApiConfig | null => {
     const config = apiConfigsList.find(c => c.id === id) || null;
     if (config) {
-      const { ignoreSslErrors, ...restConfig } = config as any;
+      const { ignoreSslErrors, prefixPath, ...restConfig } = config as any;
       return {
         ...restConfig,
         masterDefaultLogLevel: config.masterDefaultLogLevel || 'master',
@@ -148,13 +148,9 @@ export function useApiConfig() {
   const getApiRootUrl = useCallback((id: string): string | null => {
     const config = getApiConfigById(id);
     if (!config?.apiUrl) return null;
-    const { apiUrl, prefixPath } = config;
+    const { apiUrl } = config;
     let base = apiUrl.replace(/\/+$/, ''); 
-    if (prefixPath && prefixPath.trim() !== '') {
-      base += `/${prefixPath.replace(/^\/+|\/+$/g, '').trim()}`; 
-    } else {
-      base += '/api'; // Default to /api if prefixPath is empty or null
-    }
+    base += '/api'; // Always use /api as prefix
     return base;
   }, [getApiConfigById]);
 

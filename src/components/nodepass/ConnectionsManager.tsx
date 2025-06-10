@@ -15,7 +15,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ApiConfigDialog } from '@/components/nodepass/ApiKeyDialog';
-import { PlusCircle, Edit3, Trash2, Power, CheckCircle, Loader2, Upload, Download } from 'lucide-react'; // AlertTriangle removed
+import { PlusCircle, Edit3, Trash2, Power, CheckCircle, Loader2, Upload, Download } from 'lucide-react'; 
 import { useToast } from '@/hooks/use-toast';
 import {
   AlertDialog,
@@ -128,14 +128,14 @@ export function ConnectionsManager({ onLog }: ConnectionsManagerProps) {
         const content = e.target?.result;
         if (typeof content !== 'string') throw new Error("无法读取文件内容。");
         
-        const importedConfigs = JSON.parse(content) as Partial<NamedApiConfig>[];
-        if (!Array.isArray(importedConfigs)) throw new Error("导入文件格式无效，应为JSON数组。");
+        const importedConfigsUntyped = JSON.parse(content) as any[]; // Read as any first
+        if (!Array.isArray(importedConfigsUntyped)) throw new Error("导入文件格式无效，应为JSON数组。");
 
         let importedCount = 0;
         let skippedCount = 0;
         let invalidCount = 0;
 
-        importedConfigs.forEach(importedConfig => {
+        importedConfigsUntyped.forEach(importedConfig => {
           if (
             typeof importedConfig.id === 'string' &&
             typeof importedConfig.name === 'string' &&
@@ -146,15 +146,12 @@ export function ConnectionsManager({ onLog }: ConnectionsManagerProps) {
             if (existingConfig) {
               skippedCount++;
             } else {
+              const { prefixPath, ...restOfImportedConfig } = importedConfig; // Destructure out prefixPath
               const configToAdd: Omit<NamedApiConfig, 'id'> & { id?: string } = {
-                id: importedConfig.id,
-                name: importedConfig.name,
-                apiUrl: importedConfig.apiUrl,
-                token: importedConfig.token,
-                prefixPath: importedConfig.prefixPath === undefined ? null : importedConfig.prefixPath,
+                ...restOfImportedConfig, // Use the rest
+                id: importedConfig.id, // Keep original ID for matching
                 masterDefaultLogLevel: importedConfig.masterDefaultLogLevel || 'master',
                 masterDefaultTlsMode: importedConfig.masterDefaultTlsMode || 'master',
-                // ignoreSslErrors removed
               };
               addOrUpdateApiConfig(configToAdd);
               importedCount++;
@@ -251,8 +248,7 @@ export function ConnectionsManager({ onLog }: ConnectionsManagerProps) {
                 <TableHead className="w-[60px] text-center font-sans">状态</TableHead>
                 <TableHead className="font-sans">主控名称</TableHead>
                 <TableHead className="font-sans">主控 API 地址</TableHead>
-                <TableHead className="font-sans">API 前缀</TableHead>
-                {/* Removed "忽略SSL" column */}
+                {/* API Prefix column removed */}
                 <TableHead className="text-right w-[250px] font-sans">操作</TableHead>
               </TableRow>
             </TableHeader>
@@ -266,8 +262,7 @@ export function ConnectionsManager({ onLog }: ConnectionsManagerProps) {
                   </TableCell>
                   <TableCell className="font-medium break-all font-sans">{config.name}</TableCell>
                   <TableCell className="text-xs break-all font-mono">{config.apiUrl}</TableCell>
-                  <TableCell className="text-xs break-all font-mono">{config.prefixPath || '无 (默认/api)'}</TableCell>
-                  {/* Removed TableCell for ignoreSslErrors */}
+                  {/* API Prefix TableCell removed */}
                   <TableCell className="text-right">
                     <div className="flex justify-end items-center gap-2">
                       <Button

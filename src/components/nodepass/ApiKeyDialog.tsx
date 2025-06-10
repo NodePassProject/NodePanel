@@ -14,7 +14,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { KeyRound, Eye, EyeOff, Info, AlertTriangle } from 'lucide-react'; 
+import { KeyRound, Eye, EyeOff, Info } from 'lucide-react'; 
 import type { NamedApiConfig, MasterLogLevel, MasterTlsMode } from '@/hooks/use-api-key'; 
 import type { AppLogEntry } from './EventLog';
 
@@ -31,7 +31,7 @@ export function ApiConfigDialog({ open, onOpenChange, onSave, currentConfig, isE
   const [nameInput, setNameInput] = useState('');
   const [apiUrlInput, setApiUrlInput] = useState('');
   const [tokenInput, setTokenInput] = useState('');
-  const [prefixPathInput, setPrefixPathInput] = useState('');
+  // prefixPathInput state removed
   const [showToken, setShowToken] = useState(false);
   const [masterLogLevelInput, setMasterLogLevelInput] = useState<MasterLogLevel>('master');
   const [masterTlsModeInput, setMasterTlsModeInput] = useState<MasterTlsMode>('master');
@@ -41,7 +41,7 @@ export function ApiConfigDialog({ open, onOpenChange, onSave, currentConfig, isE
       setNameInput(currentConfig?.name || '');
       setApiUrlInput(currentConfig?.apiUrl || 'http://localhost:3000');
       setTokenInput(currentConfig?.token || '');
-      setPrefixPathInput(currentConfig?.prefixPath || '');
+      // prefixPathInput initialization removed
       setMasterLogLevelInput(currentConfig?.masterDefaultLogLevel || 'master');
       setMasterTlsModeInput(currentConfig?.masterDefaultTlsMode || 'master');
       setShowToken(false);
@@ -50,7 +50,7 @@ export function ApiConfigDialog({ open, onOpenChange, onSave, currentConfig, isE
       setNameInput('');
       setApiUrlInput('http://localhost:3000');
       setTokenInput('');
-      setPrefixPathInput('');
+      // prefixPathInput reset removed
       setMasterLogLevelInput('master');
       setMasterTlsModeInput('master');
       setShowToken(false);
@@ -65,7 +65,7 @@ export function ApiConfigDialog({ open, onOpenChange, onSave, currentConfig, isE
         name: nameInput.trim(),
         apiUrl: apiUrlInput.trim(),
         token: tokenInput.trim(),
-        prefixPath: prefixPathInput.trim() || null,
+        // prefixPath removed from save object
         masterDefaultLogLevel: masterLogLevelInput,
         masterDefaultTlsMode: masterTlsModeInput,
       });
@@ -133,19 +133,7 @@ export function ApiConfigDialog({ open, onOpenChange, onSave, currentConfig, isE
                 </Button>
               </div>
             </div>
-            <div className="space-y-1">
-              <Label htmlFor="prefix-path" className="font-sans">API 前缀路径 (可选)</Label>
-              <Input
-                id="prefix-path"
-                value={prefixPathInput}
-                onChange={(e) => setPrefixPathInput(e.target.value)}
-                placeholder="例: api (若为 /api/v1/*)"
-                className="font-sans"
-              />
-               <p className="text-xs text-muted-foreground font-sans">
-                如果主控的API路径是 `http://host/custom-prefix/v1`，则此处填 `custom-prefix`。留空则默认为 `/api`。
-              </p>
-            </div>
+            {/* API Prefix Path input field removed */}
 
             <div className="my-3 border-t border-border"></div>
             <p className="text-sm text-muted-foreground font-sans pb-2">
