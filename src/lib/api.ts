@@ -21,7 +21,7 @@ async function request<T>(
     response = await fetch(fullRequestUrl, {
       ...options,
       headers,
-      cache: 'no-store', // Added cache: 'no-store'
+      cache: 'no-store',
     });
   } catch (networkError: any) {
     // Handle network errors (like "Failed to fetch")
@@ -34,7 +34,7 @@ async function request<T>(
             const urlObject = new URL(fullRequestUrl);
             const ipv4Regex = /^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$/;
             if (ipv4Regex.test(urlObject.hostname)) {
-                errorMessage += ` 对于IPv4地址 (${urlObject.hostname})，请额外确认NodePass服务已在该IPv4地址和端口 (${urlObject.port || '默认'}) 上监听。`;
+                errorMessage += ` 对于IPv4地址 (${urlObject.hostname})，请额外确认NodePass服务已在该IPv4地址和端口 (${urlObject.port || '默认'}) 上监听。确保服务监听在 '0.0.0.0:${urlObject.port || '默认端口'}' (所有网络接口) 或具体的 '${urlObject.hostname}:${urlObject.port || '默认端口'}'。`;
             }
         } catch (e) { /* ignore parsing error if fullRequestUrl is malformed, e.g. not a full URL */ }
     }
@@ -101,4 +101,3 @@ export const getEventsUrl = (apiRootUrl: string | null): string => {
   if (!apiRootUrl) throw new Error("API 根地址 (apiRootUrl) 未配置，无法获取事件 URL。");
   return `${apiRootUrl}/v1/events`;
 };
-
