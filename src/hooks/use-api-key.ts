@@ -13,7 +13,6 @@ export type MasterTlsMode = '0' | '1' | '2' | 'master';
 export interface ApiConfig {
   apiUrl: string;
   token: string;
-  // prefixPath removed
 }
 
 export interface NamedApiConfig extends ApiConfig {
@@ -33,12 +32,15 @@ export function useApiConfig() {
       const storedConfigsList = localStorage.getItem(API_CONFIGS_LIST_STORAGE_KEY);
       if (storedConfigsList) {
         const parsedConfigs = JSON.parse(storedConfigsList) as NamedApiConfig[];
-        // Ensure new optional fields have default values if missing from old storage
-        // And remove prefixPath if it exists from old storage
         const migratedConfigs = parsedConfigs.map(config => {
-          const { ignoreSslErrors, prefixPath, ...restConfig } = config as any; 
+          const { ignoreSslErrors, prefixPath, ...restConfig } = config as any;
+          let finalApiUrl = restConfig.apiUrl || '';
+          if (finalApiUrl && !finalApiUrl.includes('://')) {
+            finalApiUrl = `http://${finalApiUrl}`;
+          }
           return {
             ...restConfig,
+            apiUrl: finalApiUrl,
             masterDefaultLogLevel: config.masterDefaultLogLevel || 'master',
             masterDefaultTlsMode: config.masterDefaultTlsMode || 'master',
           };
@@ -80,10 +82,17 @@ export function useApiConfig() {
 
   const addOrUpdateApiConfig = useCallback((config: Omit<NamedApiConfig, 'id' | 'prefixPath'> & { id?: string; prefixPath?: string | null }) => {
     const newId = config.id || uuidv4();
-    const { ignoreSslErrors, prefixPath, ...restConfig } = config as any; 
+    const { ignoreSslErrors, prefixPath, ...restConfig } = config as any;
+
+    let finalApiUrl = (config.apiUrl || '').trim();
+    if (finalApiUrl && !finalApiUrl.includes('://')) {
+      finalApiUrl = `http://${finalApiUrl}`;
+    }
+    
     const newConfigWithIdAndDefaults: NamedApiConfig = {
       ...restConfig,
       id: newId,
+      apiUrl: finalApiUrl,
       masterDefaultLogLevel: config.masterDefaultLogLevel || 'master',
       masterDefaultTlsMode: config.masterDefaultTlsMode || 'master',
     };
@@ -150,7 +159,7 @@ export function useApiConfig() {
     if (!config?.apiUrl) return null;
     const { apiUrl } = config;
     let base = apiUrl.replace(/\/+$/, ''); 
-    base += '/api'; // Always use /api as prefix
+    base += '/api';
     return base;
   }, [getApiConfigById]);
 
