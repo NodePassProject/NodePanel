@@ -5,29 +5,6 @@ import type { CustomNodeData, Node } from './topologyTypes';
 import type { NamedApiConfig } from '@/hooks/use-api-key';
 import { extractHostname, extractPort, isWildcardHostname, formatHostForUrl } from '@/lib/url-utils';
 
-// Helper function to determine the effective master config for a server node
-export function getEffectiveServerMasterConfig(
-  serverNodeData: CustomNodeData,
-  getNodeById: (id: string) => Node | undefined,
-  getApiConfigById: (id: string) => NamedApiConfig | null
-): NamedApiConfig | null {
-  if (serverNodeData.representedMasterId) {
-    // This case might be more relevant for basic topology or S nodes representing external masters.
-    // In advanced topology, S nodes are typically direct children of an M container.
-    return getApiConfigById(serverNodeData.representedMasterId);
-  }
-  if (serverNodeData.parentNode) {
-    const parentMNode = getNodeById(serverNodeData.parentNode);
-    if (parentMNode && parentMNode.data.masterId) {
-      return getApiConfigById(parentMNode.data.masterId);
-    }
-  }
-  // Fallback if S node isn't properly parented or configured
-  // This should ideally not happen in a well-formed advanced topology.
-  console.warn(`AdvancedTopology: Could not determine effective master config for server node ${serverNodeData.label}. Node parent or masterId might be missing.`);
-  return null;
-}
-
 // Helper function to calculate the client's tunnel address when connecting to a server
 export function calculateClientTunnelAddressForServer(
   serverNodeData: CustomNodeData, // S node's data

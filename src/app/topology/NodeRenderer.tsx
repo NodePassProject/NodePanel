@@ -9,13 +9,6 @@ import type { CustomNodeData } from './topologyTypes';
 import { ICON_ONLY_NODE_SIZE, EXPANDED_SC_NODE_WIDTH, EXPANDED_SC_NODE_BASE_HEIGHT, DETAIL_LINE_HEIGHT } from './topologyTypes';
 import { cn } from '@/lib/utils';
 
-export const CARD_NODE_WIDTH = 100; // Original default width, kept for reference or other uses
-export const CARD_NODE_HEIGHT = 40; // Original default height
-
-export const M_NODE_FOR_LINK_WIDTH = 300;
-export const M_NODE_FOR_LINK_HEIGHT = 200;
-
-
 export const nodeStyles = {
   m: {
     base: {
@@ -199,3 +192,4 @@ export const nodeTypes = {
   cardNode: CardNode,
   masterNode: MasterNode,
 };
+

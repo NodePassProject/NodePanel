@@ -118,12 +118,6 @@ export function Header({ onManageApiConfigs, onClearActiveConfig, hasActiveApiCo
 
               <DropdownMenuSeparator />
               <DropdownMenuLabel>可视化与分析</DropdownMenuLabel>
-               <DropdownMenuItem asChild>
-                <Link href="/topology">
-                  <Share2 className="mr-2 h-4 w-4" />
-                  <span>连接拓扑 (基础)</span>
-                </Link>
-              </DropdownMenuItem>
               <DropdownMenuItem asChild>
                 <Link href="/topology/advanced">
                   <Grid2X2 className="mr-2 h-4 w-4" /> {/* Changed Icon */}
