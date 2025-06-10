@@ -33,14 +33,17 @@ export function useApiConfig() {
       if (storedConfigsList) {
         const parsedConfigs = JSON.parse(storedConfigsList) as NamedApiConfig[];
         const migratedConfigs = parsedConfigs.map(config => {
-          const { ignoreSslErrors, prefixPath, ...restConfig } = config as any;
+          // Ensure id exists, apiUrl has a scheme, and defaults are set
+          const { prefixPath, ...restConfig } = config as any; // prefixPath is legacy, remove it
           let finalApiUrl = restConfig.apiUrl || '';
           if (finalApiUrl && !finalApiUrl.includes('://')) {
             finalApiUrl = `http://${finalApiUrl}`;
           }
           return {
-            ...restConfig,
+            id: config.id || uuidv4(), // Ensure ID exists
+            name: config.name || 'Unnamed Master',
             apiUrl: finalApiUrl,
+            token: config.token || '',
             masterDefaultLogLevel: config.masterDefaultLogLevel || 'master',
             masterDefaultTlsMode: config.masterDefaultTlsMode || 'master',
           };
@@ -80,19 +83,19 @@ export function useApiConfig() {
     }
   }, []);
 
-  const addOrUpdateApiConfig = useCallback((config: Omit<NamedApiConfig, 'id' | 'prefixPath'> & { id?: string; prefixPath?: string | null }) => {
+  const addOrUpdateApiConfig = useCallback((config: Omit<NamedApiConfig, 'id'> & { id?: string }) => {
     const newId = config.id || uuidv4();
-    const { ignoreSslErrors, prefixPath, ...restConfig } = config as any;
-
+    
     let finalApiUrl = (config.apiUrl || '').trim();
     if (finalApiUrl && !finalApiUrl.includes('://')) {
       finalApiUrl = `http://${finalApiUrl}`;
     }
     
     const newConfigWithIdAndDefaults: NamedApiConfig = {
-      ...restConfig,
-      id: newId,
+      name: config.name,
       apiUrl: finalApiUrl,
+      token: config.token,
+      id: newId,
       masterDefaultLogLevel: config.masterDefaultLogLevel || 'master',
       masterDefaultTlsMode: config.masterDefaultTlsMode || 'master',
     };
@@ -131,11 +134,8 @@ export function useApiConfig() {
     if (!activeConfigId) return null;
     const config = apiConfigsList.find(c => c.id === activeConfigId) || null;
     if (config) {
-      const { ignoreSslErrors, prefixPath, ...restConfig } = config as any;
       return {
-        ...restConfig,
-        masterDefaultLogLevel: config.masterDefaultLogLevel || 'master',
-        masterDefaultTlsMode: config.masterDefaultTlsMode || 'master',
+        ...config, // Already contains defaults from migration/addOrUpdate
       };
     }
     return null;
@@ -144,11 +144,8 @@ export function useApiConfig() {
   const getApiConfigById = useCallback((id: string): NamedApiConfig | null => {
     const config = apiConfigsList.find(c => c.id === id) || null;
     if (config) {
-      const { ignoreSslErrors, prefixPath, ...restConfig } = config as any;
       return {
-        ...restConfig,
-        masterDefaultLogLevel: config.masterDefaultLogLevel || 'master',
-        masterDefaultTlsMode: config.masterDefaultTlsMode || 'master',
+        ...config, // Already contains defaults
       };
     }
     return null;
@@ -157,9 +154,14 @@ export function useApiConfig() {
   const getApiRootUrl = useCallback((id: string): string | null => {
     const config = getApiConfigById(id);
     if (!config?.apiUrl) return null;
-    const { apiUrl } = config;
-    let base = apiUrl.replace(/\/+$/, ''); 
-    base += '/api';
+    
+    let base = config.apiUrl.replace(/\/+$/, ''); // Remove trailing slashes
+
+    // If the user's apiUrl already ends with '/api', don't append it again.
+    // Otherwise, append '/api'.
+    if (!base.endsWith('/api')) {
+      base += '/api';
+    }
     return base;
   }, [getApiConfigById]);
 
