@@ -7,11 +7,8 @@ export const createInstanceFormSchema = z.object({
     required_error: "实例类型是必需的。",
   }),
   isSingleEndedForward: z.optional(z.boolean()), // New field for single-ended forwarding
-  // autoCreateServer: z.optional(z.boolean()), // Removed
-  // serverApiId: z.optional(z.string()), // Removed
   tunnelAddress: z.string().min(1, "此字段是必需的。"), // Meaning changes based on context
   targetAddress: z.optional(z.string()), // For "入口(c)" this is local forward port (optional) or remote target (required if single-ended). For "出口(s)" this is required host:port
-  // serverTargetAddressForAutoCreate: z.optional(z.string()), // Removed
   logLevel: z.enum(["master", "debug", "info", "warn", "error", "event"], {
     required_error: "日志级别是必需的。",
   }),
@@ -45,6 +42,7 @@ export const createInstanceFormSchema = z.object({
           path: ["targetAddress"],
         });
       }
+      // For single-ended client, TLS configuration is not applicable for the NodePass URL itself.
     } else {
       // Mode: 入口(c) direct connect to existing server
       // tunnelAddress must be host:port
@@ -91,21 +89,22 @@ export const createInstanceFormSchema = z.object({
   }
 
   // TLS Mode and Cert/Key Path validation
-  // For "入口(c)" (client), tlsMode applies to its connection to the server (if not single-ended) or to the target (if single-ended).
-  // For "出口(s)" (server), tlsMode applies to its data channel.
-  if (!["master", "0", "1", "2"].includes(data.tlsMode)) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: `${data.instanceType} TLS模式无效。`,
-      path: ["tlsMode"],
-    });
-  }
-  if (data.tlsMode === "2") {
-    if (!data.certPath || data.certPath.trim() === "") {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "TLS模式 '2' 需要证书路径。", path: ["certPath"] });
+  // Only validate TLS if NOT a single-ended client
+  if (!(data.instanceType === "入口(c)" && data.isSingleEndedForward)) {
+    if (!["master", "0", "1", "2"].includes(data.tlsMode)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `${data.instanceType} TLS模式无效。`,
+        path: ["tlsMode"],
+      });
     }
-    if (!data.keyPath || data.keyPath.trim() === "") {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "TLS模式 '2' 需要密钥路径。", path: ["keyPath"] });
+    if (data.tlsMode === "2") {
+      if (!data.certPath || data.certPath.trim() === "") {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: "TLS模式 '2' 需要证书路径。", path: ["certPath"] });
+      }
+      if (!data.keyPath || data.keyPath.trim() === "") {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: "TLS模式 '2' 需要密钥路径。", path: ["keyPath"] });
+      }
     }
   }
 });

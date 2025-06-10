@@ -32,7 +32,6 @@ export function CreateInstanceFormFields({
   instanceType,
   tlsMode,
   isSingleEndedForward,
-  // autoCreateServer, // Removed from props usage, but kept in signature for now
   activeApiConfig,
   apiConfigsList,
   serverInstancesForDropdown,
@@ -50,14 +49,12 @@ export function CreateInstanceFormFields({
     ? MASTER_TLS_MODE_DISPLAY_MAP[activeApiConfig.masterDefaultTlsMode as keyof typeof MASTER_TLS_MODE_DISPLAY_MAP] || '主控配置'
     : '主控配置';
 
-  // serverApiIdOptions logic will be simplified or removed as autoCreateServer is gone.
-  // For now, this will likely always result in an empty array.
   const serverApiIdOptions = React.useMemo(() => {
-    if (instanceType === '入口(c)' && /* autoCreateServer && */ !isSingleEndedForward) { // autoCreateServer condition is effectively false
+    if (instanceType === '入口(c)' && !isSingleEndedForward) { // autoCreateServer condition removed
       return apiConfigsList.filter(config => config.id !== activeApiConfig?.id);
     }
     return [];
-  }, [apiConfigsList, activeApiConfig?.id, instanceType, /*autoCreateServer,*/ isSingleEndedForward]);
+  }, [apiConfigsList, activeApiConfig?.id, instanceType, isSingleEndedForward]);
 
   return (
     <Form {...form}>
@@ -114,10 +111,6 @@ export function CreateInstanceFormFields({
           />
         )}
 
-        {/* Auto Create Server Checkbox Removed */}
-        {/* Server API ID Select Removed */}
-
-        {/* Tunnel Address / Port Field */}
         <FormField
           control={form.control}
           name="tunnelAddress"
@@ -126,8 +119,8 @@ export function CreateInstanceFormFields({
               <FormLabel className="font-sans text-xs flex items-center">
                  <Settings2 size={14} className="mr-1 text-muted-foreground" />
                 {instanceType === '出口(s)' ? '出口(s)隧道监听地址' :
-                 (isSingleEndedForward ? '入口(c)本地监听端口' : 
-                   '连接的出口(s)隧道地址' // Simplified from autoCreateServer logic
+                 (isSingleEndedForward ? '入口(c)本地监听端口' :
+                   '连接的出口(s)隧道地址'
                  )}
               </FormLabel>
               <FormControl>
@@ -137,8 +130,8 @@ export function CreateInstanceFormFields({
                     instanceType === "出口(s)"
                       ? "例: 0.0.0.0:10101"
                       : (isSingleEndedForward
-                          ? "例: 8080" 
-                          : "例: your.server.com:10101") // Simplified
+                          ? "例: 8080"
+                          : "例: your.server.com:10101")
                   }
                   {...field}
                 />
@@ -152,7 +145,7 @@ export function CreateInstanceFormFields({
                         : "入口(c)连接此出口(s)地址的控制通道.")}
                 </FormDescription>
                )}
-              {externalApiSuggestion && showDetailedDescriptions && instanceType === '入口(c)' && /*!autoCreateServer &&*/ !isSingleEndedForward && (
+              {externalApiSuggestion && showDetailedDescriptions && instanceType === '入口(c)' && !isSingleEndedForward && (
                 <FormDescription className="text-xs text-amber-600 dark:text-amber-400 mt-0.5 font-sans">
                   <Info size={12} className="inline-block mr-1 align-text-bottom" />
                   {externalApiSuggestion}
@@ -163,9 +156,7 @@ export function CreateInstanceFormFields({
           )}
         />
 
-        {/* Server Target Address for Auto-Create Server Removed */}
-        
-        {instanceType === '入口(c)' && /*!autoCreateServer &&*/ !isSingleEndedForward && (
+        {instanceType === '入口(c)' && !isSingleEndedForward && (
           <FormItem className="space-y-1">
             <FormLabel className="font-sans text-xs">或从其他主控的现有出口(s)选择隧道</FormLabel>
             <Select
@@ -206,7 +197,6 @@ export function CreateInstanceFormFields({
           </FormItem>
         )}
 
-        {/* Target Address Field (context-dependent) */}
         <FormField
           control={form.control}
           name="targetAddress"
@@ -241,7 +231,6 @@ export function CreateInstanceFormFields({
           )}
         />
 
-
         <FormField
           control={form.control}
           name="logLevel"
@@ -275,97 +264,100 @@ export function CreateInstanceFormFields({
           )}
         />
 
-        <FormField
-          control={form.control}
-          name="tlsMode"
-          render={({ field }) => (
-            <FormItem className="space-y-1">
-              <FormLabel className="font-sans text-xs">
-                {instanceType === '出口(s)' ? "TLS 模式 (出口(s)数据通道)"
-                  : (isSingleEndedForward ? "TLS 模式 (入口(c)连接目标)" 
-                      : "TLS 模式 (入口(c)连接出口(s)行为)")}
-              </FormLabel>
-              <Select onValueChange={field.onChange} value={field.value || "master"}>
-                <FormControl>
-                  <SelectTrigger className="text-xs font-sans h-9">
-                    <SelectValue placeholder="选择 TLS 模式" />
-                  </SelectTrigger>
-                </FormControl>
-                <SelectContent>
-                  <SelectItem value="master" className="font-sans text-xs">
-                    默认 ({effectiveTlsModeDisplay})
-                  </SelectItem>
-                  <SelectItem value="0" className="font-sans text-xs">0: 无TLS (明文)</SelectItem>
-                  <SelectItem value="1" className="font-sans text-xs">1: 自签名</SelectItem>
-                  <SelectItem value="2" className="font-sans text-xs">2: 自定义</SelectItem>
-                </SelectContent>
-              </Select>
-              {showDetailedDescriptions && (
-                <FormDescription className="font-sans text-xs mt-0.5">
-                  {instanceType === '出口(s)'
-                    ? "出口(s)数据通道的TLS加密模式。"
-                    : (isSingleEndedForward 
-                        ? "入口(c)连接远程目标时使用的TLS行为。"
-                        : "入口(c)连接目标出口(s)时的TLS行为。")}
-                </FormDescription>
-              )}
-              <FormMessage className="text-xs" />
-            </FormItem>
-          )}
-        />
-        {tlsMode === '2' && (
+        {(instanceType === '出口(s)' || (instanceType === '入口(c)' && !isSingleEndedForward)) && (
           <>
             <FormField
               control={form.control}
-              name="certPath"
+              name="tlsMode"
               render={({ field }) => (
                 <FormItem className="space-y-1">
-                  <FormLabel className="font-sans text-xs">证书路径 (TLS 2)</FormLabel>
-                  <FormControl>
-                    <Input
-                      className="text-xs font-mono h-9"
-                      placeholder="例: /path/to/cert.pem"
-                      {...field}
-                      value={field.value || ""}
-                    />
-                  </FormControl>
-                   {showDetailedDescriptions && (
+                  <FormLabel className="font-sans text-xs">
+                    {instanceType === '出口(s)' ? "TLS 模式 (出口(s)数据通道)"
+                      : "TLS 模式 (入口(c)连接出口(s)行为)"}
+                  </FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value || "master"}>
+                    <FormControl>
+                      <SelectTrigger className="text-xs font-sans h-9">
+                        <SelectValue placeholder="选择 TLS 模式" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="master" className="font-sans text-xs">
+                        默认 ({effectiveTlsModeDisplay})
+                      </SelectItem>
+                      <SelectItem value="0" className="font-sans text-xs">0: 无TLS (明文)</SelectItem>
+                      <SelectItem value="1" className="font-sans text-xs">1: 自签名</SelectItem>
+                      <SelectItem value="2" className="font-sans text-xs">2: 自定义</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {showDetailedDescriptions && (
                     <FormDescription className="font-sans text-xs mt-0.5">
-                      {instanceType === '入口(c)' && isSingleEndedForward ? "用于单端转发客户端连接目标。" : ""}
-                      {instanceType === '入口(c)' && !isSingleEndedForward ? "用于入口(c)连接出口(s) (mTLS)。" : ""}
-                      {instanceType === '出口(s)' ? "用于出口(s)数据通道。" : ""}
+                      {instanceType === '出口(s)'
+                        ? "出口(s)数据通道的TLS加密模式。"
+                        : "入口(c)连接目标出口(s)时的TLS行为。"}
                     </FormDescription>
-                   )}
+                  )}
                   <FormMessage className="text-xs" />
                 </FormItem>
               )}
             />
-            <FormField
-              control={form.control}
-              name="keyPath"
-              render={({ field }) => (
-                <FormItem className="space-y-1">
-                  <FormLabel className="font-sans text-xs">密钥路径 (TLS 2)</FormLabel>
-                  <FormControl>
-                    <Input
-                      className="text-xs font-mono h-9"
-                      placeholder="例: /path/to/key.pem"
-                      {...field}
-                      value={field.value || ""}
-                    />
-                  </FormControl>
-                   {showDetailedDescriptions && (
-                    <FormDescription className="font-sans text-xs mt-0.5">
-                      {instanceType === '入口(c)' && isSingleEndedForward ? "用于单端转发客户端连接目标。" : ""}
-                      {instanceType === '入口(c)' && !isSingleEndedForward ? "用于入口(c)连接出口(s) (mTLS)。" : ""}
-                      {instanceType === '出口(s)' ? "用于出口(s)数据通道。" : ""}
-                    </FormDescription>
-                   )}
-                  <FormMessage className="text-xs" />
-                </FormItem>
-              )}
-            />
+            {tlsMode === '2' && (
+              <>
+                <FormField
+                  control={form.control}
+                  name="certPath"
+                  render={({ field }) => (
+                    <FormItem className="space-y-1">
+                      <FormLabel className="font-sans text-xs">证书路径 (TLS 2)</FormLabel>
+                      <FormControl>
+                        <Input
+                          className="text-xs font-mono h-9"
+                          placeholder="例: /path/to/cert.pem"
+                          {...field}
+                          value={field.value || ""}
+                        />
+                      </FormControl>
+                      {showDetailedDescriptions && (
+                        <FormDescription className="font-sans text-xs mt-0.5">
+                          {instanceType === '入口(c)' ? "用于入口(c)连接出口(s) (mTLS)。" : "用于出口(s)数据通道。"}
+                        </FormDescription>
+                      )}
+                      <FormMessage className="text-xs" />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="keyPath"
+                  render={({ field }) => (
+                    <FormItem className="space-y-1">
+                      <FormLabel className="font-sans text-xs">密钥路径 (TLS 2)</FormLabel>
+                      <FormControl>
+                        <Input
+                          className="text-xs font-mono h-9"
+                          placeholder="例: /path/to/key.pem"
+                          {...field}
+                          value={field.value || ""}
+                        />
+                      </FormControl>
+                      {showDetailedDescriptions && (
+                        <FormDescription className="font-sans text-xs mt-0.5">
+                         {instanceType === '入口(c)' ? "用于入口(c)连接出口(s) (mTLS)。" : "用于出口(s)数据通道。"}
+                        </FormDescription>
+                      )}
+                      <FormMessage className="text-xs" />
+                    </FormItem>
+                  )}
+                />
+              </>
+            )}
           </>
+        )}
+        {instanceType === '入口(c)' && isSingleEndedForward && showDetailedDescriptions && (
+            <FormDescription className="font-sans text-xs mt-0.5">
+                <Info size={12} className="inline-block mr-1 align-text-bottom" />
+                单端转发模式下，入口(c)直接连接目标，不涉及连接NodePass出口(s)的TLS配置。
+            </FormDescription>
         )}
       </form>
     </Form>

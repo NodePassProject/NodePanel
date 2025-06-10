@@ -53,11 +53,8 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
     defaultValues: {
       instanceType: '入口(c)',
       isSingleEndedForward: false,
-      // autoCreateServer: false, // Removed
-      // serverApiId: undefined, // Removed
       tunnelAddress: '',
       targetAddress: '',
-      // serverTargetAddressForAutoCreate: '', // Removed
       logLevel: 'master',
       tlsMode: 'master',
       certPath: '',
@@ -67,7 +64,6 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
 
   const instanceType = form.watch("instanceType");
   const tlsModeWatch = form.watch("tlsMode");
-  // const autoCreateServerWatched = form.watch("autoCreateServer"); // Removed
   const isSingleEndedForwardWatched = form.watch("isSingleEndedForward");
   const tunnelAddressValue = form.watch("tunnelAddress");
 
@@ -76,11 +72,8 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
       form.reset({
         instanceType: '入口(c)',
         isSingleEndedForward: false,
-        // autoCreateServer: false, // Removed
-        // serverApiId: undefined, // Removed
         tunnelAddress: '',
         targetAddress: '',
-        // serverTargetAddressForAutoCreate: '', // Removed
         logLevel: 'master',
         tlsMode: 'master',
         certPath: '',
@@ -93,10 +86,15 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
 
  useEffect(() => {
     if (instanceType === "入口(c)") {
-        // If TLS mode is not '2', clear cert and key paths.
-        if (tlsModeWatch !== '2') {
-            if (form.getValues("certPath") !== '') form.setValue("certPath", '');
-            if (form.getValues("keyPath") !== '') form.setValue("keyPath", '');
+        if (isSingleEndedForwardWatched) { // If single-ended client
+            if (form.getValues("tlsMode") !== '0') form.setValue("tlsMode", "0", { shouldDirty: true }); // Force to '0' (no TLS for UI)
+            if (form.getValues("certPath") !== '') form.setValue("certPath", '', { shouldDirty: true });
+            if (form.getValues("keyPath") !== '') form.setValue("keyPath", '', { shouldDirty: true });
+        } else { // Normal client or became normal client
+            if (tlsModeWatch !== '2') { // If not custom cert for normal client
+                if (form.getValues("certPath") !== '') form.setValue("certPath", '');
+                if (form.getValues("keyPath") !== '') form.setValue("keyPath", '');
+            }
         }
     } else if (instanceType === "出口(s)") {
         // If type is server, client-specific flags must be false.
@@ -248,14 +246,14 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
     }
 
     let primaryUrlParams: BuildUrlParams | null = null;
-    
+
     const localOnLog = (message: string, type: 'INFO' | 'WARN' | 'ERROR') => {
       if (type === 'ERROR') toast({ title: "配置错误", description: message, variant: "destructive" });
       onLog?.(message, type);
     };
 
     if (values.instanceType === '入口(c)') {
-      const clientSubmission = prepareClientUrlParams(values, activeApiConfig, getApiConfigById, localOnLog);
+      const clientSubmission = prepareClientUrlParams(values, activeApiConfig, localOnLog);
       if (!clientSubmission) return;
       primaryUrlParams = clientSubmission.clientParams;
     } else { // '出口(s)'
@@ -277,7 +275,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
       if (primaryInstanceUrl) {
         await createInstanceMutation.mutateAsync({
             data: { url: primaryInstanceUrl },
-            useApiRoot: apiRoot, 
+            useApiRoot: apiRoot,
             useApiToken: apiToken,
          });
       }
@@ -293,7 +291,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
        onLog?.('创建实例序列中发生错误: ' + error.message, 'ERROR');
     }
   }
-  
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg p-4">

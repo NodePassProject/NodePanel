@@ -6,7 +6,7 @@ import type { NamedApiConfig, MasterLogLevel, MasterTlsMode } from '@/hooks/use-
 import { extractHostname, extractPort, isWildcardHostname } from '@/lib/url-utils';
 
 export function formatHostForUrl(host: string | null | undefined): string {
-  if (!host) return '127.0.0.1'; 
+  if (!host) return '127.0.0.1';
   if (host.includes(':') && !host.startsWith('[')) { // IPv6 check
     return `[${host}]`; // Bracket IPv6 addresses for URLs
   }
@@ -19,19 +19,19 @@ export interface BuildUrlParams {
   tunnelAddress: string; // For Server: listen. For Client: server's listen (remote). For Single-Ended Client: local listen port.
   targetAddress: string; // For Server: forward. For Client: local forward. For Single-Ended Client: remote target.
   logLevel: MasterLogLevel;
-  tlsMode?: MasterTlsMode | '2'; // For Server. For Single-Ended Client (connects to target). For Client (connects to server).
+  tlsMode?: MasterTlsMode | '2' | undefined; // For Server. For Single-Ended Client (connects to target). For Client (connects to server).
   certPath?: string;
   keyPath?: string;
 }
 
 export function buildUrlFromFormValues(
-  params: BuildUrlParams, 
+  params: BuildUrlParams,
   masterConfigForInstance: NamedApiConfig | null // The master where this specific instance (client or server) will be created
-): string { 
+): string {
   const schemeType = params.instanceType === "出口(s)" ? "server" : "client";
-  
+
   let url = `${schemeType}://${params.tunnelAddress}/${params.targetAddress}`;
-  
+
   const queryParams = new URLSearchParams();
 
   // Apply Log Level
@@ -42,50 +42,46 @@ export function buildUrlFromFormValues(
   if (effectiveLogLevel && effectiveLogLevel !== "master") { // Only append if not 'master' (which means inherit from NodePass global default)
     queryParams.append('log', effectiveLogLevel);
   }
-  
-  // Determine if server-like TLS params should be applied
-  // Server always applies server-like TLS.
-  // Client in single-ended mode applies server-like TLS (for its connection to the remote target).
-  // Client in normal mode applies client-like TLS (for its connection to the NodePass server).
-  let applyServerLikeTlsParams = schemeType === 'server' || (schemeType === 'client' && !!params.isSingleEndedForward);
 
-  if (applyServerLikeTlsParams) {
-    let effectiveTlsMode = params.tlsMode;
+  let effectiveTlsMode = params.tlsMode;
 
-    // Resolve 'master' TLS mode to actual value from master config or default to '1' for server, '0' for client (single-ended acts like server here)
+  // For Server (出口(s))
+  if (params.instanceType === "出口(s)") {
     if (effectiveTlsMode === 'master' || !effectiveTlsMode) {
-      if (masterConfigForInstance?.masterDefaultTlsMode && masterConfigForInstance.masterDefaultTlsMode !== 'master') {
-        effectiveTlsMode = masterConfigForInstance.masterDefaultTlsMode;
-      } else {
-        effectiveTlsMode = '1'; // Default for server-like TLS if master doesn't specify
-      }
+      effectiveTlsMode = (masterConfigForInstance?.masterDefaultTlsMode && masterConfigForInstance.masterDefaultTlsMode !== 'master')
+                            ? masterConfigForInstance.masterDefaultTlsMode
+                            : '1'; // Server defaults to TLS 1
     }
-    
-    // Append TLS param if not 'master' (which means inherit from NodePass global default, or effectively '1' if server)
-    // NodePass server defaults to TLS 1 if no tls param. So we only need to append if it's 0 or 2.
-    if (effectiveTlsMode === '0' || effectiveTlsMode === '2') { 
+    // Append server TLS params if needed
+    if (effectiveTlsMode === '0' || effectiveTlsMode === '2') {
       queryParams.append('tls', effectiveTlsMode);
       if (effectiveTlsMode === '2') {
         if (params.certPath && params.certPath.trim() !== '') queryParams.append('crt', params.certPath.trim());
         if (params.keyPath && params.keyPath.trim() !== '') queryParams.append('key', params.keyPath.trim());
       }
     }
-  } else if (schemeType === 'client' && !params.isSingleEndedForward) { 
-    // Normal client connecting to a NodePass server
-    let effectiveClientTlsMode = params.tlsMode;
-    if (effectiveClientTlsMode === 'master' || !effectiveClientTlsMode) {
-        effectiveClientTlsMode = (masterConfigForInstance?.masterDefaultTlsMode && masterConfigForInstance.masterDefaultTlsMode !== 'master')
-                                    ? masterConfigForInstance.masterDefaultTlsMode
-                                    : '0'; // Client defaults to '0' (no TLS) if master does not specify
-    }
-    // Append TLS param if not 'master' (which means inherit from NodePass global default, or effectively '0' if client)
-    // NodePass client defaults to TLS 0 if no tls param. So we only need to append if it's 1 or 2.
-    if (effectiveClientTlsMode === '1' || effectiveClientTlsMode === '2') {
-        queryParams.append('tls', effectiveClientTlsMode);
-        if (effectiveClientTlsMode === '2') { // Client mTLS
-            if (params.certPath && params.certPath.trim() !== '') queryParams.append('crt', params.certPath.trim());
-            if (params.keyPath && params.keyPath.trim() !== '') queryParams.append('key', params.keyPath.trim());
-        }
+  }
+  // For Client (入口(c))
+  else if (params.instanceType === "入口(c)") {
+    if (params.isSingleEndedForward) {
+      // Single-ended client: NO TLS parameters in the URL.
+      // The connection to the remote target is plain TCP/TLS handled by the application the client forwards to.
+      // NodePass client scheme's tls params are for client-to-NodePass-server connection.
+    } else {
+      // Normal client connecting to a NodePass server
+      if (effectiveTlsMode === 'master' || !effectiveTlsMode) {
+          effectiveTlsMode = (masterConfigForInstance?.masterDefaultTlsMode && masterConfigForInstance.masterDefaultTlsMode !== 'master')
+                                  ? masterConfigForInstance.masterDefaultTlsMode
+                                  : '0'; // Client defaults to TLS 0 if master does not specify for client-server connection
+      }
+      // Append client TLS params if needed (for connecting to NodePass server)
+      if (effectiveTlsMode === '1' || effectiveTlsMode === '2') {
+          queryParams.append('tls', effectiveTlsMode);
+          if (effectiveTlsMode === '2') { // Client mTLS
+              if (params.certPath && params.certPath.trim() !== '') queryParams.append('crt', params.certPath.trim());
+              if (params.keyPath && params.keyPath.trim() !== '') queryParams.append('key', params.keyPath.trim());
+          }
+      }
     }
   }
 
@@ -96,13 +92,11 @@ export function buildUrlFromFormValues(
 
 interface PrepareClientUrlParamsResult {
   clientParams: BuildUrlParams;
-  // serverParamsForAutoCreate and serverMasterForAutoCreate removed
 }
 
 export function prepareClientUrlParams(
   values: CreateInstanceFormValues,
   activeApiConfig: NamedApiConfig | null, // Master for the client instance itself
-  getApiConfigById: (id: string) => NamedApiConfig | null, // No longer needed here
   onLogLocal: (message: string, type: 'INFO' | 'WARN' | 'ERROR') => void
 ): PrepareClientUrlParamsResult | null {
   if (!activeApiConfig) {
@@ -113,12 +107,12 @@ export function prepareClientUrlParams(
   let clientParams: BuildUrlParams;
 
   const clientLogLevel = values.logLevel;
-  const clientTlsParamFromForm = values.tlsMode as MasterTlsMode | '2'; 
+  const clientTlsParamFromForm = values.tlsMode as MasterTlsMode | '2' | undefined; // Can be undefined if hidden
   const clientCertPath = values.certPath;
   const clientKeyPath = values.keyPath;
 
   if (values.isSingleEndedForward) {
-    const localListenPort = values.tunnelAddress; 
+    const localListenPort = values.tunnelAddress;
     const remoteTargetAddress = values.targetAddress;
 
     if (!remoteTargetAddress) {
@@ -133,23 +127,23 @@ export function prepareClientUrlParams(
     clientParams = {
       instanceType: "入口(c)",
       isSingleEndedForward: true,
-      tunnelAddress: `[::]:${localListenPort}`, 
-      targetAddress: remoteTargetAddress,       
+      tunnelAddress: `[::]:${localListenPort}`,
+      targetAddress: remoteTargetAddress,
       logLevel: clientLogLevel,
-      tlsMode: clientTlsParamFromForm, 
-      certPath: clientCertPath,
-      keyPath: clientKeyPath,
+      tlsMode: '0', // Effectively no TLS for URL building for single-ended
+      certPath: '', // Not used for single-ended URL
+      keyPath: '', // Not used for single-ended URL
     };
   } else {
     // 入口(c) - 连接到已存在的出口(s)
-    const connectToServerTunnel = values.tunnelAddress; 
-    const clientLocalTargetPort = values.targetAddress; 
+    const connectToServerTunnel = values.tunnelAddress;
+    const clientLocalTargetPort = values.targetAddress;
 
     if (!connectToServerTunnel) {
       onLogLocal("连接到现有出口(s)时，出口(s)隧道地址是必需的。", "ERROR");
       return null;
     }
-    
+
     let clientFullLocalForwardTargetAddress = `[::]:${(parseInt(extractPort(connectToServerTunnel) || "0", 10) + 1).toString()}`; // Default
     if (clientLocalTargetPort && clientLocalTargetPort.trim() !== "" && /^[0-9]+$/.test(clientLocalTargetPort.trim())) {
       clientFullLocalForwardTargetAddress = `[::]:${clientLocalTargetPort.trim()}`;
@@ -161,7 +155,7 @@ export function prepareClientUrlParams(
       tunnelAddress: connectToServerTunnel,
       targetAddress: clientFullLocalForwardTargetAddress,
       logLevel: clientLogLevel,
-      tlsMode: clientTlsParamFromForm, 
+      tlsMode: clientTlsParamFromForm,
       certPath: clientCertPath,
       keyPath: clientKeyPath,
     };
@@ -178,8 +172,8 @@ export function prepareServerUrlParams(
   values: CreateInstanceFormValues,
   onLogLocal: (message: string, type: 'INFO' | 'WARN' | 'ERROR') => void
 ): PrepareServerUrlParamsResult | null {
-  const serverTunnelAddress = values.tunnelAddress; 
-  const serverTargetAddress = values.targetAddress; 
+  const serverTunnelAddress = values.tunnelAddress;
+  const serverTargetAddress = values.targetAddress;
 
   if (!serverTargetAddress) {
     onLogLocal("创建出口(s)时，目标地址 (业务数据) 是必需的。", "ERROR");
@@ -195,7 +189,7 @@ export function prepareServerUrlParams(
     tunnelAddress: serverTunnelAddress,
     targetAddress: serverTargetAddress,
     logLevel: values.logLevel,
-    tlsMode: values.tlsMode as MasterTlsMode | '2', 
+    tlsMode: values.tlsMode as MasterTlsMode | '2',
     certPath: values.certPath,
     keyPath: values.keyPath,
   };
