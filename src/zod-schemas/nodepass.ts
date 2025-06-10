@@ -3,24 +3,21 @@ import { z } from 'zod';
 
 // Schema for the detailed create instance form
 export const createInstanceFormSchema = z.object({
-  instanceType: z.enum(["入口(c)", "出口(s)"], {
+  instanceType: z.enum(["客户端", "服务端"], {
     required_error: "实例类型是必需的。",
   }),
-  isSingleEndedForward: z.optional(z.boolean()), // New field for single-ended forwarding
-  tunnelAddress: z.string().min(1, "此字段是必需的。"), // Meaning changes based on context
-  targetAddress: z.optional(z.string()), // For "入口(c)" this is local forward port (optional) or remote target (required if single-ended). For "出口(s)" this is required host:port
-  logLevel: z.enum(["master", "debug", "info", "warn", "error", "event"], {
+  isSingleEndedForward: z.optional(z.boolean()),
+  tunnelAddress: z.string().min(1, "此字段是必需的。"),
+  targetAddress: z.optional(z.string()),
+  logLevel: z.enum(["debug", "info", "warn", "error"], {
     required_error: "日志级别是必需的。",
   }),
-  tlsMode: z.string(), // Will be validated to 'master', '0', '1', '2'
+  tlsMode: z.string(),
   certPath: z.optional(z.string()),
   keyPath: z.optional(z.string()),
 }).superRefine((data, ctx) => {
-  // Validation based on instanceType and modes
-  if (data.instanceType === "入口(c)") {
+  if (data.instanceType === "客户端") {
     if (data.isSingleEndedForward) {
-      // Mode: 入口(c) with Single-Ended Forwarding
-      // tunnelAddress is the local listening port
       if (!/^[0-9]+$/.test(data.tunnelAddress)) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
@@ -28,7 +25,6 @@ export const createInstanceFormSchema = z.object({
           path: ["tunnelAddress"],
         });
       }
-      // targetAddress is the remote destination, required
       if (!data.targetAddress || data.targetAddress.trim() === "") {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
@@ -42,55 +38,46 @@ export const createInstanceFormSchema = z.object({
           path: ["targetAddress"],
         });
       }
-      // For single-ended client, TLS configuration is not applicable for the NodePass URL itself.
     } else {
-      // Mode: 入口(c) direct connect to existing server
-      // tunnelAddress must be host:port
       if (!/^(?:\[[0-9a-fA-F:]+\]|[0-9a-zA-Z.-]+):[0-9]+$/.test(data.tunnelAddress)) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          message: "连接的出口(s)隧道地址格式无效 (例: host:port 或 [ipv6]:port)",
+          message: "连接的服务端隧道地址格式无效 (例: host:port 或 [ipv6]:port)",
           path: ["tunnelAddress"],
         });
       }
-      // targetAddress is optional local forward port
       if (data.targetAddress && data.targetAddress.trim() !== "" && !/^[0-9]+$/.test(data.targetAddress.trim())) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          message: "入口(c)本地转发端口格式无效 (应为数字)。",
+          message: "客户端本地转发端口格式无效 (应为数字)。",
           path: ["targetAddress"],
         });
       }
     }
-  } else if (data.instanceType === "出口(s)") {
-    // Mode: 出口(s)
-    // tunnelAddress must be host:port
+  } else if (data.instanceType === "服务端") {
     if (!/^(?:\[[0-9a-fA-F:]+\]|[0-9a-zA-Z.-]+):[0-9]+$/.test(data.tunnelAddress)) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "出口(s)隧道监听地址格式无效 (例: host:port 或 [ipv6]:port)",
+        message: "服务端隧道监听地址格式无效 (例: host:port 或 [ipv6]:port)",
         path: ["tunnelAddress"],
       });
     }
-    // targetAddress is required and must be host:port
     if (!data.targetAddress || data.targetAddress.trim() === "") {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "转发地址 (出口(s)) 是必需的。",
+        message: "转发地址 (服务端) 是必需的。",
         path: ["targetAddress"],
       });
     } else if (!/^(?:\[[0-9a-fA-F:]+\]|[0-9a-zA-Z.-]+):[0-9]+$/.test(data.targetAddress)) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "转发地址 (出口(s)) 格式无效 (例: host:port)",
+        message: "转发地址 (服务端) 格式无效 (例: host:port)",
         path: ["targetAddress"],
       });
     }
   }
 
-  // TLS Mode and Cert/Key Path validation
-  // Only validate TLS if NOT a single-ended client
-  if (!(data.instanceType === "入口(c)" && data.isSingleEndedForward)) {
+  if (!(data.instanceType === "客户端" && data.isSingleEndedForward)) {
     if (!["master", "0", "1", "2"].includes(data.tlsMode)) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
@@ -110,10 +97,8 @@ export const createInstanceFormSchema = z.object({
 });
 
 
-// Type for the create form values
 export type CreateInstanceFormValues = z.infer<typeof createInstanceFormSchema>;
 
-// This schema is for the API request, which still expects a single URL for creating
 export const createInstanceApiSchema = z.object({
   url: z.string().min(1, "URL是必需的。").url("无效的URL格式。例: scheme://host:port/host:port"),
 });

@@ -18,18 +18,17 @@ import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { createInstanceFormSchema, type CreateInstanceFormValues, createInstanceApiSchema } from '@/zod-schemas/nodepass';
-import type { CreateInstanceRequest, Instance } from '@/types/nodepass';
+import type { CreateInstanceRequest } from '@/types/nodepass';
 import { PlusCircle, Loader2 } from 'lucide-react';
-import { useMutation, useQueryClient } from '@tanstack/react-query'; // useQuery removed
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { nodePassApi } from '@/lib/api';
 import { useApiConfig, type NamedApiConfig } from '@/hooks/use-api-key';
 import type { AppLogEntry } from '../EventLog';
-import { extractHostname, extractPort, isWildcardHostname } from '@/lib/url-utils';
+import { extractHostname } from '@/lib/url-utils'; // isWildcardHostname removed as it's not used
 
 import { CreateInstanceFormFields } from './CreateInstanceFormFields';
 import { buildUrlFromFormValues, type BuildUrlParams, prepareClientUrlParams, prepareServerUrlParams } from './utils';
-import { MASTER_TLS_MODE_DISPLAY_MAP } from './constants';
-
+// MASTER_TLS_MODE_DISPLAY_MAP removed as it's handled in CreateInstanceFormFields
 
 interface CreateInstanceDialogProps {
   open: boolean;
@@ -45,18 +44,18 @@ interface CreateInstanceDialogProps {
 export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiToken, apiName, activeApiConfig, onLog }: CreateInstanceDialogProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const { apiConfigsList, getApiConfigById, getApiRootUrl, getToken } = useApiConfig();
+  const { apiConfigsList, getApiRootUrl, getToken } = useApiConfig(); // getApiConfigById removed
   const [externalApiSuggestion, setExternalApiSuggestion] = useState<string | null>(null);
   const [showDetailedDescriptions, setShowDetailedDescriptions] = useState(false);
 
   const form = useForm<CreateInstanceFormValues>({
     resolver: zodResolver(createInstanceFormSchema),
     defaultValues: {
-      instanceType: '入口(c)',
+      instanceType: '客户端',
       isSingleEndedForward: false,
       tunnelAddress: '',
       targetAddress: '',
-      logLevel: 'master',
+      logLevel: 'info', // Default log level changed to info
       tlsMode: 'master',
       certPath: '',
       keyPath: '',
@@ -71,11 +70,11 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
   useEffect(() => {
     if (open) {
       form.reset({
-        instanceType: '入口(c)',
+        instanceType: '客户端',
         isSingleEndedForward: false,
         tunnelAddress: '',
         targetAddress: '',
-        logLevel: 'master',
+        logLevel: 'info', // Default log level changed to info
         tlsMode: 'master',
         certPath: '',
         keyPath: '',
@@ -86,23 +85,21 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
   }, [open, form]);
 
  useEffect(() => {
-    if (instanceType === "入口(c)") {
-        if (isSingleEndedForwardWatched) { // If single-ended client
-            if (form.getValues("tlsMode") !== '0') form.setValue("tlsMode", "0", { shouldDirty: true }); // Force to '0' (no TLS for UI)
+    if (instanceType === "客户端") {
+        if (isSingleEndedForwardWatched) {
+            if (form.getValues("tlsMode") !== '0') form.setValue("tlsMode", "0", { shouldDirty: true });
             if (form.getValues("certPath") !== '') form.setValue("certPath", '', { shouldDirty: true });
             if (form.getValues("keyPath") !== '') form.setValue("keyPath", '', { shouldDirty: true });
-        } else { // Normal client or became normal client
-            if (tlsModeWatch !== '2') { // If not custom cert for normal client
+        } else {
+            if (tlsModeWatch !== '2') {
                 if (form.getValues("certPath") !== '') form.setValue("certPath", '');
                 if (form.getValues("keyPath") !== '') form.setValue("keyPath", '');
             }
         }
-    } else if (instanceType === "出口(s)") {
-        // If type is server, client-specific flags must be false.
+    } else if (instanceType === "服务端") {
         if (isSingleEndedForwardWatched) {
             form.setValue("isSingleEndedForward", false, {shouldDirty: true});
         }
-        // If TLS mode is not '2', clear cert and key paths for server.
         if (tlsModeWatch !== '2') {
             if (form.getValues("certPath") !== '') form.setValue("certPath", '');
             if (form.getValues("keyPath") !== '') form.setValue("keyPath", '');
@@ -112,7 +109,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
 
 
   useEffect(() => {
-    if (instanceType === '入口(c)' && tunnelAddressValue && !isSingleEndedForwardWatched) {
+    if (instanceType === '客户端' && tunnelAddressValue && !isSingleEndedForwardWatched) {
       const clientTunnelHost = extractHostname(tunnelAddressValue);
       if (!clientTunnelHost) {
         setExternalApiSuggestion(null);
@@ -120,7 +117,8 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
       }
 
       const localHostnames = ['localhost', '127.0.0.1', '::', '::1', ''];
-      if (localHostnames.includes(clientTunnelHost.toLowerCase()) || isWildcardHostname(clientTunnelHost)) {
+      // isWildcardHostname removed from condition as it's covered by localHostnames or not relevant for this simple check
+      if (localHostnames.includes(clientTunnelHost.toLowerCase())) {
         setExternalApiSuggestion(null);
         return;
       }
@@ -157,7 +155,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
         title: '实例创建于 ' + masterNameForToast,
         description: '实例 (URL: ' + shortUrl + ') -> ID: ' + createdInstance.id.substring(0,8) + '...',
       });
-      onLog?.('实例创建成功于 ' + masterNameForToast + ': ' + (createdInstance.type === 'server' ? '出口(s)' : '入口(c)') + ' - ' + createdInstance.id.substring(0,8) + '... (URL: ' + shortUrl + ')', 'SUCCESS');
+      onLog?.('实例创建成功于 ' + masterNameForToast + ': ' + (createdInstance.type === 'server' ? '服务端' : '客户端') + ' - ' + createdInstance.id.substring(0,8) + '... (URL: ' + shortUrl + ')', 'SUCCESS');
 
       queryClient.invalidateQueries({ queryKey: ['instances', variables.useApiRoot === apiRoot ? apiId : apiConfigsList.find(c => getApiRootUrl(c.id) === variables.useApiRoot)?.id] });
       queryClient.invalidateQueries({ queryKey: ['allInstancesForTraffic']});
@@ -188,11 +186,11 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
       onLog?.(message, type);
     };
 
-    if (values.instanceType === '入口(c)') {
+    if (values.instanceType === '客户端') {
       const clientSubmission = prepareClientUrlParams(values, activeApiConfig, localOnLog);
       if (!clientSubmission) return;
       primaryUrlParams = clientSubmission.clientParams;
-    } else { // '出口(s)'
+    } else { // '服务端'
       const serverSubmission = prepareServerUrlParams(values, localOnLog);
       if (!serverSubmission) return;
       primaryUrlParams = serverSubmission.serverParams;
@@ -255,13 +253,13 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
 
         <CreateInstanceFormFields
             form={form}
-            instanceType={instanceType as "入口(c)" | "出口(s)"}
+            instanceType={instanceType as "客户端" | "服务端"}
             tlsMode={tlsModeWatch}
             isSingleEndedForward={isSingleEndedForwardWatched}
             activeApiConfig={activeApiConfig}
             apiConfigsList={apiConfigsList}
-            serverInstancesForDropdown={undefined} // Removed
-            isLoadingServerInstances={false} // Removed
+            serverInstancesForDropdown={undefined}
+            isLoadingServerInstances={false}
             externalApiSuggestion={externalApiSuggestion}
             onSubmitHandler={onSubmitHandler}
             showDetailedDescriptions={showDetailedDescriptions}

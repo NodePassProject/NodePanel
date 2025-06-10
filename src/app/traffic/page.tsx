@@ -106,7 +106,6 @@ const TrafficPage: NextPage = () => {
           console.warn(`TrafficPage: One or more API fetches failed (already handled and toast shown). Reason: ${result.reason?.message || String(result.reason)}`);
         }
       });
-      // Filter out the special API Key instance
       return combinedInstances.filter(inst => inst.id !== '********');
     },
     enabled: !isLoadingApiConfig && apiConfigsList.length > 0,
@@ -254,7 +253,7 @@ const TrafficPage: NextPage = () => {
                             className="items-center whitespace-nowrap text-xs font-sans"
                           >
                             {instance.type === 'server' ? <Server className="h-3 w-3 mr-1" /> : <Smartphone className="h-3 w-3 mr-1" />}
-                            {instance.type === 'server' ? '服务器' : '客户端'}
+                            {instance.type === 'server' ? '服务端' : '客户端'}
                           </Badge>
                         </TableCell>
                         <TableCell className="text-right font-mono text-xs">{formatBytes(instance.tcprx)}</TableCell>

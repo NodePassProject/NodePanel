@@ -252,7 +252,7 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
       );
     } else if (instance.type === 'server' && parsedUrl) {
         stringToCopy = parsedUrl.targetAddress || "N/A";
-        copyTitle = "出口(s)目标地址 (业务数据)";
+        copyTitle = "服务端目标地址 (业务数据)";
         displayTargetTunnelContent = (
            <span
             className="font-mono text-xs cursor-pointer hover:text-primary transition-colors duration-150"
@@ -275,22 +275,22 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
             const clientLocalListeningPort = extractPort(parsedUrl.tunnelAddress || '');
             if (clientMasterApiHost && clientLocalListeningPort) {
                 stringToCopy = `${formatHostForDisplay(clientMasterApiHost)}:${clientLocalListeningPort}`;
-                copyTitle = `入口(c)本地监听 (单端模式, 主控: ${activeApiConfig.name})`;
+                copyTitle = `客户端本地监听 (单端模式, 主控: ${activeApiConfig.name})`;
             } else {
                 stringToCopy = `[::]:${clientLocalListeningPort || '????'}`;
-                copyTitle = `入口(c)本地监听 (单端模式, 主控地址未知)`;
+                copyTitle = `客户端本地监听 (单端模式, 主控地址未知)`;
             }
-        } else { // Normal client (not single-ended)
+        } else { 
             const clientLocalForwardPort = extractPort(parsedUrl.targetAddress || '');
              if (clientMasterApiHost && clientLocalForwardPort) {
                 stringToCopy = `${formatHostForDisplay(clientMasterApiHost)}:${clientLocalForwardPort}`;
-                copyTitle = `入口(c)本地转发 (主控: ${activeApiConfig.name})`;
+                copyTitle = `客户端本地转发 (主控: ${activeApiConfig.name})`;
             } else if (clientLocalForwardPort) {
                 stringToCopy = `127.0.0.1:${clientLocalForwardPort}`;
-                copyTitle = `入口(c)本地转发 (主控地址未知)`;
+                copyTitle = `客户端本地转发 (主控地址未知)`;
             } else {
                 stringToCopy = parsedUrl.targetAddress || "N/A (解析目标失败)";
-                copyTitle = "入口(c)本地转发目标";
+                copyTitle = "客户端本地转发目标";
             }
         }
         displayTargetTunnelContent = (
@@ -331,7 +331,7 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
               className="items-center whitespace-nowrap text-xs font-sans"
             >
               {instance.type === 'server' ? <ServerIcon size={12} className="mr-1" /> : <SmartphoneIcon size={12} className="mr-1" />}
-              {instance.type === 'server' ? '出口(s)' : '入口(c)'}
+              {instance.type === 'server' ? '服务端' : '客户端'}
             </Badge>
           )
         }</TableCell><TableCell>{
@@ -549,4 +549,3 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
     </Card>
   );
 }
-    

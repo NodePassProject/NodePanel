@@ -18,7 +18,6 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { getEventsUrl } from '@/lib/api';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from "@/lib/utils";
-// Removed import of parseNodePassUrlForTopology from topology-utils as it's no longer needed here or specific parsing handled internally.
 
 interface InstanceDetailsModalProps {
   instance: Instance | null;
@@ -425,7 +424,7 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
           className="items-center whitespace-nowrap text-xs font-sans"
         >
           {instance.type === 'server' ? <ServerIcon size={12} className="mr-1" /> : <SmartphoneIcon size={12} className="mr-1" />}
-          {instance.type === 'server' ? '出口(s)' : '入口(c)'}
+          {instance.type === 'server' ? '服务端' : '客户端'}
         </Badge>
       ),
       icon: isApiKeyInstance ? <KeyRound className="h-4 w-4 text-muted-foreground" /> : (instance.type === 'server' ? <ServerIcon className="h-4 w-4 text-muted-foreground" /> : <SmartphoneIcon className="h-4 w-4 text-muted-foreground" />)
@@ -589,5 +588,3 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
     </Dialog>
   );
 }
-
-    

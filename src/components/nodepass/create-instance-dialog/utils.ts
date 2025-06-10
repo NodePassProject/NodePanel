@@ -3,56 +3,58 @@
 
 import type { CreateInstanceFormValues } from '@/zod-schemas/nodepass';
 import type { NamedApiConfig, MasterLogLevel, MasterTlsMode } from '@/hooks/use-api-key';
-import { extractHostname, extractPort, isWildcardHostname } from '@/lib/url-utils';
+import { extractHostname, extractPort } from '@/lib/url-utils'; // isWildcardHostname removed
 
 export function formatHostForUrl(host: string | null | undefined): string {
   if (!host) return '127.0.0.1';
-  if (host.includes(':') && !host.startsWith('[')) { // IPv6 check
-    return `[${host}]`; // Bracket IPv6 addresses for URLs
+  if (host.includes(':') && !host.startsWith('[')) {
+    return `[${host}]`;
   }
   return host;
 }
 
 export interface BuildUrlParams {
-  instanceType: "入口(c)" | "出口(s)";
-  isSingleEndedForward?: boolean; // Relevant for client
-  tunnelAddress: string; // For Server: listen. For Client: server's listen (remote). For Single-Ended Client: local listen port.
-  targetAddress: string; // For Server: forward. For Client: local forward. For Single-Ended Client: remote target.
-  logLevel: MasterLogLevel;
-  tlsMode?: MasterTlsMode | '2' | undefined; // For Server. For Single-Ended Client (connects to target). For Client (connects to server).
+  instanceType: "客户端" | "服务端";
+  isSingleEndedForward?: boolean;
+  tunnelAddress: string;
+  targetAddress: string;
+  logLevel: MasterLogLevel; // This will be 'debug', 'info', 'warn', or 'error' from the form
+  tlsMode?: MasterTlsMode | '2' | undefined;
   certPath?: string;
   keyPath?: string;
 }
 
 export function buildUrlFromFormValues(
   params: BuildUrlParams,
-  masterConfigForInstance: NamedApiConfig | null // The master where this specific instance (client or server) will be created
+  masterConfigForInstance: NamedApiConfig | null
 ): string {
-  const schemeType = params.instanceType === "出口(s)" ? "server" : "client";
+  const schemeType = params.instanceType === "服务端" ? "server" : "client";
 
   let url = `${schemeType}://${params.tunnelAddress}/${params.targetAddress}`;
 
   const queryParams = new URLSearchParams();
 
-  // Apply Log Level
   let effectiveLogLevel = params.logLevel;
-  if (effectiveLogLevel === 'master') {
-    effectiveLogLevel = masterConfigForInstance?.masterDefaultLogLevel || 'master'; // Use master's default if it's set and not 'master'
+  // If params.logLevel is one of the four explicit types, it will be used.
+  // The 'master' check for effectiveLogLevel is based on masterConfig, not instance param, which is correct.
+  if (effectiveLogLevel === 'master') { // This will only be true if masterConfigForInstance.masterDefaultLogLevel is 'master'
+    effectiveLogLevel = masterConfigForInstance?.masterDefaultLogLevel || 'master';
   }
-  if (effectiveLogLevel && effectiveLogLevel !== "master") { // Only append if not 'master' (which means inherit from NodePass global default)
+  // Only append log if it's not 'master' (which means inherit from NodePass global default)
+  // or if it's one of the 4 explicit levels which should always be appended.
+  if (effectiveLogLevel && effectiveLogLevel !== "master") {
     queryParams.append('log', effectiveLogLevel);
   }
 
+
   let effectiveTlsMode = params.tlsMode;
 
-  // For Server (出口(s))
-  if (params.instanceType === "出口(s)") {
+  if (params.instanceType === "服务端") {
     if (effectiveTlsMode === 'master' || !effectiveTlsMode) {
       effectiveTlsMode = (masterConfigForInstance?.masterDefaultTlsMode && masterConfigForInstance.masterDefaultTlsMode !== 'master')
                             ? masterConfigForInstance.masterDefaultTlsMode
-                            : '1'; // Server defaults to TLS 1
+                            : '1';
     }
-    // Append server TLS params if needed
     if (effectiveTlsMode === '0' || effectiveTlsMode === '2') {
       queryParams.append('tls', effectiveTlsMode);
       if (effectiveTlsMode === '2') {
@@ -61,23 +63,18 @@ export function buildUrlFromFormValues(
       }
     }
   }
-  // For Client (入口(c))
-  else if (params.instanceType === "入口(c)") {
+  else if (params.instanceType === "客户端") {
     if (params.isSingleEndedForward) {
-      // Single-ended client: NO TLS parameters in the URL.
-      // The connection to the remote target is plain TCP/TLS handled by the application the client forwards to.
-      // NodePass client scheme's tls params are for client-to-NodePass-server connection.
+      // No TLS params in URL for single-ended client
     } else {
-      // Normal client connecting to a NodePass server
       if (effectiveTlsMode === 'master' || !effectiveTlsMode) {
           effectiveTlsMode = (masterConfigForInstance?.masterDefaultTlsMode && masterConfigForInstance.masterDefaultTlsMode !== 'master')
                                   ? masterConfigForInstance.masterDefaultTlsMode
-                                  : '0'; // Client defaults to TLS 0 if master does not specify for client-server connection
+                                  : '0';
       }
-      // Append client TLS params if needed (for connecting to NodePass server)
       if (effectiveTlsMode === '1' || effectiveTlsMode === '2') {
           queryParams.append('tls', effectiveTlsMode);
-          if (effectiveTlsMode === '2') { // Client mTLS
+          if (effectiveTlsMode === '2') {
               if (params.certPath && params.certPath.trim() !== '') queryParams.append('crt', params.certPath.trim());
               if (params.keyPath && params.keyPath.trim() !== '') queryParams.append('key', params.keyPath.trim());
           }
@@ -96,7 +93,7 @@ interface PrepareClientUrlParamsResult {
 
 export function prepareClientUrlParams(
   values: CreateInstanceFormValues,
-  activeApiConfig: NamedApiConfig | null, // Master for the client instance itself
+  activeApiConfig: NamedApiConfig | null,
   onLogLocal: (message: string, type: 'INFO' | 'WARN' | 'ERROR') => void
 ): PrepareClientUrlParamsResult | null {
   if (!activeApiConfig) {
@@ -106,8 +103,8 @@ export function prepareClientUrlParams(
 
   let clientParams: BuildUrlParams;
 
-  const clientLogLevel = values.logLevel;
-  const clientTlsParamFromForm = values.tlsMode as MasterTlsMode | '2' | undefined; // Can be undefined if hidden
+  const clientLogLevel = values.logLevel as MasterLogLevel; // Cast is safe due to Zod schema change
+  const clientTlsParamFromForm = values.tlsMode as MasterTlsMode | '2' | undefined;
   const clientCertPath = values.certPath;
   const clientKeyPath = values.keyPath;
 
@@ -125,32 +122,31 @@ export function prepareClientUrlParams(
     }
 
     clientParams = {
-      instanceType: "入口(c)",
+      instanceType: "客户端",
       isSingleEndedForward: true,
       tunnelAddress: `[::]:${localListenPort}`,
       targetAddress: remoteTargetAddress,
       logLevel: clientLogLevel,
-      tlsMode: '0', // Effectively no TLS for URL building for single-ended
-      certPath: '', // Not used for single-ended URL
-      keyPath: '', // Not used for single-ended URL
+      tlsMode: '0',
+      certPath: '',
+      keyPath: '',
     };
   } else {
-    // 入口(c) - 连接到已存在的出口(s)
     const connectToServerTunnel = values.tunnelAddress;
     const clientLocalTargetPort = values.targetAddress;
 
     if (!connectToServerTunnel) {
-      onLogLocal("连接到现有出口(s)时，出口(s)隧道地址是必需的。", "ERROR");
+      onLogLocal("连接到现有服务端时，服务端隧道地址是必需的。", "ERROR");
       return null;
     }
 
-    let clientFullLocalForwardTargetAddress = `[::]:${(parseInt(extractPort(connectToServerTunnel) || "0", 10) + 1).toString()}`; // Default
+    let clientFullLocalForwardTargetAddress = `[::]:${(parseInt(extractPort(connectToServerTunnel) || "0", 10) + 1).toString()}`;
     if (clientLocalTargetPort && clientLocalTargetPort.trim() !== "" && /^[0-9]+$/.test(clientLocalTargetPort.trim())) {
       clientFullLocalForwardTargetAddress = `[::]:${clientLocalTargetPort.trim()}`;
     }
 
     clientParams = {
-      instanceType: "入口(c)",
+      instanceType: "客户端",
       isSingleEndedForward: false,
       tunnelAddress: connectToServerTunnel,
       targetAddress: clientFullLocalForwardTargetAddress,
@@ -176,19 +172,19 @@ export function prepareServerUrlParams(
   const serverTargetAddress = values.targetAddress;
 
   if (!serverTargetAddress) {
-    onLogLocal("创建出口(s)时，目标地址 (业务数据) 是必需的。", "ERROR");
+    onLogLocal("创建服务端时，目标地址 (业务数据) 是必需的。", "ERROR");
     return null;
   }
   if (!serverTunnelAddress) {
-    onLogLocal("创建出口(s)时，隧道监听地址是必需的。", "ERROR");
+    onLogLocal("创建服务端时，隧道监听地址是必需的。", "ERROR");
     return null;
   }
 
   const serverParams: BuildUrlParams = {
-    instanceType: "出口(s)",
+    instanceType: "服务端",
     tunnelAddress: serverTunnelAddress,
     targetAddress: serverTargetAddress,
-    logLevel: values.logLevel,
+    logLevel: values.logLevel as MasterLogLevel, // Cast is safe due to Zod schema change
     tlsMode: values.tlsMode as MasterTlsMode | '2',
     certPath: values.certPath,
     keyPath: values.keyPath,
