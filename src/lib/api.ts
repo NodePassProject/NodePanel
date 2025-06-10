@@ -29,6 +29,13 @@ async function request<T>(
     // Provide a more specific hint if it's a typical "Failed to fetch" error often caused by CORS
     if (networkError.message?.toLowerCase().includes('failed to fetch')) {
         errorMessage += ' 这通常是由于目标服务器的CORS策略阻止了请求 (缺少 Access-Control-Allow-Origin 头部), 或网络连接问题。';
+        try {
+            const urlObject = new URL(fullRequestUrl);
+            const ipv4Regex = /^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$/;
+            if (ipv4Regex.test(urlObject.hostname)) {
+                errorMessage += ` 对于IPv4地址 (${urlObject.hostname})，请额外确认NodePass服务已在该IPv4地址和端口 (${urlObject.port || '默认'}) 上监听。`;
+            }
+        } catch (e) { /* ignore parsing error if fullRequestUrl is malformed, e.g. not a full URL */ }
     }
     const error = new Error(errorMessage);
     (error as any).cause = networkError; // Preserve the original error if needed
@@ -82,8 +89,6 @@ export const nodePassApi = {
     checkApiRootUrl(apiRootUrl, `更新实例 ${id}`);
     return request<Instance>(`${apiRootUrl}/v1/instances/${id}`, { method: 'PATCH', body: JSON.stringify(data) }, token);
   },
-
-  // modifyInstanceConfig function removed
   
   deleteInstance: (id: string, apiRootUrl: string, token: string) => {
     checkApiRootUrl(apiRootUrl, `删除实例 ${id}`);
