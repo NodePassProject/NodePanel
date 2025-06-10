@@ -17,11 +17,10 @@ interface CreateInstanceFormFieldsProps {
   instanceType: "入口(c)" | "出口(s)";
   tlsMode?: string;
   isSingleEndedForward: boolean;
-  autoCreateServer: boolean; // Will always be false now
   activeApiConfig: NamedApiConfig | null;
   apiConfigsList: NamedApiConfig[];
-  serverInstancesForDropdown: Array<{id: string, display: string, tunnelAddr: string, masterName: string}> | undefined;
-  isLoadingServerInstances: boolean;
+  serverInstancesForDropdown: undefined; // Changed to undefined
+  isLoadingServerInstances: false; // Changed to false
   externalApiSuggestion: string | null;
   onSubmitHandler: (values: CreateInstanceFormValues) => void;
   showDetailedDescriptions: boolean;
@@ -34,8 +33,8 @@ export function CreateInstanceFormFields({
   isSingleEndedForward,
   activeApiConfig,
   apiConfigsList,
-  serverInstancesForDropdown,
-  isLoadingServerInstances,
+  serverInstancesForDropdown, // Will be undefined
+  isLoadingServerInstances, // Will be false
   externalApiSuggestion,
   onSubmitHandler,
   showDetailedDescriptions,
@@ -48,13 +47,6 @@ export function CreateInstanceFormFields({
   const effectiveTlsModeDisplay = activeApiConfig?.masterDefaultTlsMode && activeApiConfig.masterDefaultTlsMode !== 'master'
     ? MASTER_TLS_MODE_DISPLAY_MAP[activeApiConfig.masterDefaultTlsMode as keyof typeof MASTER_TLS_MODE_DISPLAY_MAP] || '主控配置'
     : '主控配置';
-
-  const serverApiIdOptions = React.useMemo(() => {
-    if (instanceType === '入口(c)' && !isSingleEndedForward) { // autoCreateServer condition removed
-      return apiConfigsList.filter(config => config.id !== activeApiConfig?.id);
-    }
-    return [];
-  }, [apiConfigsList, activeApiConfig?.id, instanceType, isSingleEndedForward]);
 
   return (
     <Form {...form}>
@@ -156,46 +148,7 @@ export function CreateInstanceFormFields({
           )}
         />
 
-        {instanceType === '入口(c)' && !isSingleEndedForward && (
-          <FormItem className="space-y-1">
-            <FormLabel className="font-sans text-xs">或从其他主控的现有出口(s)选择隧道</FormLabel>
-            <Select
-              onValueChange={(selectedServerId) => {
-                if (selectedServerId) {
-                  const selectedServer = serverInstancesForDropdown?.find(s => s.id === selectedServerId);
-                  if (selectedServer) {
-                    form.setValue('tunnelAddress', selectedServer.tunnelAddr, { shouldValidate: true, shouldDirty: true });
-                  }
-                }
-              }}
-              disabled={isLoadingServerInstances || !serverInstancesForDropdown || serverInstancesForDropdown.length === 0}
-            >
-              <FormControl>
-                <SelectTrigger className="text-xs font-sans h-9">
-                  <SelectValue placeholder={
-                    isLoadingServerInstances ? "加载出口(s)中..." :
-                    (!serverInstancesForDropdown || serverInstancesForDropdown.length === 0) ? "无其他主控的可用出口(s)" : "选择出口(s)隧道"
-                  } />
-                </SelectTrigger>
-              </FormControl>
-              <SelectContent>
-                {isLoadingServerInstances && (
-                    <div className="flex items-center justify-center p-2 font-sans text-xs">
-                        <Loader2 className="h-3.5 w-3.5 animate-spin mr-2"/> 加载中...
-                    </div>
-                )}
-                {serverInstancesForDropdown && serverInstancesForDropdown.map(server => (
-                  <SelectItem key={server.id} value={server.id} className="font-sans text-xs">
-                    {server.display}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {showDetailedDescriptions && serverInstancesForDropdown && serverInstancesForDropdown.length === 0 && !isLoadingServerInstances && (
-                <FormDescription className="font-sans text-xs mt-0.5">在其他主控下无可用出口(s)实例供选择。</FormDescription>
-            )}
-          </FormItem>
-        )}
+        {/* Removed Select dropdown for choosing server from other masters */}
 
         <FormField
           control={form.control}

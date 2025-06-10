@@ -20,14 +20,15 @@ import { useToast } from '@/hooks/use-toast';
 import { createInstanceFormSchema, type CreateInstanceFormValues, createInstanceApiSchema } from '@/zod-schemas/nodepass';
 import type { CreateInstanceRequest, Instance } from '@/types/nodepass';
 import { PlusCircle, Loader2 } from 'lucide-react';
-import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query'; // useQuery removed
 import { nodePassApi } from '@/lib/api';
 import { useApiConfig, type NamedApiConfig } from '@/hooks/use-api-key';
 import type { AppLogEntry } from '../EventLog';
-import { extractHostname, extractPort, isWildcardHostname, parseNodePassUrl } from '@/lib/url-utils';
+import { extractHostname, extractPort, isWildcardHostname } from '@/lib/url-utils';
 
 import { CreateInstanceFormFields } from './CreateInstanceFormFields';
-import { buildUrlFromFormValues, type BuildUrlParams, prepareClientUrlParams, prepareServerUrlParams, formatHostForUrl } from './utils';
+import { buildUrlFromFormValues, type BuildUrlParams, prepareClientUrlParams, prepareServerUrlParams } from './utils';
+import { MASTER_TLS_MODE_DISPLAY_MAP } from './constants';
 
 
 interface CreateInstanceDialogProps {
@@ -138,71 +139,6 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
       setExternalApiSuggestion(null);
     }
   }, [tunnelAddressValue, instanceType, apiConfigsList, isSingleEndedForwardWatched]);
-
-  const { data: serverInstancesForDropdown, isLoading: isLoadingServerInstances } = useQuery<
-    Array<{id: string, display: string, tunnelAddr: string, masterName: string}>,
-    Error
-  >({
-    queryKey: ['otherMastersServersForDropdown', apiConfigsList.map(c => c.id).join('-'), activeApiConfig?.id],
-    queryFn: async () => {
-      if (!activeApiConfig) return [];
-
-      const otherMasters = apiConfigsList.filter(config => config.id !== activeApiConfig.id);
-      if (otherMasters.length === 0) {
-        onLog?.('无其他主控可供选择出口(s)隧道。', 'INFO');
-        return [];
-      }
-      onLog?.('为入口(c)获取其他主控 (' + otherMasters.map(m=>m.name).join(', ') + ') 的出口(s)列表...', 'INFO');
-
-      let combinedServers: Array<{id: string, display: string, tunnelAddr: string, masterName: string}> = [];
-
-      for (const master of otherMasters) {
-        const masterApiRoot = getApiRootUrl(master.id);
-        const masterApiToken = getToken(master.id);
-        if (!masterApiRoot || !masterApiToken) {
-          console.warn('跳过主控 ' + master.name + ' (出口(s)下拉列表): API信息不完整。');
-          onLog?.('跳过主控 ' + master.name + ' (出口(s)下拉列表): API信息不完整。', 'WARN');
-          continue;
-        }
-        try {
-          const instances = await nodePassApi.getInstances(masterApiRoot, masterApiToken);
-          const serversFromThisMaster = instances
-            .filter(inst => inst.type === 'server')
-            .map(serverInst => {
-              const parsedUrl = parseNodePassUrl(serverInst.url);
-              if (!parsedUrl.tunnelAddress) return null;
-              return {
-                id: serverInst.id,
-                display: '主控: ' + master.name + ' - ID: ' + serverInst.id.substring(0,8) + '... (' + parsedUrl.tunnelAddress + ')',
-                tunnelAddr: parsedUrl.tunnelAddress,
-                masterName: master.name,
-              };
-            })
-            .filter(Boolean) as Array<{id: string, display: string, tunnelAddr: string, masterName: string}>;
-
-          const clientInstancesOnThisOtherMaster = instances.filter(inst => inst.type === 'client');
-          const usedServerTunnelAddressesOnThisOtherMaster = new Set<string>();
-          clientInstancesOnThisOtherMaster.forEach(clientInst => {
-            const parsedClientUrl = parseNodePassUrl(clientInst.url);
-            if (parsedClientUrl.tunnelAddress) { usedServerTunnelAddressesOnThisOtherMaster.add(parsedClientUrl.tunnelAddress.toLowerCase()); }
-          });
-
-          const availableServers = serversFromThisMaster.filter(server =>
-            !usedServerTunnelAddressesOnThisOtherMaster.has(server.tunnelAddr.toLowerCase())
-          );
-          combinedServers.push(...availableServers);
-
-        } catch (error: any) {
-          console.error('从主控 ' + master.name + ' 获取出口(s)失败:', error.message);
-          onLog?.('从主控 ' + master.name + ' 获取出口(s)失败: ' + error.message, 'ERROR');
-        }
-      }
-      onLog?.('为入口(c)获取到 ' + combinedServers.length + ' 个来自其他主控的可用出口(s)隧道。', 'INFO');
-      return combinedServers;
-    },
-    enabled: !!(open && instanceType === '入口(c)' && !isSingleEndedForwardWatched && apiConfigsList.length > 0 && activeApiConfig),
-  });
-
 
   const createInstanceMutation = useMutation({
     mutationFn: (params: { data: CreateInstanceRequest, useApiRoot?: string, useApiToken?: string }) => {
@@ -322,11 +258,10 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
             instanceType={instanceType as "入口(c)" | "出口(s)"}
             tlsMode={tlsModeWatch}
             isSingleEndedForward={isSingleEndedForwardWatched}
-            autoCreateServer={false} // Hardcode to false as it's removed
             activeApiConfig={activeApiConfig}
             apiConfigsList={apiConfigsList}
-            serverInstancesForDropdown={serverInstancesForDropdown}
-            isLoadingServerInstances={isLoadingServerInstances}
+            serverInstancesForDropdown={undefined} // Removed
+            isLoadingServerInstances={false} // Removed
             externalApiSuggestion={externalApiSuggestion}
             onSubmitHandler={onSubmitHandler}
             showDetailedDescriptions={showDetailedDescriptions}
