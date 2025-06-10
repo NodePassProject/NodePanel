@@ -22,6 +22,8 @@ async function request<T>(
       ...options,
       headers,
       cache: 'no-store',
+      mode: 'cors', // Added mode: 'cors'
+      credentials: 'omit', // Added credentials: 'omit'
     });
   } catch (networkError: any) {
     // Handle network errors (like "Failed to fetch")
@@ -101,3 +103,4 @@ export const getEventsUrl = (apiRootUrl: string | null): string => {
   if (!apiRootUrl) throw new Error("API 根地址 (apiRootUrl) 未配置，无法获取事件 URL。");
   return `${apiRootUrl}/v1/events`;
 };
+

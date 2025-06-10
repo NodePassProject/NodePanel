@@ -13,6 +13,7 @@ export type MasterTlsMode = '0' | '1' | '2' | 'master';
 export interface ApiConfig {
   apiUrl: string;
   token: string;
+  prefixPath: string | null;
 }
 
 export interface NamedApiConfig extends ApiConfig {
@@ -20,6 +21,7 @@ export interface NamedApiConfig extends ApiConfig {
   name: string;
   masterDefaultLogLevel?: MasterLogLevel;
   masterDefaultTlsMode?: MasterTlsMode;
+  // ignoreSslErrors removed
 }
 
 export function useApiConfig() {
@@ -32,18 +34,11 @@ export function useApiConfig() {
       const storedConfigsList = localStorage.getItem(API_CONFIGS_LIST_STORAGE_KEY);
       if (storedConfigsList) {
         const parsedConfigs = JSON.parse(storedConfigsList) as NamedApiConfig[];
+        // Ensure new optional fields have default values if missing from old storage
         const migratedConfigs = parsedConfigs.map(config => {
-          // Ensure id exists, apiUrl has a scheme, and defaults are set
-          const { prefixPath, ...restConfig } = config as any; // prefixPath is legacy, remove it
-          let finalApiUrl = restConfig.apiUrl || '';
-          if (finalApiUrl && !finalApiUrl.includes('://')) {
-            finalApiUrl = `http://${finalApiUrl}`;
-          }
+          const { ignoreSslErrors, ...restConfig } = config as any; // explicitly remove ignoreSslErrors
           return {
-            id: config.id || uuidv4(), // Ensure ID exists
-            name: config.name || 'Unnamed Master',
-            apiUrl: finalApiUrl,
-            token: config.token || '',
+            ...restConfig,
             masterDefaultLogLevel: config.masterDefaultLogLevel || 'master',
             masterDefaultTlsMode: config.masterDefaultTlsMode || 'master',
           };
@@ -85,16 +80,9 @@ export function useApiConfig() {
 
   const addOrUpdateApiConfig = useCallback((config: Omit<NamedApiConfig, 'id'> & { id?: string }) => {
     const newId = config.id || uuidv4();
-    
-    let finalApiUrl = (config.apiUrl || '').trim();
-    if (finalApiUrl && !finalApiUrl.includes('://')) {
-      finalApiUrl = `http://${finalApiUrl}`;
-    }
-    
+    const { ignoreSslErrors, ...restConfig } = config as any; // remove ignoreSslErrors if present
     const newConfigWithIdAndDefaults: NamedApiConfig = {
-      name: config.name,
-      apiUrl: finalApiUrl,
-      token: config.token,
+      ...restConfig,
       id: newId,
       masterDefaultLogLevel: config.masterDefaultLogLevel || 'master',
       masterDefaultTlsMode: config.masterDefaultTlsMode || 'master',
@@ -134,8 +122,11 @@ export function useApiConfig() {
     if (!activeConfigId) return null;
     const config = apiConfigsList.find(c => c.id === activeConfigId) || null;
     if (config) {
+      const { ignoreSslErrors, ...restConfig } = config as any;
       return {
-        ...config, // Already contains defaults from migration/addOrUpdate
+        ...restConfig,
+        masterDefaultLogLevel: config.masterDefaultLogLevel || 'master',
+        masterDefaultTlsMode: config.masterDefaultTlsMode || 'master',
       };
     }
     return null;
@@ -144,8 +135,11 @@ export function useApiConfig() {
   const getApiConfigById = useCallback((id: string): NamedApiConfig | null => {
     const config = apiConfigsList.find(c => c.id === id) || null;
     if (config) {
+      const { ignoreSslErrors, ...restConfig } = config as any;
       return {
-        ...config, // Already contains defaults
+        ...restConfig,
+        masterDefaultLogLevel: config.masterDefaultLogLevel || 'master',
+        masterDefaultTlsMode: config.masterDefaultTlsMode || 'master',
       };
     }
     return null;
@@ -154,18 +148,12 @@ export function useApiConfig() {
   const getApiRootUrl = useCallback((id: string): string | null => {
     const config = getApiConfigById(id);
     if (!config?.apiUrl) return null;
-
-    let schemedApiUrl = config.apiUrl.trim();
-    // Ensure the URL has a scheme, defaulting to http
-    if (schemedApiUrl && !schemedApiUrl.includes('://')) {
-      schemedApiUrl = `http://${schemedApiUrl}`;
-    }
-    
-    let base = schemedApiUrl.replace(/\/+$/, ''); // Remove trailing slashes
-
-    // Check if the base URL, in a case-insensitive manner, already ends with '/api'
-    if (!base.toLowerCase().endsWith('/api')) { 
-      base += '/api'; // Append '/api' (lowercase) only if it's not already there (case-insensitively)
+    const { apiUrl, prefixPath } = config;
+    let base = apiUrl.replace(/\/+$/, ''); 
+    if (prefixPath && prefixPath.trim() !== '') {
+      base += `/${prefixPath.replace(/^\/+|\/+$/g, '').trim()}`; 
+    } else {
+      base += '/api'; // Default to /api if prefixPath is empty or null
     }
     return base;
   }, [getApiConfigById]);
