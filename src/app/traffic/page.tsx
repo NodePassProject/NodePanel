@@ -246,7 +246,7 @@ const TrafficPage: NextPage = () => {
                     {allInstances.map((instance) => (
                       <TableRow key={`${instance.apiId}-${instance.id}`}>
                         <TableCell className="truncate max-w-[150px] font-sans">{instance.apiName}</TableCell>
-                        <TableCell className="font-mono text-xs truncate max-w-[100px]">{instance.id.substring(0,12)}...</TableCell>
+                        <TableCell className="font-mono text-xs break-all">{instance.id}</TableCell>
                         <TableCell>
                            <Badge
                             variant={instance.type === 'server' ? 'default' : 'accent'}
