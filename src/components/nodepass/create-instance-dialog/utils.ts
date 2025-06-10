@@ -109,25 +109,22 @@ export function prepareClientUrlParams(
   const clientKeyPath = values.keyPath;
 
   if (values.isSingleEndedForward) {
-    const localListenPort = values.tunnelAddress;
+    const localListenAddress = values.tunnelAddress; // This is now host:port
     const remoteTargetAddress = values.targetAddress;
 
     if (!remoteTargetAddress) {
       onLogLocal("单端转发模式下，目标地址 (业务数据) 是必需的。", "ERROR");
       return null;
     }
-    if (!localListenPort || !/^[0-9]+$/.test(localListenPort)) {
-      onLogLocal("单端转发模式下，本地监听端口无效。", "ERROR");
-      return null;
-    }
+    // Validation for localListenAddress format is handled by Zod
 
     clientParams = {
       instanceType: "客户端",
       isSingleEndedForward: true,
-      tunnelAddress: `[::]:${localListenPort}`,
+      tunnelAddress: localListenAddress, // Use the direct host:port from form
       targetAddress: remoteTargetAddress,
       logLevel: clientLogLevel,
-      tlsMode: '0',
+      tlsMode: '0', // TLS is not applicable for the instance URL in this mode
       certPath: '',
       keyPath: '',
     };
@@ -191,3 +188,4 @@ export function prepareServerUrlParams(
   };
   return { serverParams };
 }
+

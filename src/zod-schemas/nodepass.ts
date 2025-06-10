@@ -18,10 +18,10 @@ export const createInstanceFormSchema = z.object({
 }).superRefine((data, ctx) => {
   if (data.instanceType === "客户端") {
     if (data.isSingleEndedForward) {
-      if (!/^[0-9]+$/.test(data.tunnelAddress)) {
+      if (!/^(?:\[[0-9a-fA-F:]+\]|[0-9a-zA-Z.-]+):[0-9]+$/.test(data.tunnelAddress)) { // Changed regex here
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          message: "本地监听端口格式无效 (例: 8080)",
+          message: "监听地址格式无效 (例: 127.0.0.1:8080 或 [::]:8080)", // Updated message
           path: ["tunnelAddress"],
         });
       }
@@ -106,3 +106,4 @@ export const createInstanceApiSchema = z.object({
 export const updateInstanceSchema = z.object({
   action: z.enum(["start", "stop", "restart"]),
 });
+

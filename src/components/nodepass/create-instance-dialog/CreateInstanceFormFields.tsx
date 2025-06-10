@@ -91,7 +91,7 @@ export function CreateInstanceFormFields({
                   </FormLabel>
                   {showDetailedDescriptions && (
                     <FormDescription className="font-sans text-xs mt-0.5">
-                      启用后，仅需配置本地监听端口和远程目标转发地址。
+                      启用后，仅需配置本地监听地址和远程目标转发地址。
                     </FormDescription>
                   )}
                 </div>
@@ -108,7 +108,7 @@ export function CreateInstanceFormFields({
               <FormLabel className="font-sans text-xs flex items-center">
                  <Settings2 size={14} className="mr-1 text-muted-foreground" />
                 {instanceType === '服务端' ? '服务端隧道监听地址' :
-                 (isSingleEndedForward ? '客户端本地监听端口' :
+                 (isSingleEndedForward ? '监听地址 (客户端)' : // Changed Label
                    '连接的服务端隧道地址'
                  )}
               </FormLabel>
@@ -119,7 +119,7 @@ export function CreateInstanceFormFields({
                     instanceType === "服务端"
                       ? "例: 0.0.0.0:10101"
                       : (isSingleEndedForward
-                          ? "例: 8080"
+                          ? "例: 127.0.0.1:8080" // Changed Placeholder
                           : "例: your.server.com:10101")
                   }
                   {...field}
@@ -130,7 +130,7 @@ export function CreateInstanceFormFields({
                   {instanceType === "服务端"
                     ? "服务端在此地址监听控制连接。"
                     : (isSingleEndedForward
-                        ? "客户端在此本地端口监听传入连接。"
+                        ? "客户端在此本地地址 (IP:端口) 监听传入连接。" // Changed Description
                         : "客户端连接此服务端地址的控制通道.")}
                 </FormDescription>
                )}
@@ -307,3 +307,4 @@ export function CreateInstanceFormFields({
     </Form>
   );
 }
+
