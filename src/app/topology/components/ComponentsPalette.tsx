@@ -2,7 +2,7 @@
 "use client";
 
 import React from 'react';
-import { Server, Smartphone, Globe, UserCircle2 } from 'lucide-react';
+import { Server, Smartphone as ClientIcon, Globe, UserCircle2 as UserIcon } from 'lucide-react'; // Renamed Smartphone to ClientIcon
 
 export type DraggableNodeType = 'S' | 'C' | 'T' | 'U';
 
@@ -15,10 +15,10 @@ interface ComponentItem {
 }
 
 const componentItems: ComponentItem[] = [
-  { type: 'U', label: '用户 (U)', icon: UserCircle2, colorClass: 'text-purple-600', description: '用户或流量发起方' },
-  { type: 'C', label: '入口(c)', icon: Smartphone, colorClass: 'text-green-600', description: 'NodePass 入口(c) 实例' },
-  { type: 'S', label: '出口(s)', icon: Server, colorClass: 'text-primary', description: 'NodePass 出口(s) 实例' },
-  { type: 'T', label: '落地 (T)', icon: Globe, colorClass: 'text-orange-500', description: '最终流量目标设备/服务' },
+  { type: 'U', label: '用户入口', icon: UserIcon, colorClass: 'text-purple-600', description: '用户或流量发起方' },
+  { type: 'C', label: '客户端', icon: ClientIcon, colorClass: 'text-green-600', description: 'NodePass 客户端实例' },
+  { type: 'S', label: '服务端', icon: Server, colorClass: 'text-primary', description: 'NodePass 服务端实例' },
+  { type: 'T', label: '目标服务', icon: Globe, colorClass: 'text-orange-500', description: '最终流量目标设备/服务' },
 ];
 
 export function ComponentsPalette() {
@@ -47,4 +47,6 @@ export function ComponentsPalette() {
     </div>
   );
 }
+    
+
     

@@ -17,13 +17,13 @@ import {
   Position,
 } from 'reactflow';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Server, DatabaseZap, User, Globe, ListTree, Puzzle, Info as InfoIcon } from 'lucide-react';
+import { Server, Smartphone as ClientIcon, Globe, UserCircle2 as UserIcon, ListTree, Puzzle, Info as InfoIcon } from 'lucide-react'; // Renamed Smartphone to ClientIcon for clarity
 import { v4 as uuidv4 } from 'uuid';
 
 import { TopologyCanvasWrapper } from './TopologyCanvas';
 import { MastersPalette } from './components/MastersPalette';
 import { ComponentsPalette, type DraggableNodeType } from './components/ComponentsPalette';
-import { PropertiesDisplayPanel } from './components/PropertiesDisplayPanel';
+// PropertiesDisplayPanel removed as per previous request
 import type { NamedApiConfig } from '@/hooks/use-api-key';
 import { useApiConfig } from '@/hooks/use-api-key';
 import { useToast } from '@/hooks/use-toast';
@@ -61,7 +61,7 @@ export function AdvancedTopologyEditor() {
   const { deleteElements, fitView, getNodes, getEdges, setEdges: setReactFlowEdges } = useReactFlow();
   const [nodesInternal, setNodesInternal, onNodesChangeInternalCallback] = useNodesState<Node>(initialNodes);
   const [edgesInternal, setEdgesInternal, onEdgesChangeInternal] = useEdgesState(initialEdges);
-  const [selectedNode, setSelectedNode] = useState<Node | null>(null);
+  // selectedNode state removed as PropertiesDisplayPanel is gone
   const [nodeIdCounter, setNodeIdCounter] = useState(0);
   const { toast } = useToast();
   const reactFlowWrapperRef = useRef<HTMLDivElement>(null);
@@ -382,37 +382,37 @@ export function AdvancedTopologyEditor() {
           return;
       }
       if (targetRole === 'U') { // U cannot be a target
-        toast({ title: '连接无效', description: '用户 (U) 节点不能被其他节点链接。', variant: 'destructive' });
+        toast({ title: '连接无效', description: '用户入口 (U) 节点不能被其他节点链接。', variant: 'destructive' });
         return;
       }
       if (sourceRole === 'T') { // T cannot be a source
-        toast({ title: '连接无效', description: '目标 (T) 节点不能作为连接的起点。', variant: 'destructive' });
+        toast({ title: '连接无效', description: '目标服务 (T) 节点不能作为连接的起点。', variant: 'destructive' });
         return;
       }
       if (sourceRole === 'U' && !(targetRole === 'S' || targetRole === 'C')) {
-        toast({ title: '连接无效', description: '用户 (U) 节点只能连接到 出口(S) 或 入口(C) 节点。', variant: 'destructive' });
+        toast({ title: '连接无效', description: '用户入口 (U) 节点只能连接到 服务端(S) 或 客户端(C) 节点。', variant: 'destructive' });
         return;
       }
       if (targetRole === 'T' && !(sourceRole === 'S' || sourceRole === 'C')) {
-         toast({ title: '连接无效', description: '目标 (T) 节点只能被 出口(S) 或 入口(C) 连接。', variant: 'destructive'});
+         toast({ title: '连接无效', description: '目标服务 (T) 节点只能被 服务端(S) 或 客户端(C) 连接。', variant: 'destructive'});
          return;
       }
       if (sourceRole === 'S' && !(targetRole === 'C' || targetRole === 'T')) { // S can connect to C or T
-         toast({ title: '连接无效', description: '出口(S) 节点只能连接到 入口(C) 或 目标(T)。', variant: 'destructive'});
+         toast({ title: '连接无效', description: '服务端(S) 节点只能连接到 客户端(C) 或 目标服务(T)。', variant: 'destructive'});
          return;
       }
       if (sourceRole === 'C' && !(targetRole === 'S' || targetRole === 'C' || targetRole === 'T')) { // C can connect to S, C, or T
-         toast({ title: '连接无效', description: '入口(C) 节点只能连接到 出口(S), 入口(C), 或 目标(T)。', variant: 'destructive'});
+         toast({ title: '连接无效', description: '客户端(C) 节点只能连接到 服务端(S), 客户端(C), 或 目标服务(T)。', variant: 'destructive'});
          return;
       }
       
       // U and T nodes can only have one connection
       if (sourceRole === 'U' && allCurrentEdges.some(edge => edge.source === sourceNode.id)) {
-        toast({ title: '连接无效', description: '用户 (U) 节点只能有一个传出连接。', variant: 'destructive' });
+        toast({ title: '连接无效', description: '用户入口 (U) 节点只能有一个传出连接。', variant: 'destructive' });
         return;
       }
       if (targetRole === 'T' && allCurrentEdges.some(edge => edge.target === targetNode.id)) {
-        toast({ title: '连接无效', description: '目标 (T) 节点只能有一个传入连接。', variant: 'destructive' });
+        toast({ title: '连接无效', description: '目标服务 (T) 节点只能有一个传入连接。', variant: 'destructive' });
         return;
       }
 
@@ -469,7 +469,7 @@ export function AdvancedTopologyEditor() {
                     }
                     return n;
                 });
-                toast({ title: "跨主控入口(C)地址已自动更新", description: `入口(C) ${clientNodeForUpdate.data.label} 已自动配置连接到 出口(S) ${serverNodeForClientConfig.data.label}。` });
+                toast({ title: "跨主控客户端(C)地址已自动更新", description: `客户端(C) ${clientNodeForUpdate.data.label} 已自动配置连接到 服务端(S) ${serverNodeForClientConfig.data.label}。` });
             } else {
                  nodesToUpdateForAddress = allCurrentNodes.map(n => {
                     if (n.id === clientNodeForUpdate!.id) {
@@ -484,7 +484,7 @@ export function AdvancedTopologyEditor() {
                     }
                     return n;
                 });
-                toast({ title: "警告: 无法自动配置跨主控入口(C)地址", description: "未能计算出有效的服务端隧道地址。请检查源S节点及其主控配置。入口(C)已设为隧道模式，请手动配置其隧道地址。", variant: "warning" });
+                toast({ title: "警告: 无法自动配置跨主控客户端(C)地址", description: "未能计算出有效的服务端隧道地址。请检查源S节点及其主控配置。客户端(C)已设为隧道模式，请手动配置其隧道地址。", variant: "warning" });
             }
         }
       } else if ((sourceNode.data.role === 'S' || sourceNode.data.role === 'C') && targetNode.data.role === 'T') {
@@ -500,8 +500,8 @@ export function AdvancedTopologyEditor() {
             scNodeUpdated = true;
         }
         if (tNodeUpdated || scNodeUpdated) nodesToUpdateForAddress = tempNodes;
-        if (tNodeUpdated) toast({ title: `落地 (T) ${targetNode.data.label} 已同步上游目标地址。`});
-        if (scNodeUpdated) toast({ title: `${sourceNode.data.label} 已同步落地 (T) 目标地址。`});
+        if (tNodeUpdated) toast({ title: `目标服务 (T) ${targetNode.data.label} 已同步上游目标地址。`});
+        if (scNodeUpdated) toast({ title: `${sourceNode.data.label} 已同步目标服务 (T) 目标地址。`});
       }
 
       if (nodesToUpdateForAddress.length > 0) {
@@ -515,7 +515,7 @@ export function AdvancedTopologyEditor() {
   );
 
   const onSelectionChange = useCallback(({ nodes: selectedNodesList }: { nodes: Node[]; edges: Edge[] }) => {
-    setSelectedNode(selectedNodesList.length === 1 ? selectedNodesList[0] : null);
+    // setSelectedNode(selectedNodesList.length === 1 ? selectedNodesList[0] : null); // No longer needed
     if (selectedNodesList.length !== 1) setContextMenu(null);
   }, []);
 
@@ -555,8 +555,8 @@ export function AdvancedTopologyEditor() {
         }
         return updatedNodes;
     });
-    setSelectedNode(clickedNode);
-  }, [setNodesInternal, updateMasterNodeDimensions, setSelectedNode]);
+    // setSelectedNode(clickedNode); // No longer needed
+  }, [setNodesInternal, updateMasterNodeDimensions]);
 
 
   const onNodeContextMenu = useCallback((event: React.MouseEvent, node: Node) => {
@@ -578,7 +578,7 @@ export function AdvancedTopologyEditor() {
  const onPaneClick = useCallback(() => {
     setContextMenu(null);
 
-    let wasSelectedNodeActuallyCollapsed = false;
+    // let wasSelectedNodeActuallyCollapsed = false; // Not needed as selectedNode is removed
     let parentsToUpdateDueToCollapse = new Set<string>();
 
     setNodesInternal(nds => {
@@ -587,9 +587,9 @@ export function AdvancedTopologyEditor() {
           if (n.parentNode) {
             parentsToUpdateDueToCollapse.add(n.parentNode);
           }
-          if (selectedNode && selectedNode.id === n.id) {
-            wasSelectedNodeActuallyCollapsed = true;
-          }
+          // if (selectedNode && selectedNode.id === n.id) { // Not needed
+          //   wasSelectedNodeActuallyCollapsed = true;
+          // }
           return {
             ...n,
             data: { ...n.data, isExpanded: false },
@@ -609,10 +609,10 @@ export function AdvancedTopologyEditor() {
       return finalNodesAfterCollapse;
     });
 
-    if (wasSelectedNodeActuallyCollapsed) {
-      setSelectedNode(null);
-    }
-  }, [setContextMenu, setNodesInternal, updateMasterNodeDimensions, selectedNode, setSelectedNode]);
+    // if (wasSelectedNodeActuallyCollapsed) { // Not needed
+    //   setSelectedNode(null);
+    // }
+  }, [setContextMenu, setNodesInternal, updateMasterNodeDimensions]);
 
 
   useEffect(() => {
@@ -671,10 +671,10 @@ export function AdvancedTopologyEditor() {
       } else if (type !== 'master') {
           const nodeRole = type.toUpperCase() as NodeRole;
           const { labelPrefix, icon } = {
-              'S': { labelPrefix: '出口(s)', icon: Server },
-              'C': { labelPrefix: '入口(c)', icon: DatabaseZap },
-              'T': { labelPrefix: '落地', icon: Globe },
-              'U': { labelPrefix: '用户', icon: User },
+              'S': { labelPrefix: '服务端', icon: Server },
+              'C': { labelPrefix: '客户端', icon: ClientIcon },
+              'T': { labelPrefix: '目标服务', icon: Globe },
+              'U': { labelPrefix: '用户入口', icon: UserIcon },
           }[nodeRole]!;
 
           if ((nodeRole === 'S' || nodeRole === 'C') && !parentMContainer) {
@@ -747,8 +747,8 @@ export function AdvancedTopologyEditor() {
   const handleChangeNodeRole = useCallback((nodeId: string, newRole: 'S' | 'C') => {
     setNodesInternal(nds => nds.map(node => {
         if (node.id === nodeId && (node.data.role === 'S' || node.data.role === 'C')) {
-            const newLabelPrefix = newRole === 'S' ? '出口(s)' : '入口(c)';
-            const newIcon = newRole === 'S' ? Server : DatabaseZap;
+            const newLabelPrefix = newRole === 'S' ? '服务端' : '客户端';
+            const newIcon = newRole === 'S' ? Server : ClientIcon;
             let newData: CustomNodeData = { 
                 ...node.data, 
                 role: newRole, 
@@ -776,7 +776,7 @@ export function AdvancedTopologyEditor() {
 
 
   const handleClearCanvasCallback = useCallback(() => {
-    setNodesInternal([]); setEdgesInternal([]); setNodeIdCounter(0); setSelectedNode(null); setContextMenu(null);
+    setNodesInternal([]); setEdgesInternal([]); setNodeIdCounter(0); /* setSelectedNode(null); */ setContextMenu(null);
     toast({ title: '画布已清空' });
   }, [setNodesInternal, setEdgesInternal, toast]);
 
@@ -807,7 +807,7 @@ export function AdvancedTopologyEditor() {
         }
 
         let urlParams: BuildUrlParams | null = null;
-        const instanceTypeForBuild: "入口(c)" | "出口(s)" = node.data.role === 'S' ? "出口(s)" : "入口(c)";
+        const instanceTypeForBuild: "客户端" | "服务端" = node.data.role === 'S' ? "服务端" : "客户端";
 
         if (node.data.role === 'S') {
           if (!node.data.targetAddress || !node.data.tunnelAddress) {
@@ -818,7 +818,7 @@ export function AdvancedTopologyEditor() {
             instanceType: instanceTypeForBuild,
             tunnelAddress: node.data.tunnelAddress,
             targetAddress: node.data.targetAddress,
-            logLevel: (node.data.logLevel as any) || masterConfigForNode.masterDefaultLogLevel || 'master',
+            logLevel: (node.data.logLevel as any) || masterConfigForNode.masterDefaultLogLevel || 'info',
             tlsMode: (node.data.tlsMode as any) || masterConfigForNode.masterDefaultTlsMode || 'master',
             certPath: node.data.certPath,
             keyPath: node.data.keyPath,
@@ -834,7 +834,7 @@ export function AdvancedTopologyEditor() {
               isSingleEndedForward: true,
               tunnelAddress: node.data.tunnelAddress,
               targetAddress: node.data.targetAddress,
-              logLevel: (node.data.logLevel as any) || masterConfigForNode.masterDefaultLogLevel || 'master',
+              logLevel: (node.data.logLevel as any) || masterConfigForNode.masterDefaultLogLevel || 'info',
               tlsMode: (node.data.tlsMode as any) || '0',
               certPath: node.data.certPath,
               keyPath: node.data.keyPath,
@@ -849,7 +849,7 @@ export function AdvancedTopologyEditor() {
               isSingleEndedForward: false,
               tunnelAddress: node.data.tunnelAddress,
               targetAddress: node.data.targetAddress,
-              logLevel: (node.data.logLevel as any) || masterConfigForNode.masterDefaultLogLevel || 'master',
+              logLevel: (node.data.logLevel as any) || masterConfigForNode.masterDefaultLogLevel || 'info',
               tlsMode: (node.data.tlsMode as any) || masterConfigForNode.masterDefaultTlsMode || 'master',
               certPath: node.data.certPath,
               keyPath: node.data.keyPath,
@@ -904,7 +904,7 @@ export function AdvancedTopologyEditor() {
     setNodesInternal(nds => nds.map(n => ({ ...n, data: { ...n.data, submissionStatus: undefined, submissionMessage: undefined } })));
     const instancesToCreate = prepareInstancesForSubmission();
     if (instancesToCreate.length === 0) {
-      toast({ title: '无实例可提交', description: '请配置有效的出口(s)/入口(c)节点。' });
+      toast({ title: '无实例可提交', description: '请配置有效的服务端(S)/客户端(C)节点。' });
       setIsSubmitting(false); return;
     }
     setInstancesForConfirmation(instancesToCreate); setIsSubmitConfirmOpen(true);
@@ -1097,9 +1097,9 @@ export function AdvancedTopologyEditor() {
                                         tlsMode: clientNode.data.tlsMode || 'master'
                                     }
                                 };
-                                toast({ title: `跨主控入口(C) ${clientNode.data.label} 的地址已自动更新。` });
+                                toast({ title: `跨主控客户端(C) ${clientNode.data.label} 的地址已自动更新。` });
                             } else if (!newClientTunnelAddr || newClientTunnelAddr.trim() === "") {
-                                toast({ title: `警告: 更新出口(S)后无法重新计算入口(C) ${clientNode.data.label} 的隧道地址。`, variant: "warning" });
+                                toast({ title: `警告: 更新服务端(S)后无法重新计算客户端(C) ${clientNode.data.label} 的隧道地址。`, variant: "warning" });
                             }
                         }
                     }
@@ -1131,9 +1131,9 @@ export function AdvancedTopologyEditor() {
                                         tlsMode: clientNode.data.tlsMode || 'master'
                                     }
                                 };
-                                toast({ title: `跨主控入口(C) ${clientNode.data.label} 的地址已自动更新。` });
+                                toast({ title: `跨主控客户端(C) ${clientNode.data.label} 的地址已自动更新。` });
                             } else if (!newClientTunnelAddr || newClientTunnelAddr.trim() === "") {
-                                toast({ title: `警告: 更新出口(S)后无法重新计算入口(C) ${clientNode.data.label} 的隧道地址。`, variant: "warning" });
+                                toast({ title: `警告: 更新服务端(S)后无法重新计算客户端(C) ${clientNode.data.label} 的隧道地址。`, variant: "warning" });
                             }
                         }
                     }
@@ -1147,7 +1147,7 @@ export function AdvancedTopologyEditor() {
                 if (targetTNodeIndex !== -1 && editedNode.data.targetAddress !== newNodes[targetTNodeIndex].data.targetAddress) {
                     newNodes[targetTNodeIndex] = { ...newNodes[targetTNodeIndex], data: { ...newNodes[targetTNodeIndex].data, targetAddress: editedNode.data.targetAddress }};
                     if (originalNodeDataFromState.targetAddress !== editedNode.data.targetAddress) {
-                        toast({ title: `落地 (T) ${newNodes[targetTNodeIndex].data.label} 已同步目标地址。`});
+                        toast({ title: `目标服务 (T) ${newNodes[targetTNodeIndex].data.label} 已同步目标地址。`});
                     }
                 }
             }
@@ -1159,7 +1159,7 @@ export function AdvancedTopologyEditor() {
                 if (sourceNodeIndex !== -1 && editedNode.data.targetAddress !== newNodes[sourceNodeIndex].data.targetAddress) {
                      newNodes[sourceNodeIndex] = { ...newNodes[sourceNodeIndex], data: { ...newNodes[sourceNodeIndex].data, targetAddress: editedNode.data.targetAddress }};
                      if (originalNodeDataFromState.targetAddress !== editedNode.data.targetAddress) {
-                       toast({ title: `${newNodes[sourceNodeIndex].data.label} 已同步落地 (T) 目标地址。`});
+                       toast({ title: `${newNodes[sourceNodeIndex].data.label} 已同步目标服务 (T) 目标地址。`});
                      }
                 }
             }
@@ -1203,7 +1203,7 @@ export function AdvancedTopologyEditor() {
     deleteElements({ nodes: [nodeToDelete], edges: edgesToRemove });
     toast({ title: `节点 "${nodeToDelete.data.label || nodeToDelete.id}" 已删除` });
     
-    if (selectedNode?.id === nodeToDelete.id) setSelectedNode(null);
+    // if (selectedNode?.id === nodeToDelete.id) setSelectedNode(null); // Not needed
     setContextMenu(null);
 
     setNodesInternal(prevNodes => {
@@ -1238,7 +1238,7 @@ export function AdvancedTopologyEditor() {
     const apiR = getApiRootUrl(masterIdToRender); const apiT = getToken(masterIdToRender);
     if (!apiR || !apiT) { toast({ title: "错误", description: `主控 "${masterConfig.name}" 的API配置不完整。`, variant: "destructive" }); return; }
 
-    setNodesInternal([]); setEdgesInternal([]); setNodeIdCounter(0); setSelectedNode(null); setContextMenu(null);
+    setNodesInternal([]); setEdgesInternal([]); setNodeIdCounter(0); /* setSelectedNode(null); */ setContextMenu(null);
     let currentIdCounter = 0;
 
     toast({ title: `正在加载主控 ${masterConfig.name} 的实例...` });
@@ -1282,8 +1282,9 @@ export function AdvancedTopologyEditor() {
                 activeHandles: { ...initialActiveHandles[nodeRole as keyof typeof initialActiveHandles] },
             };
 
-            const nodeTypeIcon = inst.type === 'server' ? Server : DatabaseZap;
+            const nodeTypeIcon = inst.type === 'server' ? Server : ClientIcon;
             const instanceNodeId = `${nodeRole.toLowerCase()}-${inst.id.substring(0,8)}-${++currentIdCounter}`;
+            const nodeLabelPrefix = nodeRole === 'S' ? '服务端' : '客户端';
 
             const instanceNode: Node = {
                 id: instanceNodeId, type: 'cardNode',
@@ -1291,7 +1292,7 @@ export function AdvancedTopologyEditor() {
                 parentNode: mContainerNodeId, extent: 'parent',
                 data: {
                     ...commonNodeData,
-                    label: `${nodeRole}: ${inst.id.substring(0,5)}..`, role: nodeRole, icon: nodeTypeIcon,
+                    label: `${nodeLabelPrefix}: ${inst.id.substring(0,5)}..`, role: nodeRole, icon: nodeTypeIcon,
                     isSingleEndedForwardC: nodeRole === 'C' ? (parsedUrl.scheme === 'client' && isWildcardHostname(extractHostname(parsedUrl.tunnelAddress || ""))) : undefined,
                 } as CustomNodeData,
                 width: ICON_ONLY_NODE_SIZE, height: ICON_ONLY_NODE_SIZE,
@@ -1324,9 +1325,9 @@ export function AdvancedTopologyEditor() {
             <div className="flex flex-col p-3">
               <h2 className="text-sm font-semibold font-title mb-1 flex items-center">
                 <ListTree size={16} className="mr-2 text-primary" />
-                主控列表 (M)
+                主控列表
               </h2>
-              <p className="text-xs text-muted-foreground font-sans mb-2">拖拽主控到画布创建容器。</p>
+              <p className="text-xs text-muted-foreground font-sans mb-2">拖拽主控到画布。</p>
               <ScrollArea className="flex-grow pr-1 max-h-60">
                 <MastersPalette onRenderMasterInstances={handleRenderMasterInstancesOnCanvas} />
               </ScrollArea>
@@ -1335,20 +1336,12 @@ export function AdvancedTopologyEditor() {
             <div className="flex flex-col p-3">
               <h2 className="text-sm font-semibold font-title mb-1 flex items-center">
                 <Puzzle size={16} className="mr-2 text-primary" />
-                组件 (U, S, C, T)
+                组件卡片
               </h2>
-              <p className="text-xs text-muted-foreground font-sans mb-2">拖拽 S/C 到主控容器内，U/T 到画布。</p>
+              <p className="text-xs text-muted-foreground font-sans mb-2">拖拽实例到主控内部。</p>
               <div className="flex-grow overflow-y-auto pr-1"><ComponentsPalette /></div>
             </div>
-            <Separator className="my-0" />
-            <div className="flex flex-col flex-grow min-h-0 p-3">
-              <h2 className="text-sm font-semibold font-title mb-1 flex items-center">
-                <InfoIcon size={16} className="mr-2 text-primary" />
-                节点属性
-              </h2>
-              <p className="text-xs text-muted-foreground font-sans mb-2">{selectedNode ? `选中: ${selectedNode.data.label || selectedNode.id}` : '点击节点查看属性。'}</p>
-              <div className="flex-grow overflow-y-hidden"><PropertiesDisplayPanel selectedNode={selectedNode} /></div>
-            </div>
+            {/* PropertiesDisplayPanel and its container div removed */}
           </div>
         </ScrollArea>
         <div className="flex-grow flex flex-col overflow-hidden p-2">
@@ -1374,10 +1367,10 @@ export function AdvancedTopologyEditor() {
           )}
 
           {(contextMenu.data as Node).type === 'node' && (contextMenu.data as Node).data.role === 'S' && (contextMenu.data as Node).data.parentNode && (
-            <Button variant="ghost" size="sm" className="w-full justify-start px-2 py-1 h-auto text-xs font-sans" onClick={() => handleChangeNodeRole((contextMenu.data as Node).id, 'C')}>更改为入口(c)</Button>
+            <Button variant="ghost" size="sm" className="w-full justify-start px-2 py-1 h-auto text-xs font-sans" onClick={() => handleChangeNodeRole((contextMenu.data as Node).id, 'C')}>更改为客户端(C)</Button>
           )}
           {(contextMenu.data as Node).type === 'node' && (contextMenu.data as Node).data.role === 'C' && (contextMenu.data as Node).data.parentNode && (
-            <Button variant="ghost" size="sm" className="w-full justify-start px-2 py-1 h-auto text-xs font-sans" onClick={() => handleChangeNodeRole((contextMenu.data as Node).id, 'S')}>更改为出口(s)</Button>
+            <Button variant="ghost" size="sm" className="w-full justify-start px-2 py-1 h-auto text-xs font-sans" onClick={() => handleChangeNodeRole((contextMenu.data as Node).id, 'S')}>更改为服务端(S)</Button>
           )}
           {contextMenu.type === 'node' && <Separator className="my-1"/>}
           {contextMenu.type === 'node' && (
@@ -1413,3 +1406,5 @@ export function AdvancedTopologyEditor() {
     </div>
   );
 }
+
+    
