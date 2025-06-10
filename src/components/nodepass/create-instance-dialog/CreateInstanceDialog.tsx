@@ -41,16 +41,6 @@ interface CreateInstanceDialogProps {
   onLog?: (message: string, type: AppLogEntry['type']) => void;
 }
 
-interface InstanceUrlConfig {
-  url: string;
-  masterConfig: NamedApiConfig;
-}
-
-interface SubmissionPlan {
-  primary: InstanceUrlConfig;
-  secondary?: InstanceUrlConfig; // For auto-created server
-}
-
 export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiToken, apiName, activeApiConfig, onLog }: CreateInstanceDialogProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -63,11 +53,11 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
     defaultValues: {
       instanceType: '入口(c)',
       isSingleEndedForward: false,
-      autoCreateServer: false,
-      serverApiId: undefined,
+      // autoCreateServer: false, // Removed
+      // serverApiId: undefined, // Removed
       tunnelAddress: '',
       targetAddress: '',
-      serverTargetAddressForAutoCreate: '',
+      // serverTargetAddressForAutoCreate: '', // Removed
       logLevel: 'master',
       tlsMode: 'master',
       certPath: '',
@@ -77,7 +67,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
 
   const instanceType = form.watch("instanceType");
   const tlsModeWatch = form.watch("tlsMode");
-  const autoCreateServerWatched = form.watch("autoCreateServer");
+  // const autoCreateServerWatched = form.watch("autoCreateServer"); // Removed
   const isSingleEndedForwardWatched = form.watch("isSingleEndedForward");
   const tunnelAddressValue = form.watch("tunnelAddress");
 
@@ -86,11 +76,11 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
       form.reset({
         instanceType: '入口(c)',
         isSingleEndedForward: false,
-        autoCreateServer: false,
-        serverApiId: undefined,
+        // autoCreateServer: false, // Removed
+        // serverApiId: undefined, // Removed
         tunnelAddress: '',
         targetAddress: '',
-        serverTargetAddressForAutoCreate: '',
+        // serverTargetAddressForAutoCreate: '', // Removed
         logLevel: 'master',
         tlsMode: 'master',
         certPath: '',
@@ -102,14 +92,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
   }, [open, form]);
 
  useEffect(() => {
-    // When instanceType changes, or related flags change, reset some fields to avoid invalid states
     if (instanceType === "入口(c)") {
-        if (isSingleEndedForwardWatched) {
-            // If single-ended is true, autoCreateServer must be false.
-            if (autoCreateServerWatched) { // if autoCreateServer is true
-                 form.setValue("autoCreateServer", false, { shouldDirty: true });
-            }
-        }
         // If TLS mode is not '2', clear cert and key paths.
         if (tlsModeWatch !== '2') {
             if (form.getValues("certPath") !== '') form.setValue("certPath", '');
@@ -120,51 +103,17 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
         if (isSingleEndedForwardWatched) {
             form.setValue("isSingleEndedForward", false, {shouldDirty: true});
         }
-        if (autoCreateServerWatched) {
-            form.setValue("autoCreateServer", false, {shouldDirty: true});
-        }
-        // Server doesn't use serverApiId or serverTargetAddressForAutoCreate for itself.
-        if (form.getValues("serverApiId") !== undefined) {
-            form.setValue("serverApiId", undefined);
-        }
-        if (form.getValues("serverTargetAddressForAutoCreate") !== '') {
-            form.setValue("serverTargetAddressForAutoCreate", '');
-        }
-
         // If TLS mode is not '2', clear cert and key paths for server.
         if (tlsModeWatch !== '2') {
             if (form.getValues("certPath") !== '') form.setValue("certPath", '');
             if (form.getValues("keyPath") !== '') form.setValue("keyPath", '');
         }
     }
-  }, [instanceType, form, isSingleEndedForwardWatched, autoCreateServerWatched, tlsModeWatch]);
+  }, [instanceType, form, isSingleEndedForwardWatched, tlsModeWatch]);
 
 
   useEffect(() => {
-    // Effect for autoCreateServerWatched logic (selecting serverApiId, etc.)
-    if (instanceType === "入口(c)" && autoCreateServerWatched && !isSingleEndedForwardWatched) {
-      const otherMasters = apiConfigsList.filter(c => c.id !== activeApiConfig?.id);
-      if (otherMasters.length > 0) {
-        const currentServerApiId = form.getValues("serverApiId");
-        if (!currentServerApiId || !otherMasters.some(m => m.id === currentServerApiId)) {
-          form.setValue("serverApiId", otherMasters[0].id, { shouldValidate: true, shouldDirty: true });
-        }
-      } else {
-        form.setValue("serverApiId", undefined, { shouldValidate: true, shouldDirty: true });
-      }
-       if (!form.formState.dirtyFields.serverTargetAddressForAutoCreate) {
-         form.setValue("serverTargetAddressForAutoCreate", "", {shouldDirty: true});
-       }
-
-    } else if (instanceType === "入口(c)" && (!autoCreateServerWatched || isSingleEndedForwardWatched) ) {
-       if (form.getValues("serverApiId") !== undefined) form.setValue("serverApiId", undefined);
-       if (form.getValues("serverTargetAddressForAutoCreate") !== '') form.setValue("serverTargetAddressForAutoCreate", '');
-    }
-  }, [instanceType, autoCreateServerWatched, isSingleEndedForwardWatched, apiConfigsList, activeApiConfig, form]);
-
-
-  useEffect(() => {
-    if (instanceType === '入口(c)' && tunnelAddressValue && !autoCreateServerWatched && !isSingleEndedForwardWatched) {
+    if (instanceType === '入口(c)' && tunnelAddressValue && !isSingleEndedForwardWatched) {
       const clientTunnelHost = extractHostname(tunnelAddressValue);
       if (!clientTunnelHost) {
         setExternalApiSuggestion(null);
@@ -190,7 +139,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
     } else {
       setExternalApiSuggestion(null);
     }
-  }, [tunnelAddressValue, instanceType, apiConfigsList, autoCreateServerWatched, isSingleEndedForwardWatched]);
+  }, [tunnelAddressValue, instanceType, apiConfigsList, isSingleEndedForwardWatched]);
 
   const { data: serverInstancesForDropdown, isLoading: isLoadingServerInstances } = useQuery<
     Array<{id: string, display: string, tunnelAddr: string, masterName: string}>,
@@ -253,7 +202,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
       onLog?.('为入口(c)获取到 ' + combinedServers.length + ' 个来自其他主控的可用出口(s)隧道。', 'INFO');
       return combinedServers;
     },
-    enabled: !!(open && instanceType === '入口(c)' && !autoCreateServerWatched && !isSingleEndedForwardWatched && apiConfigsList.length > 0 && activeApiConfig),
+    enabled: !!(open && instanceType === '入口(c)' && !isSingleEndedForwardWatched && apiConfigsList.length > 0 && activeApiConfig),
   });
 
 
@@ -299,8 +248,6 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
     }
 
     let primaryUrlParams: BuildUrlParams | null = null;
-    let secondaryUrlParams: BuildUrlParams | null = null;
-    let secondaryMasterConfig: NamedApiConfig | null = null;
     
     const localOnLog = (message: string, type: 'INFO' | 'WARN' | 'ERROR') => {
       if (type === 'ERROR') toast({ title: "配置错误", description: message, variant: "destructive" });
@@ -310,12 +257,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
     if (values.instanceType === '入口(c)') {
       const clientSubmission = prepareClientUrlParams(values, activeApiConfig, getApiConfigById, localOnLog);
       if (!clientSubmission) return;
-
       primaryUrlParams = clientSubmission.clientParams;
-      if (clientSubmission.serverParamsForAutoCreate && clientSubmission.serverMasterForAutoCreate) {
-        secondaryUrlParams = clientSubmission.serverParamsForAutoCreate;
-        secondaryMasterConfig = clientSubmission.serverMasterForAutoCreate;
-      }
     } else { // '出口(s)'
       const serverSubmission = prepareServerUrlParams(values, localOnLog);
       if (!serverSubmission) return;
@@ -331,35 +273,8 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
     const primaryInstanceUrl = buildUrlFromFormValues(primaryUrlParams, activeApiConfig);
     onLog?.('准备创建主实例于 "' + activeApiConfig.name + '": ' + primaryInstanceUrl, 'INFO');
 
-    let secondaryInstanceUrl: string | null = null;
-    if (secondaryUrlParams && secondaryMasterConfig) {
-      secondaryInstanceUrl = buildUrlFromFormValues(secondaryUrlParams, secondaryMasterConfig);
-      onLog?.('准备创建从实例于 "' + secondaryMasterConfig.name + '": ' + secondaryInstanceUrl, 'INFO');
-    }
-
     try {
-      let serverCreationOk = true;
-      if (secondaryInstanceUrl && secondaryMasterConfig) {
-        const serverTargetApiRoot = getApiRootUrl(secondaryMasterConfig.id);
-        const serverTargetApiToken = getToken(secondaryMasterConfig.id);
-
-        if (!serverTargetApiRoot || !serverTargetApiToken) {
-          toast({title: "配置错误", description: '无法为出口(s)找到有效的API配置 (主控ID: ' + secondaryMasterConfig.id + ')', variant: "destructive"});
-          serverCreationOk = false;
-        } else {
-          try {
-            await createInstanceMutation.mutateAsync({
-              data: { url: secondaryInstanceUrl },
-              useApiRoot: serverTargetApiRoot,
-              useApiToken: serverTargetApiToken,
-            });
-          } catch (e) {
-            serverCreationOk = false;
-          }
-        }
-      }
-
-      if (primaryInstanceUrl && serverCreationOk) {
+      if (primaryInstanceUrl) {
         await createInstanceMutation.mutateAsync({
             data: { url: primaryInstanceUrl },
             useApiRoot: apiRoot, 
@@ -369,7 +284,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
 
       const wasAnyMutationInErrorState = createInstanceMutation.isError;
 
-      if (!wasAnyMutationInErrorState && serverCreationOk) {
+      if (!wasAnyMutationInErrorState) {
          form.reset();
          onOpenChange(false);
       }
@@ -378,7 +293,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
        onLog?.('创建实例序列中发生错误: ' + error.message, 'ERROR');
     }
   }
-
+  
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg p-4">
@@ -409,7 +324,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
             instanceType={instanceType as "入口(c)" | "出口(s)"}
             tlsMode={tlsModeWatch}
             isSingleEndedForward={isSingleEndedForwardWatched}
-            autoCreateServer={autoCreateServerWatched}
+            autoCreateServer={false} // Hardcode to false as it's removed
             activeApiConfig={activeApiConfig}
             apiConfigsList={apiConfigsList}
             serverInstancesForDropdown={serverInstancesForDropdown}
@@ -440,5 +355,3 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
     </Dialog>
   );
 }
-
-    
