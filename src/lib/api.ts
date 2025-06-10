@@ -21,6 +21,7 @@ async function request<T>(
     response = await fetch(fullRequestUrl, {
       ...options,
       headers,
+      cache: 'no-store', // Added cache: 'no-store'
     });
   } catch (networkError: any) {
     // Handle network errors (like "Failed to fetch")
