@@ -7,7 +7,7 @@ import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, For
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Info, Settings2, Share2, Zap } from 'lucide-react'; // Loader2, Network removed as they are not used
+import { Info, Settings2, Share2, Zap } from 'lucide-react';
 import type { CreateInstanceFormValues } from '@/zod-schemas/nodepass';
 import type { NamedApiConfig } from '@/hooks/use-api-key';
 import { MASTER_TLS_MODE_DISPLAY_MAP } from './constants';
@@ -19,8 +19,8 @@ interface CreateInstanceFormFieldsProps {
   isSingleEndedForward: boolean;
   activeApiConfig: NamedApiConfig | null;
   apiConfigsList: NamedApiConfig[];
-  serverInstancesForDropdown: undefined;
-  isLoadingServerInstances: false;
+  serverInstancesForDropdown: undefined; // This prop is no longer used
+  isLoadingServerInstances: false; // This prop is no longer used
   externalApiSuggestion: string | null;
   onSubmitHandler: (values: CreateInstanceFormValues) => void;
   showDetailedDescriptions: boolean;
@@ -107,8 +107,8 @@ export function CreateInstanceFormFields({
             <FormItem className="space-y-1">
               <FormLabel className="font-sans text-xs flex items-center">
                  <Settings2 size={14} className="mr-1 text-muted-foreground" />
-                {instanceType === '服务端' ? '服务端隧道监听地址' :
-                 (isSingleEndedForward ? '监听地址 (客户端)' : // Changed Label
+                {instanceType === '服务端' ? '隧道地址' :
+                 (isSingleEndedForward ? '监听地址 (客户端)' :
                    '连接的服务端隧道地址'
                  )}
               </FormLabel>
@@ -119,7 +119,7 @@ export function CreateInstanceFormFields({
                     instanceType === "服务端"
                       ? "例: 0.0.0.0:10101"
                       : (isSingleEndedForward
-                          ? "例: 127.0.0.1:8080" // Changed Placeholder
+                          ? "例: 127.0.0.1:8080"
                           : "例: your.server.com:10101")
                   }
                   {...field}
@@ -130,7 +130,7 @@ export function CreateInstanceFormFields({
                   {instanceType === "服务端"
                     ? "服务端在此地址监听控制连接。"
                     : (isSingleEndedForward
-                        ? "客户端在此本地地址 (IP:端口) 监听传入连接。" // Changed Description
+                        ? "客户端在此本地地址 (IP:端口) 监听传入连接。"
                         : "客户端连接此服务端地址的控制通道.")}
                 </FormDescription>
                )}
@@ -152,8 +152,8 @@ export function CreateInstanceFormFields({
             <FormItem className="space-y-1">
               <FormLabel className="font-sans text-xs flex items-center">
                 <Share2 size={14} className="mr-1 text-muted-foreground" />
-                {instanceType === '服务端' ? '转发地址 (服务端)' :
-                 (isSingleEndedForward ? '转发地址 (远程目标)' : '客户端本地转发端口 (可选)')}
+                {instanceType === '服务端' ? '目标地址' :
+                 (isSingleEndedForward ? '目标地址' : '客户端本地转发端口 (可选)')}
               </FormLabel>
               <FormControl>
                 <Input
@@ -308,3 +308,4 @@ export function CreateInstanceFormFields({
   );
 }
 
+    
