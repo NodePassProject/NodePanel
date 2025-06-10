@@ -47,7 +47,7 @@ const initialEdges: Edge[] = [];
 
 const MIN_MASTER_NODE_HEIGHT = 120;
 const MIN_MASTER_NODE_WIDTH = 200;
-const M_NODE_SCALE_FACTOR_PER_CHILD = 1.2; 
+const M_NODE_SCALE_FACTOR_PER_CHILD = 1.2;
 
 const initialActiveHandles = {
   S: { top: true, bottom: true, left: true, right: true },
@@ -85,6 +85,125 @@ export function AdvancedTopologyEditor() {
   const handshakeLogRegex = /Tunnel handshaked:.*?in\s+(\d+)\s*ms/i;
   const sseHandshakeAbortControllerRef = useRef<AbortController | null>(null);
 
+  // Moved these definitions earlier to resolve initialization errors
+  const updateMasterNodeDimensions = useCallback((masterNodeId: string, currentNodes: Node[]): Node[] => {
+    const masterNode = currentNodes.find(n => n.id === masterNodeId);
+    if (!masterNode || !masterNode.data.isContainer || masterNode.data.role !== 'M') {
+      return currentNodes;
+    }
+
+    const children = currentNodes.filter(n => n.parentNode === masterNodeId);
+    const numChildren = children.length;
+
+    let newWidth: number;
+    let newHeight: number;
+
+    if (numChildren === 0) {
+      newWidth = MIN_MASTER_NODE_WIDTH;
+      newHeight = MIN_MASTER_NODE_HEIGHT;
+    } else {
+      newWidth = MIN_MASTER_NODE_WIDTH * Math.pow(M_NODE_SCALE_FACTOR_PER_CHILD, numChildren);
+      newHeight = MIN_MASTER_NODE_HEIGHT * Math.pow(M_NODE_SCALE_FACTOR_PER_CHILD, numChildren);
+    }
+
+    newWidth = Math.round(newWidth);
+    newHeight = Math.round(newHeight);
+
+    if (masterNode.width === newWidth && masterNode.height === newHeight) {
+      return currentNodes;
+    }
+
+    const updatedMasterNode = {
+      ...masterNode,
+      width: newWidth,
+      height: newHeight,
+      style: { ...masterNode.style, width: newWidth, height: newHeight },
+    };
+
+    return currentNodes.map(n => (n.id === masterNodeId ? updatedMasterNode : n));
+  }, []);
+
+  const getOptimalHandlesForConnection = useCallback((sourceNode: Node, targetNode: Node): { sourceHandle: string, targetHandle: string } => {
+    const sourceCenter = {
+      x: sourceNode.positionAbsolute!.x + (sourceNode.width! / 2),
+      y: sourceNode.positionAbsolute!.y + (sourceNode.height! / 2),
+    };
+    const targetCenter = {
+      x: targetNode.positionAbsolute!.x + (targetNode.width! / 2),
+      y: targetNode.positionAbsolute!.y + (targetNode.height! / 2),
+    };
+
+    const dx = targetCenter.x - sourceCenter.x;
+    const dy = targetCenter.y - sourceCenter.y;
+
+    let sourceHandle: string, targetHandle: string;
+
+    if (Math.abs(dy) >= Math.abs(dx)) {
+      if (dy > 0) {
+        sourceHandle = Position.Bottom; targetHandle = Position.Top;
+      } else {
+        sourceHandle = Position.Top; targetHandle = Position.Bottom;
+      }
+    } else {
+      if (dx > 0) {
+        sourceHandle = Position.Right; targetHandle = Position.Left;
+      } else {
+        sourceHandle = Position.Left; targetHandle = Position.Right;
+      }
+    }
+
+    if (sourceNode.data.role === 'U') {
+        if (sourceHandle === Position.Left) sourceHandle = Position.Right;
+        if (sourceHandle === Position.Top) sourceHandle = Position.Bottom;
+    }
+    if (targetNode.data.role === 'T') {
+        if (targetHandle === Position.Right) targetHandle = Position.Left;
+        if (targetHandle === Position.Bottom) targetHandle = Position.Top;
+    }
+
+    return { sourceHandle, targetHandle };
+  }, []);
+
+  const updateAffectedNodeHandles = useCallback((nodeId: string, currentNodes: Node[], currentEdges: Edge[]): Node[] => {
+    return currentNodes.map(n => {
+      if (n.id === nodeId && (n.data.role === 'U' || n.data.role === 'T' || n.data.role === 'S' || n.data.role === 'C')) {
+        const connectedEdges = currentEdges.filter(edge => edge.source === n.id || edge.target === n.id);
+        const relevantConnections = connectedEdges.filter(edge => {
+            const otherNodeId = edge.source === n.id ? edge.target : edge.source;
+            const otherNode = currentNodes.find(cn => cn.id === otherNodeId);
+            return otherNode && (otherNode.data.role === 'U' || otherNode.data.role === 'T' || otherNode.data.role === 'S' || otherNode.data.role === 'C');
+        });
+
+        let newActiveHandles = { ...initialActiveHandles[n.data.role as keyof typeof initialActiveHandles] };
+
+        if (relevantConnections.length === 0) {
+        } else if (n.data.role === 'U') {
+            const edge = relevantConnections[0];
+            if (edge.sourceHandle === Position.Right) newActiveHandles = { top: false, bottom: false, left: false, right: true };
+            else if (edge.sourceHandle === Position.Bottom) newActiveHandles = { top: false, bottom: true, left: false, right: false };
+        } else if (n.data.role === 'T') {
+            const edge = relevantConnections[0];
+            if (edge.targetHandle === Position.Left) newActiveHandles = { top: false, bottom: false, left: true, right: false };
+            else if (edge.targetHandle === Position.Top) newActiveHandles = { top: true, bottom: false, left: false, right: false };
+        } else if (n.data.role === 'S' || n.data.role === 'C') {
+            let hasHorizontal = false;
+            let hasVertical = false;
+            relevantConnections.forEach(edge => {
+                const handle = edge.source === n.id ? edge.sourceHandle : edge.targetHandle;
+                if (handle === Position.Left || handle === Position.Right) hasHorizontal = true;
+                if (handle === Position.Top || handle === Position.Bottom) hasVertical = true;
+            });
+
+            if (hasHorizontal && !hasVertical) newActiveHandles = { top: false, bottom: false, left: true, right: true };
+            else if (!hasHorizontal && hasVertical) newActiveHandles = { top: true, bottom: true, left: false, right: false };
+            else newActiveHandles = { top: true, bottom: true, left: true, right: true };
+        }
+
+        return { ...n, data: { ...n.data, activeHandles: newActiveHandles } };
+      }
+      return n;
+    });
+  }, []); // initialActiveHandles is stable
 
   const handleOpenEditNodeDialog = useCallback((node: Node) => {
     setContextMenu(null);
@@ -156,10 +275,10 @@ export function AdvancedTopologyEditor() {
         if (edge.source !== nodeToDelete.id) nodeIdsToUpdateHandles.add(edge.source);
         if (edge.target !== nodeToDelete.id) nodeIdsToUpdateHandles.add(edge.target);
     });
-    
+
     deleteElements({ nodes: [{ id: nodeToDelete.id }], edges: edgesToRemove }); // Pass only node ID for deletion
     toast({ title: `节点 "${nodeToDelete.data.label || nodeToDelete.id}" 已删除` });
-    
+
     setContextMenu(null);
 
     setNodesInternal(prevNodes => {
@@ -186,127 +305,6 @@ export function AdvancedTopologyEditor() {
     masterNode: MasterNode,
   }), [handleOpenEditNodeDialog, handleDeleteNode]);
 
-
-  const updateMasterNodeDimensions = useCallback((masterNodeId: string, currentNodes: Node[]): Node[] => {
-    const masterNode = currentNodes.find(n => n.id === masterNodeId);
-    if (!masterNode || !masterNode.data.isContainer || masterNode.data.role !== 'M') {
-      return currentNodes;
-    }
-
-    const children = currentNodes.filter(n => n.parentNode === masterNodeId);
-    const numChildren = children.length;
-
-    let newWidth: number;
-    let newHeight: number;
-
-    if (numChildren === 0) {
-      newWidth = MIN_MASTER_NODE_WIDTH;
-      newHeight = MIN_MASTER_NODE_HEIGHT;
-    } else {
-      newWidth = MIN_MASTER_NODE_WIDTH * Math.pow(M_NODE_SCALE_FACTOR_PER_CHILD, numChildren);
-      newHeight = MIN_MASTER_NODE_HEIGHT * Math.pow(M_NODE_SCALE_FACTOR_PER_CHILD, numChildren);
-    }
-
-    newWidth = Math.round(newWidth);
-    newHeight = Math.round(newHeight);
-
-    if (masterNode.width === newWidth && masterNode.height === newHeight) {
-      return currentNodes;
-    }
-
-    const updatedMasterNode = {
-      ...masterNode,
-      width: newWidth,
-      height: newHeight,
-      style: { ...masterNode.style, width: newWidth, height: newHeight },
-    };
-
-    return currentNodes.map(n => (n.id === masterNodeId ? updatedMasterNode : n));
-  }, []);
-
-  const getOptimalHandlesForConnection = useCallback((sourceNode: Node, targetNode: Node): { sourceHandle: string, targetHandle: string } => {
-    const sourceCenter = {
-      x: sourceNode.positionAbsolute!.x + (sourceNode.width! / 2),
-      y: sourceNode.positionAbsolute!.y + (sourceNode.height! / 2),
-    };
-    const targetCenter = {
-      x: targetNode.positionAbsolute!.x + (targetNode.width! / 2),
-      y: targetNode.positionAbsolute!.y + (targetNode.height! / 2),
-    };
-
-    const dx = targetCenter.x - sourceCenter.x;
-    const dy = targetCenter.y - sourceCenter.y;
-
-    let sourceHandle: string, targetHandle: string;
-
-    if (Math.abs(dy) >= Math.abs(dx)) { 
-      if (dy > 0) { 
-        sourceHandle = Position.Bottom; targetHandle = Position.Top;
-      } else { 
-        sourceHandle = Position.Top; targetHandle = Position.Bottom;
-      }
-    } else { 
-      if (dx > 0) { 
-        sourceHandle = Position.Right; targetHandle = Position.Left;
-      } else { 
-        sourceHandle = Position.Left; targetHandle = Position.Right;
-      }
-    }
-    
-    if (sourceNode.data.role === 'U') {
-        if (sourceHandle === Position.Left) sourceHandle = Position.Right;
-        if (sourceHandle === Position.Top) sourceHandle = Position.Bottom;
-    }
-    if (targetNode.data.role === 'T') {
-        if (targetHandle === Position.Right) targetHandle = Position.Left;
-        if (targetHandle === Position.Bottom) targetHandle = Position.Top;
-    }
-
-    return { sourceHandle, targetHandle };
-  }, []);
-
-  const updateAffectedNodeHandles = useCallback((nodeId: string, currentNodes: Node[], currentEdges: Edge[]): Node[] => {
-    return currentNodes.map(n => {
-      if (n.id === nodeId && (n.data.role === 'U' || n.data.role === 'T' || n.data.role === 'S' || n.data.role === 'C')) {
-        const connectedEdges = currentEdges.filter(edge => edge.source === n.id || edge.target === n.id);
-        const relevantConnections = connectedEdges.filter(edge => {
-            const otherNodeId = edge.source === n.id ? edge.target : edge.source;
-            const otherNode = currentNodes.find(cn => cn.id === otherNodeId);
-            return otherNode && (otherNode.data.role === 'U' || otherNode.data.role === 'T' || otherNode.data.role === 'S' || otherNode.data.role === 'C');
-        });
-
-        let newActiveHandles = { ...initialActiveHandles[n.data.role as keyof typeof initialActiveHandles] };
-
-        if (relevantConnections.length === 0) {
-        } else if (n.data.role === 'U') {
-            const edge = relevantConnections[0]; 
-            if (edge.sourceHandle === Position.Right) newActiveHandles = { top: false, bottom: false, left: false, right: true };
-            else if (edge.sourceHandle === Position.Bottom) newActiveHandles = { top: false, bottom: true, left: false, right: false };
-        } else if (n.data.role === 'T') {
-            const edge = relevantConnections[0]; 
-            if (edge.targetHandle === Position.Left) newActiveHandles = { top: false, bottom: false, left: true, right: false };
-            else if (edge.targetHandle === Position.Top) newActiveHandles = { top: true, bottom: false, left: false, right: false };
-        } else if (n.data.role === 'S' || n.data.role === 'C') {
-            let hasHorizontal = false;
-            let hasVertical = false;
-            relevantConnections.forEach(edge => {
-                const handle = edge.source === n.id ? edge.sourceHandle : edge.targetHandle;
-                if (handle === Position.Left || handle === Position.Right) hasHorizontal = true;
-                if (handle === Position.Top || handle === Position.Bottom) hasVertical = true;
-            });
-
-            if (hasHorizontal && !hasVertical) newActiveHandles = { top: false, bottom: false, left: true, right: true };
-            else if (!hasHorizontal && hasVertical) newActiveHandles = { top: true, bottom: true, left: false, right: false };
-            else newActiveHandles = { top: true, bottom: true, left: true, right: true }; 
-        }
-        
-        return { ...n, data: { ...n.data, activeHandles: newActiveHandles } };
-      }
-      return n;
-    });
-  }, []);
-
-
   const onNodesChangeInternal: OnNodesChange = useCallback((changes: NodeChange[]) => {
     setNodesInternal((nds) => {
       const appliedChanges = applyNodeChanges(changes, nds);
@@ -324,7 +322,7 @@ export function AdvancedTopologyEditor() {
           }
         } else if (change.type === 'add' && change.item.parentNode) {
             parentIdsToUpdate.add(change.item.parentNode);
-        } else if (change.type === 'dimensions' && change.dragging === false) { 
+        } else if (change.type === 'dimensions' && change.dragging === false) {
             const changedNode = finalNodes.find(n => n.id === change.id);
             if (changedNode && (changedNode.data.role === 'U' || changedNode.data.role === 'T' || changedNode.data.role === 'S' || changedNode.data.role === 'C')) {
                 nodesMoved = true;
@@ -341,7 +339,7 @@ export function AdvancedTopologyEditor() {
             }
         }
       });
-      
+
       parentIdsToUpdate.forEach(parentId => {
         finalNodes = updateMasterNodeDimensions(parentId, finalNodes);
       });
@@ -358,7 +356,7 @@ export function AdvancedTopologyEditor() {
           if (sourceNode && targetNode && (movedNodeIds.has(sourceNode.id) || movedNodeIds.has(targetNode.id)) &&
               (sourceNode.data.role === 'U' || sourceNode.data.role === 'T' || sourceNode.data.role === 'S' || sourceNode.data.role === 'C') &&
               (targetNode.data.role === 'U' || targetNode.data.role === 'T' || targetNode.data.role === 'S' || targetNode.data.role === 'C')) {
-            
+
             const { sourceHandle, targetHandle } = getOptimalHandlesForConnection(sourceNode, targetNode);
             if (edge.sourceHandle !== sourceHandle || edge.targetHandle !== targetHandle) {
               edgesToUpdate.push({ ...edge, sourceHandle, targetHandle });
@@ -370,9 +368,9 @@ export function AdvancedTopologyEditor() {
 
         if (edgesToUpdate.length > 0) {
           setReactFlowEdges(eds => eds.map(ed => edgesToUpdate.find(uEd => uEd.id === ed.id) || ed));
-          currentEdges = getEdges(); 
+          currentEdges = getEdges();
         }
-        
+
         affectedNodeIdsForHandleUpdate.forEach(nodeId => {
             finalNodes = updateAffectedNodeHandles(nodeId, finalNodes, currentEdges);
         });
@@ -395,11 +393,11 @@ export function AdvancedTopologyEditor() {
         });
 
         const currentEdgeNodeIds = new Set<string>();
-         getEdges().forEach(edge => { 
+         getEdges().forEach(edge => {
             currentEdgeNodeIds.add(edge.source);
             currentEdgeNodeIds.add(edge.target);
         });
-        
+
         const nodesToPotentiallyResetHandles = new Set([...allNodeIdsInvolvedInEdges, ...currentEdgeNodeIds]);
 
         nodesToPotentiallyResetHandles.forEach(nodeId => {
@@ -477,11 +475,11 @@ export function AdvancedTopologyEditor() {
           toast({ title: '连接无效', description: '主控 (M) 节点是容器，不能直接连接。请连接其内部的 S/C 节点。', variant: 'destructive'});
           return;
       }
-      if (targetRole === 'U') { 
+      if (targetRole === 'U') {
         toast({ title: '连接无效', description: '用户入口 (U) 节点不能被其他节点链接。', variant: 'destructive' });
         return;
       }
-      if (sourceRole === 'T') { 
+      if (sourceRole === 'T') {
         toast({ title: '连接无效', description: '目标服务 (T) 节点不能作为连接的起点。', variant: 'destructive' });
         return;
       }
@@ -493,15 +491,15 @@ export function AdvancedTopologyEditor() {
          toast({ title: '连接无效', description: '目标服务 (T) 节点只能被 服务端(S) 或 客户端(C) 连接。', variant: 'destructive'});
          return;
       }
-      if (sourceRole === 'S' && !(targetRole === 'C' || targetRole === 'T')) { 
+      if (sourceRole === 'S' && !(targetRole === 'C' || targetRole === 'T')) {
          toast({ title: '连接无效', description: '服务端(S) 节点只能连接到 客户端(C) 或 目标服务(T)。', variant: 'destructive'});
          return;
       }
-      if (sourceRole === 'C' && !(targetRole === 'S' || targetRole === 'C' || targetRole === 'T')) { 
+      if (sourceRole === 'C' && !(targetRole === 'S' || targetRole === 'C' || targetRole === 'T')) {
          toast({ title: '连接无效', description: '客户端(C) 节点只能连接到 服务端(S), 客户端(C), 或 目标服务(T)。', variant: 'destructive'});
          return;
       }
-      
+
       if (sourceRole === 'U' && allCurrentEdges.some(edge => edge.source === sourceNode.id)) {
         toast({ title: '连接无效', description: '用户入口 (U) 节点只能有一个传出连接。', variant: 'destructive' });
         return;
@@ -514,9 +512,9 @@ export function AdvancedTopologyEditor() {
 
       const { sourceHandle, targetHandle } = getOptimalHandlesForConnection(sourceNode, targetNode);
       const newEdgeBase = {
-        ...params, 
-        sourceHandle, 
-        targetHandle, 
+        ...params,
+        sourceHandle,
+        targetHandle,
         id: `edge-${uuidv4()}`,
         animated: true,
         style: { strokeDasharray: '5 5' },
@@ -572,8 +570,8 @@ export function AdvancedTopologyEditor() {
                           ...n,
                           data: {
                             ...n.data,
-                            isSingleEndedForwardC: false, 
-                            tlsMode: n.data.tlsMode || 'master' 
+                            isSingleEndedForwardC: false,
+                            tlsMode: n.data.tlsMode || 'master'
                           }
                         };
                     }
@@ -600,13 +598,13 @@ export function AdvancedTopologyEditor() {
       }
 
       if (nodesToUpdateForAddress.length > 0) {
-        setNodesInternal(nodesToUpdateForAddress); 
-        setEdgesAndUpdateHandles((eds) => addEdge(newEdgeBase, eds)); 
+        setNodesInternal(nodesToUpdateForAddress);
+        setEdgesAndUpdateHandles((eds) => addEdge(newEdgeBase, eds));
       } else {
         setEdgesAndUpdateHandles((eds) => addEdge(newEdgeBase, eds));
       }
     },
-    [getNodes, getEdges, setNodesInternal, setEdgesAndUpdateHandles, toast, getApiConfigById, getOptimalHandlesForConnection]
+    [getNodes, getEdges, setNodesInternal, setEdgesAndUpdateHandles, toast, getApiConfigById, getOptimalHandlesForConnection, updateAffectedNodeHandles] // Added updateAffectedNodeHandles
   );
 
   const onSelectionChange = useCallback(({ nodes: selectedNodesList }: { nodes: Node[]; edges: Edge[] }) => {
@@ -614,11 +612,11 @@ export function AdvancedTopologyEditor() {
   }, []);
 
   const calculateExpandedNodeHeight = (data: CustomNodeData): number => {
-    let numDetails = 2; 
+    let numDetails = 2;
     if (data.tunnelAddress) numDetails++;
     if (data.targetAddress) numDetails++;
     if (data.submissionStatus) numDetails++;
-    return EXPANDED_SC_NODE_BASE_HEIGHT + (numDetails * DETAIL_LINE_HEIGHT) + (data.submissionStatus ? 5 : 0); 
+    return EXPANDED_SC_NODE_BASE_HEIGHT + (numDetails * DETAIL_LINE_HEIGHT) + (data.submissionStatus ? 5 : 0);
   };
 
 
@@ -833,20 +831,20 @@ export function AdvancedTopologyEditor() {
         if (node.id === nodeId && (node.data.role === 'S' || node.data.role === 'C')) {
             const newLabelPrefix = newRole === 'S' ? '服务端' : '客户端';
             const newIcon = newRole === 'S' ? Server : ClientIcon;
-            let newData: CustomNodeData = { 
-                ...node.data, 
-                role: newRole, 
-                icon: newIcon, 
+            let newData: CustomNodeData = {
+                ...node.data,
+                role: newRole,
+                icon: newIcon,
                 label: `${newLabelPrefix} ${node.data.label.split(' ').pop()}`,
-                activeHandles: { ...initialActiveHandles[newRole as keyof typeof initialActiveHandles] } 
+                activeHandles: { ...initialActiveHandles[newRole as keyof typeof initialActiveHandles] }
             };
 
             if (newRole === 'S') {
                 newData.isSingleEndedForwardC = undefined;
                 if (!newData.tunnelAddress || newData.tunnelAddress.startsWith("remote")) newData.tunnelAddress = `[::]:${10000 + nodeIdCounter}`;
                 if (!newData.targetAddress || newData.targetAddress.startsWith("[")) newData.targetAddress = `127.0.0.1:${3000 + nodeIdCounter}`;
-            } else { 
-                newData.isSingleEndedForwardC = false; 
+            } else {
+                newData.isSingleEndedForwardC = false;
                 if (!newData.tunnelAddress || newData.tunnelAddress.startsWith("[")) newData.tunnelAddress = `remote.server.com:${10000 + nodeIdCounter}`;
                 if (!newData.targetAddress || newData.targetAddress.startsWith("127")) newData.targetAddress = `[::]:${3000 + nodeIdCounter + 1}`;
             }
@@ -919,7 +917,7 @@ export function AdvancedTopologyEditor() {
               tunnelAddress: node.data.tunnelAddress,
               targetAddress: node.data.targetAddress,
               logLevel: (node.data.logLevel as any) || masterConfigForNode.masterDefaultLogLevel || 'info',
-              tlsMode: (node.data.tlsMode as any) || '0',
+              tlsMode: (node.data.tlsMode as any) || '0', // Single-ended client usually means no nodepass-to-nodepass TLS
               certPath: node.data.certPath,
               keyPath: node.data.keyPath,
             };
@@ -975,7 +973,7 @@ export function AdvancedTopologyEditor() {
         const apiRootForCheck = getApiRootUrl(masterForSseCheck.id); const tokenForCheck = getToken(masterForSseCheck.id);
         if (!apiRootForCheck || !tokenForCheck) throw new Error("API配置不完整。");
         const eventsUrl = getEventsUrl(apiRootForCheck); if (!eventsUrl) throw new Error("无法生成事件URL。");
-        const response = await fetch(eventsUrl, { method: 'GET', headers: { 'X-API-Key': tokenForCheck, 'Accept': 'text/event-stream', 'Cache-Control': 'no-cache', 'mode': 'cors', 'credentials': 'omit' }, signal: ssePreCheckAbortController.signal });
+        const response = await fetch(eventsUrl, { method: 'GET', headers: { 'X-API-Key': tokenForCheck, 'Accept': 'text/event-stream', 'Cache-Control': 'no-cache' }, signal: ssePreCheckAbortController.signal, mode: 'cors', credentials: 'omit' });
         if (!response.ok || !response.body) { const errorText = response.statusText || `HTTP error ${response.status}`; throw new Error(errorText); }
         const reader = response.body.getReader(); const { done } = await reader.read(); if (!done) sseCheckSuccess = true;
         if (!ssePreCheckAbortController.signal.aborted) ssePreCheckAbortController.abort("Pre-check complete");
@@ -1000,7 +998,7 @@ export function AdvancedTopologyEditor() {
     if (!sseApiRoot || !sseApiToken) { toast({ title: "SSE 错误", description: `无法监听握手: 主控 ${masterForSse.name} 的API配置无效。`, variant: "destructive" }); return; }
     const eventsSSEUrl = getEventsUrl(sseApiRoot); if (!eventsSSEUrl) return;
     try {
-        const response = await fetch(eventsSSEUrl, { method: 'GET', headers: { 'X-API-Key': sseApiToken, 'Accept': 'text/event-stream', 'Cache-Control': 'no-cache', 'mode': 'cors', 'credentials': 'omit' }, signal });
+        const response = await fetch(eventsSSEUrl, { method: 'GET', headers: { 'X-API-Key': sseApiToken, 'Accept': 'text/event-stream', 'Cache-Control': 'no-cache' }, signal, mode: 'cors', credentials: 'omit' });
         if (!response.ok || !response.body) { const errorText = response.statusText || `HTTP error ${response.status}`; throw new Error(errorText); }
         const reader = response.body.getReader(); const decoder = new TextDecoder(); let buffer = '';
         while (true) {
@@ -1042,7 +1040,7 @@ export function AdvancedTopologyEditor() {
   }, [instancesForConfirmation, getApiRootUrl, getToken, toast, createInstanceMutation, setNodesInternal, activeApiConfig, apiConfigsList, listenForHandshakeViaSSE]);
 
   useEffect(() => { return () => { if (sseHandshakeAbortControllerRef.current && !sseHandshakeAbortControllerRef.current.signal.aborted) { sseHandshakeAbortControllerRef.current.abort("Component unmounting"); sseHandshakeAbortControllerRef.current = null; } }; }, []);
-  
+
   const handleSaveNodeProperties = useCallback((nodeId: string, updatedDataFromDialog: Partial<CustomNodeData>) => {
     const allCurrentNodes = getNodes();
     let newNodes = [...allCurrentNodes];
@@ -1194,7 +1192,7 @@ export function AdvancedTopologyEditor() {
     } else if (editedNode.parentNode) {
       finalNodesAfterSave = updateMasterNodeDimensions(editedNode.parentNode!, finalNodesAfterSave);
     }
-    
+
     const affectedNodeIdsForHandleUpdate = new Set<string>([nodeId]);
      getEdges().forEach(edge => {
         if(edge.source === nodeId) affectedNodeIdsForHandleUpdate.add(edge.target);
@@ -1342,7 +1340,7 @@ export function AdvancedTopologyEditor() {
               <TopologyCanvasWrapper
                 nodes={nodesInternal} edges={edgesInternal} onNodesChange={onNodesChangeInternalCallback} onEdgesChange={onEdgesChangeInternal} onConnect={onConnect}
                 onSelectionChange={onSelectionChange} reactFlowWrapperRef={reactFlowWrapperRef} onNodeClick={onNodeClickHandler}
-                onCenterView={handleCenterViewCallback} 
+                onCenterView={handleCenterViewCallback}
                 onClearCanvas={handleClearCanvasCallback} onTriggerSubmitTopology={handleTriggerSubmitTopology}
                 canSubmit={(nodesInternal.length > 0 || edgesInternal.length > 0) && !isSubmitting}
                 isSubmitting={isSubmitting}
@@ -1399,5 +1397,3 @@ export function AdvancedTopologyEditor() {
     </div>
   );
 }
-
-    
