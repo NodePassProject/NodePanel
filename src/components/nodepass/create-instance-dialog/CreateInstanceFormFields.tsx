@@ -108,8 +108,8 @@ export function CreateInstanceFormFields({
               <FormLabel className="font-sans text-xs flex items-center">
                  <Settings2 size={14} className="mr-1 text-muted-foreground" />
                 {instanceType === '服务端' ? '隧道地址' :
-                 (isSingleEndedForward ? '监听地址 (客户端)' :
-                   '连接的服务端隧道地址'
+                 (isSingleEndedForward ? '监听地址' :
+                   '隧道地址'
                  )}
               </FormLabel>
               <FormControl>
@@ -120,7 +120,7 @@ export function CreateInstanceFormFields({
                       ? "例: 0.0.0.0:10101"
                       : (isSingleEndedForward
                           ? "例: 127.0.0.1:8080"
-                          : "例: your.server.com:10101")
+                          : "例: 10.0.0.2:10101")
                   }
                   {...field}
                 />
@@ -153,7 +153,7 @@ export function CreateInstanceFormFields({
               <FormLabel className="font-sans text-xs flex items-center">
                 <Share2 size={14} className="mr-1 text-muted-foreground" />
                 {instanceType === '服务端' ? '目标地址' :
-                 (isSingleEndedForward ? '目标地址' : '客户端本地转发端口 (可选)')}
+                 (isSingleEndedForward ? '目标地址' : '目标地址')}
               </FormLabel>
               <FormControl>
                 <Input

@@ -234,8 +234,8 @@ export function EditTopologyNodeDialog({
 
   if (!node) return null;
   const dialogTitle = role === 'M' ? "编辑 主控容器"
-    : role === 'S' ? "编辑 服务端(s)"
-    : role === 'C' ? "编辑 客户端(c)"
+    : role === 'S' ? "编辑 服务端"
+    : role === 'C' ? "编辑 客户端"
     : role === 'T' ? "编辑 目标服务"
     : "编辑 用户";
   const watchedMasterSubRole = role === 'M' ? form.watch('masterSubRoleM') : undefined;
@@ -317,7 +317,7 @@ export function EditTopologyNodeDialog({
                 <FormField control={form.control} name="tunnelAddressS" render={({ field }) => (
                   <FormItem><FormLabel className="font-sans">隧道地址</FormLabel><FormControl><Input {...field} placeholder="例: [::]:10101 或 0.0.0.0:10101" className="font-mono" /></FormControl><FormMessage /></FormItem>)} />
                 <FormField control={form.control} name="targetAddressS" render={({ field }) => (
-                  <FormItem><FormLabel className="font-sans">目标地址 (业务数据)</FormLabel><FormControl><Input {...field} placeholder="例: 192.168.1.10:80" className="font-mono" /></FormControl><FormMessage /></FormItem>)} />
+                  <FormItem><FormLabel className="font-sans">目标地址</FormLabel><FormControl><Input {...field} placeholder="例: 192.168.1.10:80" className="font-mono" /></FormControl><FormMessage /></FormItem>)} />
                 <FormField control={form.control} name="logLevelS" render={({ field }) => (
                   <FormItem><FormLabel className="font-sans">日志级别</FormLabel><Select onValueChange={field.onChange} value={field.value as string}><FormControl><SelectTrigger className="font-sans"><SelectValue /></SelectTrigger></FormControl><SelectContent><SelectItem value="master">主控默认</SelectItem><SelectItem value="debug">Debug</SelectItem><SelectItem value="info">Info</SelectItem><SelectItem value="warn">Warn</SelectItem><SelectItem value="error">Error</SelectItem><SelectItem value="event">Event</SelectItem></SelectContent></Select><FormMessage /></FormItem>)} />
                 <FormField control={form.control} name="tlsModeS" render={({ field }) => (
@@ -353,9 +353,9 @@ export function EditTopologyNodeDialog({
                 {renderClientAsSingleEnded ? (
                   <>
                     <FormField control={form.control} name="localListenAddressC_Single" render={({ field }) => (
-                      <FormItem><FormLabel className="font-sans">本地监听地址</FormLabel><FormControl><Input {...field} placeholder="例: [::]:10101 或 127.0.0.1:10101" className="font-mono" /></FormControl><FormMessage /></FormItem>)} />
+                      <FormItem><FormLabel className="font-sans">监听地址</FormLabel><FormControl><Input {...field} placeholder="例: [::]:10101 或 127.0.0.1:10101" className="font-mono" /></FormControl><FormMessage /></FormItem>)} />
                     <FormField control={form.control} name="remoteTargetAddressC_Single" render={({ field }) => (
-                      <FormItem><FormLabel className="font-sans">目标服务地址</FormLabel><FormControl><Input {...field} placeholder="例: remote.host:8000" className="font-mono" /></FormControl><FormMessage /></FormItem>)} />
+                      <FormItem><FormLabel className="font-sans">目标地址</FormLabel><FormControl><Input {...field} placeholder="例: remote.host:8000" className="font-mono" /></FormControl><FormMessage /></FormItem>)} />
                   </>
                 ) : (
                   <>
@@ -394,7 +394,7 @@ export function EditTopologyNodeDialog({
                 name="targetAddressTU"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel className="font-sans">目标服务地址</FormLabel>
+                    <FormLabel className="font-sans">目标地址</FormLabel>
                     <FormControl><Input {...field} placeholder="例: 192.168.1.10:80" className="font-mono" /></FormControl>
                     <FormMessage />
                   </FormItem>
