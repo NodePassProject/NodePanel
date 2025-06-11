@@ -49,11 +49,7 @@ export const MasterNode: React.FC<NodeProps<CustomNodeData>> = memo(({ data }) =
   
   return (
     <>
-      {/* Master nodes (M) are containers and not directly part of the top/bottom only connection logic for S,C,U,T */}
-      <Handle type="target" position={Position.Top} id="m-top" className="!bg-purple-500 w-2.5 h-2.5" />
-      <Handle type="source" position={Position.Bottom} id="m-bottom" className="!bg-purple-500 w-2.5 h-2.5" />
-      <Handle type="target" position={Position.Left} id="m-left" className="!bg-cyan-500 w-2.5 h-2.5" />
-      <Handle type="source" position={Position.Right} id="m-right" className="!bg-cyan-500 w-2.5 h-2.5" />
+      {/* Master (M) nodes are containers and do not have direct connection points. */}
       
       <div className="font-semibold text-sm mb-1">{data.label} 
         {!isAdvancedContainerRole && <span className="text-xs text-muted-foreground"> {subRoleText}</span>}
@@ -192,20 +188,17 @@ export const CardNode: React.FC<
         <>
           <Handle type="target" position={Position.Top} id="top" className={cn(handleBaseClasses, !data.activeHandles?.top && handleHiddenClasses)} />
           <Handle type="source" position={Position.Bottom} id="bottom" className={cn(handleBaseClasses, !data.activeHandles?.bottom && handleHiddenClasses)} />
-          {/* Left and Right handles removed for S and C nodes */}
         </>
       )}
 
       {data.role === 'U' && (
         <>
-          {/* Only bottom source handle for U nodes */}
           <Handle type="source" position={Position.Bottom} id="bottom" className={cn(handleBaseClasses, !data.activeHandles?.bottom && handleHiddenClasses)} />
         </>
       )}
 
       {data.role === 'T' && (
         <>
-          {/* Only top target handle for T nodes */}
           <Handle type="target" position={Position.Top} id="top" className={cn(handleBaseClasses, !data.activeHandles?.top && handleHiddenClasses)} />
         </>
       )}
