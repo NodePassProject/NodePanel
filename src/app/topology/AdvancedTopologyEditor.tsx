@@ -50,11 +50,11 @@ const MIN_MASTER_NODE_WIDTH = 200;
 const M_NODE_SCALE_FACTOR_PER_CHILD = 1.2;
 
 const initialActiveHandles = {
-  S: { top: true, bottom: true, left: true, right: true },
-  C: { top: true, bottom: true, left: true, right: true },
-  U: { top: false, bottom: true, left: false, right: true },
-  T: { top: true, bottom: false, left: true, right: false },
-  M: { top: true, bottom: true, left: true, right: true },
+  S: { top: true, bottom: true, left: false, right: false },
+  C: { top: true, bottom: true, left: false, right: false },
+  U: { top: false, bottom: true, left: false, right: false }, // Can only connect from bottom
+  T: { top: true, bottom: false, left: false, right: false }, // Can only connect to top
+  M: { top: true, bottom: true, left: true, right: true }, // Master nodes are containers
 };
 
 export function AdvancedTopologyEditor() {
@@ -123,46 +123,52 @@ export function AdvancedTopologyEditor() {
     return currentNodes.map(n => (n.id === masterNodeId ? updatedMasterNode : n));
   }, []);
 
-  const getOptimalHandlesForConnection = useCallback((sourceNode: Node, targetNode: Node): { sourceHandle: string, targetHandle: string } => {
-    const sourceCenter = {
-      x: sourceNode.positionAbsolute!.x + (sourceNode.width! / 2),
-      y: sourceNode.positionAbsolute!.y + (sourceNode.height! / 2),
-    };
-    const targetCenter = {
-      x: targetNode.positionAbsolute!.x + (targetNode.width! / 2),
-      y: targetNode.positionAbsolute!.y + (targetNode.height! / 2),
-    };
+ const getOptimalHandlesForConnection = useCallback((sourceNode: Node, targetNode: Node): { sourceHandle: string, targetHandle: string } => {
+    let sh: Position, th: Position;
 
-    const dx = targetCenter.x - sourceCenter.x;
-    const dy = targetCenter.y - sourceCenter.y;
+    const dy = (targetNode.positionAbsolute!.y + (targetNode.height! / 2)) - 
+               (sourceNode.positionAbsolute!.y + (sourceNode.height! / 2));
 
-    let sourceHandle: string, targetHandle: string;
-
-    if (Math.abs(dy) >= Math.abs(dx)) {
-      if (dy > 0) {
-        sourceHandle = Position.Bottom; targetHandle = Position.Top;
-      } else {
-        sourceHandle = Position.Top; targetHandle = Position.Bottom;
-      }
-    } else {
-      if (dx > 0) {
-        sourceHandle = Position.Right; targetHandle = Position.Left;
-      } else {
-        sourceHandle = Position.Left; targetHandle = Position.Right;
-      }
+    // Determine basic vertical preference
+    if (dy >= 0) { // Target is below or at same level
+        sh = Position.Bottom;
+        th = Position.Top;
+    } else { // Target is above
+        sh = Position.Top;
+        th = Position.Bottom;
     }
 
+    // Override for U (source)
     if (sourceNode.data.role === 'U') {
-        if (sourceHandle === Position.Left) sourceHandle = Position.Right;
-        if (sourceHandle === Position.Top) sourceHandle = Position.Bottom;
+        sh = Position.Bottom;
+        // If U connects to S/C, target S/C should connect on Top
+        if (targetNode.data.role === 'S' || targetNode.data.role === 'C') {
+            th = Position.Top;
+        }
     }
+    // Override for T (target)
     if (targetNode.data.role === 'T') {
-        if (targetHandle === Position.Right) targetHandle = Position.Left;
-        if (targetHandle === Position.Bottom) targetHandle = Position.Top;
+        th = Position.Top;
+        // If S/C connects to T, source S/C should connect from Bottom
+        if (sourceNode.data.role === 'S' || sourceNode.data.role === 'C') {
+            // Re-evaluate source handle based on relative position to T if T dictates Top
+             if (dy >= 0) { // Target T is below or at same level
+                sh = Position.Bottom;
+            } else { // Target T is above
+                sh = Position.Top;
+            }
+        }
+    }
+    
+    // This case should be caught by connection validation, but handles it defensively
+    if (sourceNode.data.role === 'U' && targetNode.data.role === 'T') {
+        sh = Position.Bottom;
+        th = Position.Top;
     }
 
-    return { sourceHandle, targetHandle };
+    return { sourceHandle: sh, targetHandle: th };
   }, []);
+
 
   const updateAffectedNodeHandles = useCallback((nodeId: string, currentNodes: Node[], currentEdges: Edge[]): Node[] => {
     return currentNodes.map(n => {
@@ -177,27 +183,17 @@ export function AdvancedTopologyEditor() {
         let newActiveHandles = { ...initialActiveHandles[n.data.role as keyof typeof initialActiveHandles] };
 
         if (relevantConnections.length === 0) {
+          // No change from initialActiveHandles if no relevant connections
         } else if (n.data.role === 'U') {
-            const edge = relevantConnections[0];
-            if (edge.sourceHandle === Position.Right) newActiveHandles = { top: false, bottom: false, left: false, right: true };
-            else if (edge.sourceHandle === Position.Bottom) newActiveHandles = { top: false, bottom: true, left: false, right: false };
+            newActiveHandles = { top: false, bottom: true, left: false, right: false };
         } else if (n.data.role === 'T') {
-            const edge = relevantConnections[0];
-            if (edge.targetHandle === Position.Left) newActiveHandles = { top: false, bottom: false, left: true, right: false };
-            else if (edge.targetHandle === Position.Top) newActiveHandles = { top: true, bottom: false, left: false, right: false };
+            newActiveHandles = { top: true, bottom: false, left: false, right: false };
         } else if (n.data.role === 'S' || n.data.role === 'C') {
-            let hasHorizontal = false;
-            let hasVertical = false;
-            relevantConnections.forEach(edge => {
-                const handle = edge.source === n.id ? edge.sourceHandle : edge.targetHandle;
-                if (handle === Position.Left || handle === Position.Right) hasHorizontal = true;
-                if (handle === Position.Top || handle === Position.Bottom) hasVertical = true;
-            });
-
-            if (hasHorizontal && !hasVertical) newActiveHandles = { top: false, bottom: false, left: true, right: true };
-            else if (!hasHorizontal && hasVertical) newActiveHandles = { top: true, bottom: true, left: false, right: false };
-            else newActiveHandles = { top: true, bottom: true, left: true, right: true };
+            newActiveHandles = { top: true, bottom: true, left: false, right: false };
         }
+        
+        newActiveHandles.left = false;
+        newActiveHandles.right = false;
 
         return { ...n, data: { ...n.data, activeHandles: newActiveHandles } };
       }
@@ -1331,3 +1327,4 @@ export function AdvancedTopologyEditor() {
     </div>
   );
 }
+

@@ -49,12 +49,12 @@ export const MasterNode: React.FC<NodeProps<CustomNodeData>> = memo(({ data }) =
   
   return (
     <>
-      {!isAdvancedContainerRole && data.masterSubRole === 'client-role' && (
-        <>
-          <Handle type="target" position={Position.Left} id="m-left" className="!bg-cyan-500 w-2.5 h-2.5" />
-          <Handle type="source" position={Position.Right} id="m-right" className="!bg-cyan-500 w-2.5 h-2.5" />
-        </>
-      )}
+      {/* Master nodes (M) are containers and not directly part of the top/bottom only connection logic for S,C,U,T */}
+      <Handle type="target" position={Position.Top} id="m-top" className="!bg-purple-500 w-2.5 h-2.5" />
+      <Handle type="source" position={Position.Bottom} id="m-bottom" className="!bg-purple-500 w-2.5 h-2.5" />
+      <Handle type="target" position={Position.Left} id="m-left" className="!bg-cyan-500 w-2.5 h-2.5" />
+      <Handle type="source" position={Position.Right} id="m-right" className="!bg-cyan-500 w-2.5 h-2.5" />
+      
       <div className="font-semibold text-sm mb-1">{data.label} 
         {!isAdvancedContainerRole && <span className="text-xs text-muted-foreground"> {subRoleText}</span>}
       </div>
@@ -169,7 +169,6 @@ export const CardNode: React.FC<
 
         {isExpanded && (
           <div className="text-xs space-y-0.5 w-full pl-1 overflow-hidden text-ellipsis">
-            {/* Role information removed as per request */}
             {data.tunnelAddress && <p className="truncate" title={`隧道: ${data.tunnelAddress}`}><strong>隧道:</strong> {data.tunnelAddress}</p>}
             {data.targetAddress && <p className="truncate" title={`目标: ${data.targetAddress}`}><strong>目标:</strong> {data.targetAddress}</p>}
           </div>
@@ -193,26 +192,21 @@ export const CardNode: React.FC<
         <>
           <Handle type="target" position={Position.Top} id="top" className={cn(handleBaseClasses, !data.activeHandles?.top && handleHiddenClasses)} />
           <Handle type="source" position={Position.Bottom} id="bottom" className={cn(handleBaseClasses, !data.activeHandles?.bottom && handleHiddenClasses)} />
-          <Handle type="target" position={Position.Left} id="left" className={cn(handleBaseClasses, !data.activeHandles?.left && handleHiddenClasses)} />
-          <Handle type="source" position={Position.Right} id="right" className={cn(handleBaseClasses, !data.activeHandles?.right && handleHiddenClasses)} />
+          {/* Left and Right handles removed for S and C nodes */}
         </>
       )}
 
       {data.role === 'U' && (
         <>
-          <Handle type="source" position={Position.Top} id="top" className={cn(handleBaseClasses, !data.activeHandles?.top && handleHiddenClasses)} />
+          {/* Only bottom source handle for U nodes */}
           <Handle type="source" position={Position.Bottom} id="bottom" className={cn(handleBaseClasses, !data.activeHandles?.bottom && handleHiddenClasses)} />
-          <Handle type="source" position={Position.Left} id="left" className={cn(handleBaseClasses, !data.activeHandles?.left && handleHiddenClasses)} />
-          <Handle type="source" position={Position.Right} id="right" className={cn(handleBaseClasses, !data.activeHandles?.right && handleHiddenClasses)} />
         </>
       )}
 
       {data.role === 'T' && (
         <>
+          {/* Only top target handle for T nodes */}
           <Handle type="target" position={Position.Top} id="top" className={cn(handleBaseClasses, !data.activeHandles?.top && handleHiddenClasses)} />
-          <Handle type="target" position={Position.Bottom} id="bottom" className={cn(handleBaseClasses, !data.activeHandles?.bottom && handleHiddenClasses)} />
-          <Handle type="target" position={Position.Left} id="left" className={cn(handleBaseClasses, !data.activeHandles?.left && handleHiddenClasses)} />
-          <Handle type="target" position={Position.Right} id="right" className={cn(handleBaseClasses, !data.activeHandles?.right && handleHiddenClasses)} />
         </>
       )}
     </>
@@ -224,3 +218,4 @@ export const nodeTypes = {
   cardNode: CardNode,
   masterNode: MasterNode,
 };
+
