@@ -47,7 +47,7 @@ const masterSchema = baseSchema.extend({
 
 const serverSchema = baseSchema.extend({
   tunnelAddressS: z.string().min(1, "隧道地址不能为空。").regex(hostPortRegex, hostPortErrorMsg),
-  targetAddressS: z.string().min(1, "目标地址 (业务数据) 不能为空。").regex(hostPortRegex, hostPortErrorMsg),
+  targetAddressS: z.string().min(1, "目标地址不能为空。").regex(hostPortRegex, hostPortErrorMsg),
   logLevelS: z.enum(["master", "debug", "info", "warn", "error", "event"]),
   tlsModeS: z.enum(["master", "0", "1", "2"]),
   certPathS: z.optional(z.string()),
@@ -96,21 +96,20 @@ export function EditTopologyNodeDialog({
 
             if (effectiveIsSingleEnded) { 
                 if (!data.localListenAddressC_Single || !hostPortRegex.test(data.localListenAddressC_Single)) {
-                  ctx.addIssue({ code: z.ZodIssueCode.custom, message: `本地监听地址 (客户端, 单端模式) 无效 (${hostPortErrorMsg})。`, path: ["localListenAddressC_Single"] });
+                  ctx.addIssue({ code: z.ZodIssueCode.custom, message: `本地监听地址无效 (${hostPortErrorMsg})。`, path: ["localListenAddressC_Single"] });
                 }
                 if (!data.remoteTargetAddressC_Single || !hostPortRegex.test(data.remoteTargetAddressC_Single)) {
-                  ctx.addIssue({ code: z.ZodIssueCode.custom, message: `目标服务地址 (单端模式) 无效 (${hostPortErrorMsg})。`, path: ["remoteTargetAddressC_Single"] });
+                  ctx.addIssue({ code: z.ZodIssueCode.custom, message: `目标服务地址无效 (${hostPortErrorMsg})。`, path: ["remoteTargetAddressC_Single"] });
                 }
             } else { 
                 if (!data.tunnelAddressC_Normal || !hostPortRegex.test(data.tunnelAddressC_Normal)) {
-                  ctx.addIssue({ code: z.ZodIssueCode.custom, message: `隧道地址 (连接服务端) 无效 (${hostPortErrorMsg})。`, path: ["tunnelAddressC_Normal"] });
+                  ctx.addIssue({ code: z.ZodIssueCode.custom, message: `隧道地址无效 (${hostPortErrorMsg})。`, path: ["tunnelAddressC_Normal"] });
                 }
                 if (data.localListenAddressC_Normal && data.localListenAddressC_Normal.trim() !== "" && !hostPortRegex.test(data.localListenAddressC_Normal)) {
-                  ctx.addIssue({ code: z.ZodIssueCode.custom, message: `本地监听地址 (客户端) 无效 (${hostPortErrorMsg})。`, path: ["localListenAddressC_Normal"] });
+                  ctx.addIssue({ code: z.ZodIssueCode.custom, message: `本地监听地址无效 (${hostPortErrorMsg})。`, path: ["localListenAddressC_Normal"] });
                 }
             }
             
-            // TLS validation only if not single-ended client
             if (!effectiveIsSingleEnded) {
                 const currentTlsMode = data.tlsModeC;
                 if (currentTlsMode === "2") {
@@ -167,20 +166,20 @@ export function EditTopologyNodeDialog({
           ...defaultVals,
           isSingleEndedForwardC: isEffectivelySingleEndedForDefaults,
           logLevelC: (data.logLevel as any) || "master", 
-          tlsModeC: (data.tlsMode as any) || (isEffectivelySingleEndedForDefaults ? "0" : "master"), // Default TLS for single-ended is 0
+          tlsModeC: (data.tlsMode as any) || (isEffectivelySingleEndedForDefaults ? "0" : "master"),
           certPathC: data.certPath || "",
           keyPathC: data.keyPath || "",
         };
         if (isEffectivelySingleEndedForDefaults) {
-          (defaultVals as any).localListenAddressC_Single = data.tunnelAddress || ""; // In single-ended, node.data.tunnelAddress is local listen
+          (defaultVals as any).localListenAddressC_Single = data.tunnelAddress || ""; 
           (defaultVals as any).remoteTargetAddressC_Single = data.targetAddress || "";
         } else {
           if (isInterMasterClientLink && interMasterLinkSourceInfo) {
             (defaultVals as any).tunnelAddressC_Normal = interMasterLinkSourceInfo.serverTunnelAddress;
           } else {
-            (defaultVals as any).tunnelAddressC_Normal = data.tunnelAddress || ""; // server's tunnel
+            (defaultVals as any).tunnelAddressC_Normal = data.tunnelAddress || ""; 
           }
-          (defaultVals as any).localListenAddressC_Normal = data.targetAddress || ""; // client's local listen
+          (defaultVals as any).localListenAddressC_Normal = data.targetAddress || ""; 
         }
       } else if (role === 'T' || role === 'U') {
         defaultVals = { ...defaultVals, targetAddressTU: data.targetAddress || "" };
@@ -231,14 +230,14 @@ export function EditTopologyNodeDialog({
       };
       
       if (finalIsSingleEndedDataValue) {
-        updatedData.tunnelAddress = values.localListenAddressC_Single; // Client's local listen
-        updatedData.targetAddress = values.remoteTargetAddressC_Single; // Remote target
-        updatedData.tlsMode = '0'; // TLS not applicable for instance URL construction here
+        updatedData.tunnelAddress = values.localListenAddressC_Single; 
+        updatedData.targetAddress = values.remoteTargetAddressC_Single; 
+        updatedData.tlsMode = '0'; 
         updatedData.certPath = "";
         updatedData.keyPath = "";
       } else { 
-        updatedData.tunnelAddress = values.tunnelAddressC_Normal; // Server's tunnel
-        updatedData.targetAddress = values.localListenAddressC_Normal; // Client's local listen
+        updatedData.tunnelAddress = values.tunnelAddressC_Normal; 
+        updatedData.targetAddress = values.localListenAddressC_Normal; 
         updatedData.tlsMode = values.tlsModeC;
         updatedData.certPath = values.tlsModeC === "2" ? values.certPathC : "";
         updatedData.keyPath = values.tlsModeC === "2" ? values.keyPathC : "";
@@ -318,17 +317,17 @@ export function EditTopologyNodeDialog({
                       <FormDescription className="font-sans text-xs">远程服务端(s)将在此地址监听。</FormDescription><FormMessage /></FormItem>)}
                     />
                     <FormField control={form.control} name="remoteServerForwardAddress" render={({ field }) => (
-                      <FormItem><FormLabel className="font-sans">远程服务端(s)转发地址 (业务数据)</FormLabel><FormControl><Input {...field} placeholder="例: 192.168.1.10:80" className="font-mono" /></FormControl>
+                      <FormItem><FormLabel className="font-sans">远程服务端(s)转发地址</FormLabel><FormControl><Input {...field} placeholder="例: 192.168.1.10:80" className="font-mono" /></FormControl>
                       <FormDescription className="font-sans text-xs">远程服务端(s)将流量转发到此业务地址。</FormDescription><FormMessage /></FormItem>)}
                     />
                   </>
                 )}
                  <FormField control={form.control} name="logLevelM" render={({ field }) => (
-                  <FormItem><FormLabel className="font-sans">日志级别 (默认)</FormLabel><Select onValueChange={field.onChange} value={field.value as string}><FormControl><SelectTrigger className="font-sans"><SelectValue /></SelectTrigger></FormControl><SelectContent><SelectItem value="master">主控默认</SelectItem><SelectItem value="debug">Debug</SelectItem><SelectItem value="info">Info</SelectItem><SelectItem value="warn">Warn</SelectItem><SelectItem value="error">Error</SelectItem><SelectItem value="event">Event</SelectItem></SelectContent></Select>
+                  <FormItem><FormLabel className="font-sans">日志级别</FormLabel><Select onValueChange={field.onChange} value={field.value as string}><FormControl><SelectTrigger className="font-sans"><SelectValue /></SelectTrigger></FormControl><SelectContent><SelectItem value="master">主控默认</SelectItem><SelectItem value="debug">Debug</SelectItem><SelectItem value="info">Info</SelectItem><SelectItem value="warn">Warn</SelectItem><SelectItem value="error">Error</SelectItem><SelectItem value="event">Event</SelectItem></SelectContent></Select>
                    <FormDescription className="font-sans text-xs">此主控内S/C节点的默认日志级别。</FormDescription>
                   <FormMessage /></FormItem>)} />
                 <FormField control={form.control} name="tlsModeM" render={({ field }) => (
-                  <FormItem><FormLabel className="font-sans">TLS模式 (默认)</FormLabel><Select onValueChange={field.onChange} value={field.value as string}><FormControl><SelectTrigger className="font-sans"><SelectValue /></SelectTrigger></FormControl><SelectContent>{Object.entries(MASTER_TLS_MODE_DISPLAY_MAP).map(([val, lab]) => (<SelectItem key={val} value={val}>{lab}</SelectItem>))}</SelectContent></Select>
+                  <FormItem><FormLabel className="font-sans">TLS模式</FormLabel><Select onValueChange={field.onChange} value={field.value as string}><FormControl><SelectTrigger className="font-sans"><SelectValue /></SelectTrigger></FormControl><SelectContent>{Object.entries(MASTER_TLS_MODE_DISPLAY_MAP).map(([val, lab]) => (<SelectItem key={val} value={val}>{lab}</SelectItem>))}</SelectContent></Select>
                   <FormDescription className="font-sans text-xs">此主控内S/C节点的默认TLS模式。</FormDescription>
                   <FormMessage /></FormItem>)} />
               </>
@@ -339,14 +338,14 @@ export function EditTopologyNodeDialog({
                 <FormField control={form.control} name="tunnelAddressS" render={({ field }) => (
                   <FormItem><FormLabel className="font-sans">隧道地址</FormLabel><FormControl><Input {...field} placeholder="例: [::]:10101 或 0.0.0.0:10101" className="font-mono" /></FormControl><FormMessage /></FormItem>)} />
                 <FormField control={form.control} name="targetAddressS" render={({ field }) => (
-                  <FormItem><FormLabel className="font-sans">目标地址 (业务数据)</FormLabel><FormControl><Input {...field} placeholder="例: 192.168.1.10:80" className="font-mono" /></FormControl><FormMessage /></FormItem>)} />
+                  <FormItem><FormLabel className="font-sans">目标地址</FormLabel><FormControl><Input {...field} placeholder="例: 192.168.1.10:80" className="font-mono" /></FormControl><FormMessage /></FormItem>)} />
                 <FormField control={form.control} name="logLevelS" render={({ field }) => (
                   <FormItem><FormLabel className="font-sans">日志级别</FormLabel><Select onValueChange={field.onChange} value={field.value as string}><FormControl><SelectTrigger className="font-sans"><SelectValue /></SelectTrigger></FormControl><SelectContent><SelectItem value="master">主控默认</SelectItem><SelectItem value="debug">Debug</SelectItem><SelectItem value="info">Info</SelectItem><SelectItem value="warn">Warn</SelectItem><SelectItem value="error">Error</SelectItem><SelectItem value="event">Event</SelectItem></SelectContent></Select><FormMessage /></FormItem>)} />
                 <FormField control={form.control} name="tlsModeS" render={({ field }) => (
                   <FormItem><FormLabel className="font-sans">TLS模式</FormLabel><Select onValueChange={field.onChange} value={field.value as string}><FormControl><SelectTrigger className="font-sans"><SelectValue /></SelectTrigger></FormControl><SelectContent>{Object.entries(MASTER_TLS_MODE_DISPLAY_MAP).map(([val, lab]) => (<SelectItem key={val} value={val}>{lab}</SelectItem>))}</SelectContent></Select><FormMessage /></FormItem>)} />
                 {watchedServerTlsMode === '2' && (<>
-                  <FormField control={form.control} name="certPathS" render={({ field }) => (<FormItem><FormLabel className="font-sans">证书路径 (TLS 2)</FormLabel><FormControl><Input {...field} placeholder="/path/to/cert.pem" className="font-mono" /></FormControl><FormMessage /></FormItem>)} />
-                  <FormField control={form.control} name="keyPathS" render={({ field }) => (<FormItem><FormLabel className="font-sans">密钥路径 (TLS 2)</FormLabel><FormControl><Input {...field} placeholder="/path/to/key.pem" className="font-mono" /></FormControl><FormMessage /></FormItem>)} />
+                  <FormField control={form.control} name="certPathS" render={({ field }) => (<FormItem><FormLabel className="font-sans">证书路径</FormLabel><FormControl><Input {...field} placeholder="/path/to/cert.pem" className="font-mono" /></FormControl><FormMessage /></FormItem>)} />
+                  <FormField control={form.control} name="keyPathS" render={({ field }) => (<FormItem><FormLabel className="font-sans">密钥路径</FormLabel><FormControl><Input {...field} placeholder="/path/to/key.pem" className="font-mono" /></FormControl><FormMessage /></FormItem>)} />
                 </>)}
               </>
             )}
@@ -362,7 +361,6 @@ export function EditTopologyNodeDialog({
                         <FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} id="isSingleEndedForwardCheckbox" /></FormControl>
                         <div className="space-y-0.5 leading-none">
                           <FormLabel htmlFor="isSingleEndedForwardCheckbox" className="font-sans cursor-pointer text-sm">单端转发模式</FormLabel>
-                          {/* Removed description as per request */}
                         </div>
                       </FormItem>
                     )}
@@ -376,15 +374,15 @@ export function EditTopologyNodeDialog({
                 {renderClientAsSingleEnded ? (
                   <>
                     <FormField control={form.control} name="localListenAddressC_Single" render={({ field }) => (
-                      <FormItem><FormLabel className="font-sans">本地监听地址 (客户端, 单端模式)</FormLabel><FormControl><Input {...field} placeholder="例: [::]:10101 或 127.0.0.1:10101" className="font-mono" /></FormControl><FormMessage /></FormItem>)} />
+                      <FormItem><FormLabel className="font-sans">本地监听地址</FormLabel><FormControl><Input {...field} placeholder="例: [::]:10101 或 127.0.0.1:10101" className="font-mono" /></FormControl><FormMessage /></FormItem>)} />
                     <FormField control={form.control} name="remoteTargetAddressC_Single" render={({ field }) => (
-                      <FormItem><FormLabel className="font-sans">目标服务地址 (单端模式)</FormLabel><FormControl><Input {...field} placeholder="例: remote.host:8000" className="font-mono" /></FormControl><FormMessage /></FormItem>)} />
+                      <FormItem><FormLabel className="font-sans">目标服务地址</FormLabel><FormControl><Input {...field} placeholder="例: remote.host:8000" className="font-mono" /></FormControl><FormMessage /></FormItem>)} />
                   </>
                 ) : ( 
                   <>
                     <FormField control={form.control} name="tunnelAddressC_Normal" render={({ field }) => (
                       <FormItem>
-                        <FormLabel className="font-sans">隧道地址 (连接服务端)</FormLabel>
+                        <FormLabel className="font-sans">隧道地址</FormLabel>
                         <FormControl>
                           <Input
                             {...field}
@@ -402,7 +400,7 @@ export function EditTopologyNodeDialog({
                       </FormItem>
                     )} />
                     <FormField control={form.control} name="localListenAddressC_Normal" render={({ field }) => (
-                      <FormItem><FormLabel className="font-sans">本地监听地址 (客户端)</FormLabel><FormControl><Input {...field} placeholder="例: [::]:8080 或 127.0.0.1:8080" className="font-mono" /></FormControl><FormMessage /></FormItem>)} />
+                      <FormItem><FormLabel className="font-sans">本地监听地址</FormLabel><FormControl><Input {...field} placeholder="例: [::]:8080 或 127.0.0.1:8080" className="font-mono" /></FormControl><FormMessage /></FormItem>)} />
                   </>
                 )}
                 <FormField control={form.control} name="logLevelC" render={({ field }) => (
@@ -411,7 +409,7 @@ export function EditTopologyNodeDialog({
                  {!(role === 'C' && renderClientAsSingleEnded) && (
                     <FormField control={form.control} name="tlsModeC" render={({ field }) => (
                     <FormItem>
-                        <FormLabel className="font-sans">TLS模式 (客户端连接服务端)</FormLabel>
+                        <FormLabel className="font-sans">TLS模式</FormLabel>
                         <Select onValueChange={field.onChange} value={field.value as string}>
                         <FormControl><SelectTrigger className="font-sans"><SelectValue /></SelectTrigger></FormControl>
                         <SelectContent>{Object.entries(MASTER_TLS_MODE_DISPLAY_MAP).map(([val, lab]) => (<SelectItem key={val} value={val}>{lab}</SelectItem>))}</SelectContent>
@@ -422,8 +420,8 @@ export function EditTopologyNodeDialog({
                  )}
 
                 {watchedClientTlsMode === '2' && !(role === 'C' && renderClientAsSingleEnded) && (<>
-                  <FormField control={form.control} name="certPathC" render={({ field }) => (<FormItem><FormLabel className="font-sans">证书路径 (TLS 2)</FormLabel><FormControl><Input {...field} placeholder="/path/to/cert.pem" className="font-mono" /></FormControl><FormMessage /></FormItem>)} />
-                  <FormField control={form.control} name="keyPathC" render={({ field }) => (<FormItem><FormLabel className="font-sans">密钥路径 (TLS 2)</FormLabel><FormControl><Input {...field} placeholder="/path/to/key.pem" className="font-mono" /></FormControl><FormMessage /></FormItem>)} />
+                  <FormField control={form.control} name="certPathC" render={({ field }) => (<FormItem><FormLabel className="font-sans">证书路径</FormLabel><FormControl><Input {...field} placeholder="/path/to/cert.pem" className="font-mono" /></FormControl><FormMessage /></FormItem>)} />
+                  <FormField control={form.control} name="keyPathC" render={({ field }) => (<FormItem><FormLabel className="font-sans">密钥路径</FormLabel><FormControl><Input {...field} placeholder="/path/to/key.pem" className="font-mono" /></FormControl><FormMessage /></FormItem>)} />
                 </>)}
               </>
             )}
@@ -436,7 +434,6 @@ export function EditTopologyNodeDialog({
                   <FormItem>
                     <FormLabel className="font-sans">目标服务地址</FormLabel>
                     <FormControl><Input {...field} placeholder="例: 192.168.1.10:80" className="font-mono" /></FormControl>
-                    {/* Removed description as per request */}
                     <FormMessage />
                   </FormItem>
                 )}
@@ -457,3 +454,5 @@ export function EditTopologyNodeDialog({
     </Dialog>
   );
 }
+
+    
