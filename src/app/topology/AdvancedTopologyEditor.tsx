@@ -1223,90 +1223,6 @@ export function AdvancedTopologyEditor() {
     });
   };
 
-  const handleRenderMasterInstancesOnCanvas = useCallback(async (masterIdToRender: string) => {
-    const masterConfig = getApiConfigById(masterIdToRender);
-    if (!masterConfig) { toast({ title: "错误", description: "无法找到选定主控的配置。", variant: "destructive" }); return; }
-    const apiR = getApiRootUrl(masterIdToRender); const apiT = getToken(masterIdToRender);
-    if (!apiR || !apiT) { toast({ title: "错误", description: `主控 "${masterConfig.name}" 的API配置不完整。`, variant: "destructive" }); return; }
-
-    setNodesInternal([]); setEdgesInternal([]); setNodeIdCounter(0); setContextMenu(null);
-    let currentIdCounter = 0;
-
-    toast({ title: `正在加载主控 ${masterConfig.name} 的实例...` });
-
-    try {
-        const fetchedInstancesRaw: ApiInstanceType[] = await nodePassApi.getInstances(apiR, apiT);
-        const instancesForThisMaster = fetchedInstancesRaw.filter(inst => inst.id !== '********');
-
-        const newRenderedNodes: Node[] = [];
-
-        const mContainerNodeId = `adv-master-container-${masterConfig.id.substring(0, 8)}-${++currentIdCounter}`;
-        const M_NODE_CHILD_PADDING_VISUAL = 25;
-        const mContainerNode: Node = {
-            id: mContainerNodeId, type: 'masterNode', position: { x: 100, y: 50 },
-            data: {
-                label: `主控: ${masterConfig.name}`, role: 'M', isContainer: true,
-                masterId: masterConfig.id, masterName: masterConfig.name,
-                apiUrl: masterConfig.apiUrl, defaultLogLevel: masterConfig.masterDefaultLogLevel,
-                defaultTlsMode: masterConfig.masterDefaultTlsMode, masterSubRole: 'container',
-                activeHandles: { ...initialActiveHandles.M },
-            },
-            style: { ...nodeStyles.m.base, width: MIN_MASTER_NODE_WIDTH, height: MIN_MASTER_NODE_HEIGHT },
-            width: MIN_MASTER_NODE_WIDTH, height: MIN_MASTER_NODE_HEIGHT,
-        };
-        newRenderedNodes.push(mContainerNode);
-
-        let internalNodeYOffset = M_NODE_CHILD_PADDING_VISUAL;
-        const internalNodeXOffset = M_NODE_CHILD_PADDING_VISUAL;
-
-        for (const inst of instancesForThisMaster) {
-            const parsedUrl = parseNodePassUrl(inst.url);
-            const nodeRole = inst.type === 'server' ? 'S' : 'C';
-            const commonNodeData: Partial<CustomNodeData> = {
-                originalInstanceId: inst.id, originalInstanceUrl: inst.url,
-                tunnelAddress: parsedUrl.tunnelAddress || '', targetAddress: parsedUrl.targetAddress || '',
-                logLevel: parsedUrl.logLevel || 'master',
-                tlsMode: parsedUrl.tlsMode || (inst.type === 'client' ? '0' : 'master'),
-                certPath: parsedUrl.certPath || '', keyPath: parsedUrl.keyPath || '',
-                parentNode: mContainerNodeId,
-                isExpanded: false,
-                activeHandles: { ...initialActiveHandles[nodeRole as keyof typeof initialActiveHandles] },
-            };
-
-            const nodeTypeIcon = inst.type === 'server' ? Server : ClientIcon;
-            const instanceNodeId = `${nodeRole.toLowerCase()}-${inst.id.substring(0,8)}-${++currentIdCounter}`;
-            const nodeLabelPrefix = nodeRole === 'S' ? '服务端' : '客户端';
-
-            const instanceNode: Node = {
-                id: instanceNodeId, type: 'cardNode',
-                position: { x: internalNodeXOffset, y: internalNodeYOffset },
-                parentNode: mContainerNodeId, extent: 'parent',
-                data: {
-                    ...commonNodeData,
-                    label: `${nodeLabelPrefix}: ${inst.id.substring(0,5)}..`, role: nodeRole, icon: nodeTypeIcon,
-                    isSingleEndedForwardC: nodeRole === 'C' ? (parsedUrl.scheme === 'client' && isWildcardHostname(extractHostname(parsedUrl.tunnelAddress || ""))) : undefined,
-                } as CustomNodeData,
-                width: ICON_ONLY_NODE_SIZE, height: ICON_ONLY_NODE_SIZE,
-            };
-            newRenderedNodes.push(instanceNode);
-            internalNodeYOffset += ICON_ONLY_NODE_SIZE + 15;
-        }
-
-        const finalNodesWithChildren = updateMasterNodeDimensions(mContainerNodeId, newRenderedNodes);
-
-        setNodesInternal(finalNodesWithChildren);
-        setNodeIdCounter(currentIdCounter);
-
-        setTimeout(() => { fitView({ duration: 400, padding: 0.1 }); }, 100);
-        toast({ title: `主控 ${masterConfig.name} 的实例已渲染。`, description: `共 ${instancesForThisMaster.length} 个实例。` });
-
-    } catch (error: any) {
-      console.error(`渲染主控 ${masterConfig.name} 实例失败:`, error);
-      toast({ title: `渲染主控 ${masterConfig.name} 实例失败`, description: error.message, variant: "destructive" });
-      setNodesInternal([]); setEdgesInternal([]);
-    }
-  }, [getApiConfigById, getApiRootUrl, getToken, toast, setNodesInternal, setEdgesInternal, fitView, updateMasterNodeDimensions]);
-
 
   return (
     <div ref={editorContainerRef} className="flex flex-col flex-grow h-full relative">
@@ -1320,7 +1236,7 @@ export function AdvancedTopologyEditor() {
               </h2>
               <p className="text-xs text-muted-foreground font-sans mb-2">拖拽主控到画布。</p>
               <ScrollArea className="flex-grow pr-1 max-h-60">
-                <MastersPalette onRenderMasterInstances={handleRenderMasterInstancesOnCanvas} />
+                <MastersPalette />
               </ScrollArea>
             </div>
             <Separator className="my-0" />

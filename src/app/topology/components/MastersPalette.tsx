@@ -3,7 +3,7 @@
 
 import React from 'react';
 import { useApiConfig, type NamedApiConfig } from '@/hooks/use-api-key';
-import { Cog, MoreVertical, ToyBrick, RefreshCw, Loader2 } from 'lucide-react';
+import { Cog, MoreVertical, RefreshCw, Loader2 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import {
@@ -15,19 +15,18 @@ import {
 import { useQuery } from '@tanstack/react-query';
 import { nodePassApi } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
-import { parseNodePassUrl, extractHostname } from '@/lib/url-utils'; // Added extractHostname
+import { parseNodePassUrl, extractHostname, isWildcardHostname } from '@/lib/url-utils'; // Added isWildcardHostname
 
 interface MasterPaletteItemProps {
   config: NamedApiConfig;
-  onRenderMasterInstances: (masterId: string) => void;
 }
 
-const MasterPaletteItem: React.FC<MasterPaletteItemProps> = ({ config, onRenderMasterInstances }) => {
+const MasterPaletteItem: React.FC<MasterPaletteItemProps> = ({ config }) => {
   const { getApiRootUrl, getToken } = useApiConfig();
   const { toast } = useToast();
 
   const { data: instanceCounts, isLoading: isLoadingInstances, error, refetch } = useQuery<
-    { clientCount: number; tunnelCount: number }, // Updated to tunnelCount
+    { clientCount: number; tunnelCount: number },
     Error
   >({
     queryKey: ['masterInstancesCount', config.id],
@@ -42,7 +41,6 @@ const MasterPaletteItem: React.FC<MasterPaletteItemProps> = ({ config, onRenderM
       let serverCount = 0;
       let externalClientConnections = 0;
 
-      const localServerListenAddresses = new Set<string>();
       const masterApiHost = extractHostname(config.apiUrl);
 
       fetchedInstances.forEach(instance => {
@@ -52,12 +50,9 @@ const MasterPaletteItem: React.FC<MasterPaletteItemProps> = ({ config, onRenderM
           const parsedClientUrl = parseNodePassUrl(instance.url);
           if (parsedClientUrl.tunnelAddress) {
             const clientConnectsToHost = extractHostname(parsedClientUrl.tunnelAddress);
-            // Check if client connects to a host different from its own master's API host
-            // This is a heuristic for "external" connection.
-            // A more robust check would involve checking against known server instances on this master.
+            
             if (clientConnectsToHost && masterApiHost && clientConnectsToHost.toLowerCase() !== masterApiHost.toLowerCase()) {
                let isExternal = true;
-               // Check if the client tunnel address matches any local server instance listen address
                for (const sInst of fetchedInstances) {
                    if (sInst.type === 'server') {
                        const parsedSUrl = parseNodePassUrl(sInst.url);
@@ -82,7 +77,6 @@ const MasterPaletteItem: React.FC<MasterPaletteItemProps> = ({ config, onRenderM
           serverCount++;
         }
       });
-      // Tunnel count = server instances + client instances connecting externally
       const tunnelCount = serverCount + externalClientConnections;
       return { clientCount, tunnelCount };
     },
@@ -108,7 +102,7 @@ const MasterPaletteItem: React.FC<MasterPaletteItemProps> = ({ config, onRenderM
     : error
     ? <RefreshCw className="h-3 w-3 ml-1 text-destructive cursor-pointer" onClick={() => refetch()} title="点击重试计数"/>
     : instanceCounts
-    ? `(${instanceCounts.clientCount}c/${instanceCounts.tunnelCount}t)` // Display tunnelCount
+    ? `(${instanceCounts.clientCount}c/${instanceCounts.tunnelCount}t)`
     : '';
 
 
@@ -132,10 +126,6 @@ const MasterPaletteItem: React.FC<MasterPaletteItemProps> = ({ config, onRenderM
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="font-sans text-xs">
-          <DropdownMenuItem onClick={() => onRenderMasterInstances(config.id)}>
-            <ToyBrick className="mr-2 h-3.5 w-3.5" />
-            在画布渲染全部实例
-          </DropdownMenuItem>
            <DropdownMenuItem onClick={() => refetch()} disabled={isLoadingInstances}>
             <RefreshCw className="mr-2 h-3.5 w-3.5" />
             刷新实例计数
@@ -147,7 +137,7 @@ const MasterPaletteItem: React.FC<MasterPaletteItemProps> = ({ config, onRenderM
 };
 
 
-export function MastersPalette({ onRenderMasterInstances }: { onRenderMasterInstances: (masterId: string) => void; }) {
+export function MastersPalette() {
   const { apiConfigsList, isLoading } = useApiConfig();
 
   return (
@@ -166,7 +156,6 @@ export function MastersPalette({ onRenderMasterInstances }: { onRenderMasterInst
             <MasterPaletteItem
               key={config.id}
               config={config}
-              onRenderMasterInstances={onRenderMasterInstances}
             />
           ))}
         </div>
