@@ -16,17 +16,16 @@ export function AppLogo({ className }: AppLogoProps) {
 
   const lightModeSvg = `
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 480" class="${className || ''}">
-      <rect width="480" height="480" rx="24" ry="24" fill="#FFFFFF"/>
+      <rect width="480" height="480" rx="24" ry="24" fill="transparent"/>
       <g transform="translate(64, 57.2) scale(0.77)">
         <path fill="#000000" d="${logoPath}"/>
       </g>
     </svg>
   `;
 
-  // Updated dark mode SVG: rect fill changed from #000000 to #141414
   const darkModeSvg = `
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 480" class="${className || ''}">
-      <rect width="480" height="480" rx="24" ry="24" fill="#141414"/>
+      <rect width="480" height="480" rx="24" ry="24" fill="transparent"/>
       <g transform="translate(64, 57.2) scale(0.77)">
         <path fill="#FFFFFF" d="${logoPath}"/>
       </g>
