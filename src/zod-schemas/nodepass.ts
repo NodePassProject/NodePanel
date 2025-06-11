@@ -9,7 +9,7 @@ export const createInstanceFormSchema = z.object({
   isSingleEndedForward: z.optional(z.boolean()),
   tunnelAddress: z.string().min(1, "此字段是必需的。"),
   targetAddress: z.optional(z.string()),
-  logLevel: z.enum(["debug", "info", "warn", "error"], {
+  logLevel: z.enum(["master", "debug", "info", "warn", "error"], { // Added "master"
     required_error: "日志级别是必需的。",
   }),
   tlsMode: z.string(),

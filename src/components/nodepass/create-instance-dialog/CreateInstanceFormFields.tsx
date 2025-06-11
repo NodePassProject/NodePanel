@@ -192,6 +192,7 @@ export function CreateInstanceFormFields({
                   </SelectTrigger>
                 </FormControl>
                 <SelectContent>
+                  <SelectItem value="master" className="font-sans text-xs">默认 (主控配置)</SelectItem>
                   <SelectItem value="debug" className="font-sans text-xs">Debug</SelectItem>
                   <SelectItem value="info" className="font-sans text-xs">Info</SelectItem>
                   <SelectItem value="warn" className="font-sans text-xs">Warn</SelectItem>
@@ -200,7 +201,7 @@ export function CreateInstanceFormFields({
               </Select>
               {showDetailedDescriptions && (
                 <FormDescription className="font-sans text-xs mt-0.5">
-                  实例日志级别。如果主控自身配置了默认日志级别 (非"未指定")，则"主控配置"选项将使用该级别。
+                  实例的日志记录级别。选择 '默认 (主控配置)' 时，将采用当前活动主控中设置的默认日志级别。若主控也设为'未指定'，则继承 NodePass 全局默认日志级别。
                 </FormDescription>
               )}
               <FormMessage className="text-xs" />

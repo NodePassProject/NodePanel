@@ -434,7 +434,7 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
       value: isApiKeyInstance ? (
          <Badge variant="outline" className="border-yellow-500 text-yellow-600 whitespace-nowrap font-sans text-xs">
             <KeyRound className="mr-1 h-3.5 w-3.5" />
-            监听中
+            可用
           </Badge>
       ) : <InstanceStatusBadge status={instance.status} />,
       icon: <Cable className="h-4 w-4 text-muted-foreground" />

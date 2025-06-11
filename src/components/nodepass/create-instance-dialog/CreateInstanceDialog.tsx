@@ -55,7 +55,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
       isSingleEndedForward: false,
       tunnelAddress: '',
       targetAddress: '',
-      logLevel: 'info', // Default log level changed to info
+      logLevel: 'master', // Default log level changed to master
       tlsMode: 'master',
       certPath: '',
       keyPath: '',
@@ -74,7 +74,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
         isSingleEndedForward: false,
         tunnelAddress: '',
         targetAddress: '',
-        logLevel: 'info', // Default log level changed to info
+        logLevel: 'master', // Default log level changed to master
         tlsMode: 'master',
         certPath: '',
         keyPath: '',
