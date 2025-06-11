@@ -217,8 +217,8 @@ export function CreateInstanceFormFields({
               render={({ field }) => (
                 <FormItem className="space-y-1">
                   <FormLabel className="font-sans text-xs">
-                    {instanceType === '服务端' ? "TLS 模式 (服务端数据通道)"
-                      : "TLS 模式 (客户端连接服务端行为)"}
+                    {instanceType === '服务端' ? "TLS 模式"
+                      : "TLS 模式"}
                   </FormLabel>
                   <Select onValueChange={field.onChange} value={field.value || "master"}>
                     <FormControl>
