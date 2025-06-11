@@ -6,12 +6,7 @@ import { useApiConfig, type NamedApiConfig } from '@/hooks/use-api-key';
 import { Cog, MoreVertical, RefreshCw, Loader2 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+// DropdownMenu components are no longer needed here
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { nodePassApi } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
@@ -24,7 +19,7 @@ interface MasterPaletteItemProps {
 const MasterPaletteItem: React.FC<MasterPaletteItemProps> = ({ config }) => {
   const { getApiRootUrl, getToken } = useApiConfig();
   const { toast } = useToast();
-  const queryClient = useQueryClient(); // Get query client for manual refetch if needed
+  const queryClient = useQueryClient();
 
   const { data: instanceCounts, isLoading: isLoadingInstances, error, refetch } = useQuery<
     { clientCount: number; tunnelCount: number },
@@ -119,17 +114,7 @@ const MasterPaletteItem: React.FC<MasterPaletteItemProps> = ({ config }) => {
         <span className="truncate mr-1">{config.name}</span>
         {config.id && <span className="text-muted-foreground text-[10px]">{countsDisplay}</span>}
       </div>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="icon" className="h-6 w-6 opacity-50 group-hover:opacity-100">
-            <MoreVertical className="h-3.5 w-3.5" />
-            <span className="sr-only">主控操作</span>
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="font-sans text-xs">
-           {/* Item removed from here, will be a global button */}
-        </DropdownMenuContent>
-      </DropdownMenu>
+      {/* Removed DropdownMenu for individual master refresh */}
     </div>
   );
 };
