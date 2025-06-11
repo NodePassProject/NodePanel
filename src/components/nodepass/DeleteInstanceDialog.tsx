@@ -25,7 +25,7 @@ export function DeleteInstanceDialog({
 
   const description = (
     <>
-      确定删除实例 <span className="font-semibold">{instance.id.substring(0,12)}...</span>？此操作无法撤销。
+      确定删除实例 <span className="font-semibold">{instance.id}</span>？此操作无法撤销。
       <br />
       URL: <span className="font-semibold break-all">{instance.url}</span>。
     </>
@@ -45,3 +45,4 @@ export function DeleteInstanceDialog({
     />
   );
 }
+
