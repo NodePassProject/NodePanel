@@ -83,9 +83,9 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
       const actionText = actionTextMap[variables.action] || variables.action;
       toast({
         title: `实例操作: ${actionText}`,
-        description: `实例 ${data.id.substring(0,8)}... 状态已改为 ${data.status}。`,
+        description: `实例 ${data.id} 状态已改为 ${data.status}。`,
       });
-      onLog?.(`实例 ${data.id.substring(0,8)}... ${actionText}成功，状态: ${data.status}`, 'SUCCESS');
+      onLog?.(`实例 ${data.id} ${actionText}成功，状态: ${data.status}`, 'SUCCESS');
       queryClient.invalidateQueries({ queryKey: ['instances', apiId] });
     },
     onError: (error: any, variables) => {
@@ -93,10 +93,10 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
       const actionText = actionTextMap[variables.action] || variables.action;
       toast({
         title: '实例操作失败',
-        description: `实例 ${variables.instanceId.substring(0,8)}... ${actionText}失败: ${error.message || '未知错误。'}`,
+        description: `实例 ${variables.instanceId} ${actionText}失败: ${error.message || '未知错误。'}`,
         variant: 'destructive',
       });
-      onLog?.(`实例 ${variables.instanceId.substring(0,8)}... ${actionText}失败: ${error.message || '未知错误'}`, 'ERROR');
+      onLog?.(`实例 ${variables.instanceId} ${actionText}失败: ${error.message || '未知错误'}`, 'ERROR');
     },
   });
 
@@ -363,7 +363,7 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
               disabled={isBulkDeleting}
             />
           )
-        }</TableCell><TableCell className="font-medium font-mono text-xs max-w-[100px] truncate" title={instance.id}>{instance.id}</TableCell><TableCell>{
+        }</TableCell><TableCell className="font-medium font-mono text-xs break-all" title={instance.id}>{instance.id}</TableCell><TableCell>{
           instance.id === '********' ? (
             <Badge variant="outline" className="border-yellow-500 text-yellow-600 items-center whitespace-nowrap text-xs py-0.5 px-1.5 font-sans">
               <KeyRound className="h-3 w-3 mr-1" />API 密钥

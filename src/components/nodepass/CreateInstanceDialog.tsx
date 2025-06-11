@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useEffect, useState } from 'react';
@@ -23,7 +24,7 @@ import { useApiConfig, type NamedApiConfig } from '@/hooks/use-api-key';
 import type { AppLogEntry } from '../EventLog';
 import { extractHostname, extractPort, parseNodePassUrlForTopology } from '@/app/topology/lib/topology-utils';
 
-import { CreateInstanceFormFields } from './CreateInstanceFormFields';
+import { CreateInstanceFormFields } from './utils';
 import { buildUrlFromFormValues, formatHostForUrl } from './utils';
 import { MASTER_TLS_MODE_DISPLAY_MAP } from './constants';
 
@@ -142,7 +143,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
             const parsedUrl = parseNodePassUrlForTopology(server.url);
             if (!parsedUrl.tunnelAddress) return null;
             const displayTunnelAddr = parsedUrl.tunnelAddress;
-            return { id: server.id, display: `ID: ${server.id.substring(0,8)}... (${displayTunnelAddr})`, tunnelAddr: displayTunnelAddr };
+            return { id: server.id, display: `ID: ${server.id} (${displayTunnelAddr})`, tunnelAddr: displayTunnelAddr };
         })
         .filter(Boolean) as {id: string, display: string, tunnelAddr: string}[],
     enabled: !!(open && instanceType === 'client' && !autoCreateServer && apiId && apiRoot && apiToken),
@@ -160,8 +161,8 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
     onSuccess: (createdInstance, variables) => {
       const shortUrl = variables.data.url.length > 40 ? variables.data.url.substring(0,37) + "..." : variables.data.url;
       const masterNameForToast = variables.useApiRoot === apiRoot ? apiName : apiConfigsList.find(c => getApiRootUrl(c.id) === variables.useApiRoot)?.name || 'a master';
-      toast({ title: `实例创建于 ${masterNameForToast}`, description: `实例 (URL: ${shortUrl}) -> ID: ${createdInstance.id.substring(0,8)}...` });
-      onLog?.(`实例创建成功于 ${masterNameForToast}: ${createdInstance.type} - ${createdInstance.id.substring(0,8)}... (URL: ${variables.data.url})`, 'SUCCESS');
+      toast({ title: `实例创建于 ${masterNameForToast}`, description: `实例 (URL: ${shortUrl}) -> ID: ${createdInstance.id}` });
+      onLog?.(`实例创建成功于 ${masterNameForToast}: ${createdInstance.type} - ${createdInstance.id} (URL: ${variables.data.url})`, 'SUCCESS');
       queryClient.invalidateQueries({ queryKey: ['instances', variables.useApiRoot === apiRoot ? apiId : apiConfigsList.find(c => getApiRootUrl(c.id) === variables.useApiRoot)?.id] });
       queryClient.invalidateQueries({ queryKey: ['allInstancesForTopologyPage']});
       queryClient.invalidateQueries({ queryKey: ['allInstancesForTraffic']});
@@ -347,7 +348,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
         
         <CreateInstanceFormFields
             form={form}
-            instanceType={instanceType}
+            instanceType={instanceType as "client" | "server"}
             tlsMode={tlsModeWatch}
             autoCreateServer={autoCreateServer}
             activeApiConfig={activeApiConfig}

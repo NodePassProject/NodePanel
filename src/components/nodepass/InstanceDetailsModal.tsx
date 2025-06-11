@@ -283,7 +283,7 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
                   if (typeof rawLogData === 'string') {
                     addLogEntry(parseAndFormatLogLine(rawLogData, logCounterRef.current++)); 
                   } else {
-                    addLogEntry(parseAndFormatLogLine(`收到实例 ${instance.id.substring(0,8)} 的日志，但'logs'字段非字符串。类型: ${typeof rawLogData}`, logCounterRef.current++, 'WARN'));
+                    addLogEntry(parseAndFormatLogLine(`收到实例 ${instance.id} 的日志，但'logs'字段非字符串。类型: ${typeof rawLogData}`, logCounterRef.current++, 'WARN'));
                   }
                 }
               } else if (jsonData.type === 'shutdown') {
@@ -300,14 +300,14 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
                   if (Array.isArray(jsonData.instance)) {
                     addLogEntry(parseAndFormatLogLine(`收到初始实例数据 (${jsonData.instance.length} 个)。`, logCounterRef.current++, 'INFO'));
                   } else if (typeof jsonData.instance === 'object' && jsonData.instance !== null && jsonData.instance.id !== '********') {
-                    addLogEntry(parseAndFormatLogLine(`收到单个实例初始数据: ${jsonData.instance.id.substring(0,8)}...`, logCounterRef.current++, 'INFO'));
+                    addLogEntry(parseAndFormatLogLine(`收到单个实例初始数据: ${jsonData.instance.id}`, logCounterRef.current++, 'INFO'));
                   }
               } else if (jsonData.type === 'create' && jsonData.instance && jsonData.instance.id !== '********') {
-                  addLogEntry(parseAndFormatLogLine(`实例已创建: ${jsonData.instance.id.substring(0,8)}...`, logCounterRef.current++, 'INFO'));
+                  addLogEntry(parseAndFormatLogLine(`实例已创建: ${jsonData.instance.id}`, logCounterRef.current++, 'INFO'));
               } else if (jsonData.type === 'update' && jsonData.instance && jsonData.instance.id !== '********') {
-                  addLogEntry(parseAndFormatLogLine(`实例已更新: ${jsonData.instance.id.substring(0,8)}... 状态: ${jsonData.instance.status}`, logCounterRef.current++, 'INFO'));
+                  addLogEntry(parseAndFormatLogLine(`实例已更新: ${jsonData.instance.id} 状态: ${jsonData.instance.status}`, logCounterRef.current++, 'INFO'));
               } else if (jsonData.type === 'delete' && jsonData.instance && jsonData.instance.id !== '********') {
-                  addLogEntry(parseAndFormatLogLine(`实例已删除: ${jsonData.instance.id.substring(0,8)}...`, logCounterRef.current++, 'INFO'));
+                  addLogEntry(parseAndFormatLogLine(`实例已删除: ${jsonData.instance.id}`, logCounterRef.current++, 'INFO'));
               } else if (eventInstanceId !== '********') { 
                 addLogEntry(parseAndFormatLogLine(`未识别的 'instance' 事件数据类型: ${jsonData.type}. Data: ${JSON.stringify(jsonData).substring(0,100)}...`, logCounterRef.current++, 'WARN'));
               }
@@ -402,7 +402,7 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
       label: "ID",
       value: (
         <span
-          className="font-mono text-xs cursor-pointer hover:text-primary transition-colors duration-150"
+          className="font-mono text-xs cursor-pointer hover:text-primary transition-colors duration-150 break-all"
           title={`点击复制: ${instance.id}`}
           onClick={() => handleCopyToClipboard(instance.id, "ID")}
         >
@@ -534,11 +534,11 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
           <DialogTitle className="font-title">实例详情</DialogTitle>
           <DialogDescription className="font-sans">
             实例 <span
-                    className="font-semibold font-mono cursor-pointer hover:text-primary transition-colors duration-150"
+                    className="font-semibold font-mono cursor-pointer hover:text-primary transition-colors duration-150 break-all"
                     title={`点击复制: ${instance.id}`}
                     onClick={() => handleCopyToClipboard(instance.id, "ID")}
                   >
-                    {instance.id.substring(0,12)}...
+                    {instance.id}
                   </span> 详细信息。
           </DialogDescription>
         </DialogHeader>
@@ -588,3 +588,4 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
     </Dialog>
   );
 }
+
