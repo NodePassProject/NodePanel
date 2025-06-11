@@ -108,9 +108,9 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
     onSuccess: (_, instanceId) => {
       toast({
         title: '实例已删除',
-        description: `实例 ${instanceId.substring(0,8)}... 已删除。`,
+        description: `实例 ${instanceId} 已删除。`,
       });
-      onLog?.(`实例 ${instanceId.substring(0,8)}... 已删除。`, 'SUCCESS');
+      onLog?.(`实例 ${instanceId} 已删除。`, 'SUCCESS');
       queryClient.invalidateQueries({ queryKey: ['instances', apiId] });
       queryClient.invalidateQueries({ queryKey: ['allInstancesForTraffic']});
       setSelectedInstanceForDelete(null);
@@ -123,10 +123,10 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
     onError: (error: any, instanceId) => {
       toast({
         title: '删除实例出错',
-        description: `删除实例 ${instanceId.substring(0,8)}... 失败: ${error.message || '未知错误。'}`,
+        description: `删除实例 ${instanceId} 失败: ${error.message || '未知错误。'}`,
         variant: 'destructive',
       });
-       onLog?.(`删除实例 ${instanceId.substring(0,8)}... 失败: ${error.message || '未知错误'}`, 'ERROR');
+       onLog?.(`删除实例 ${instanceId} 失败: ${error.message || '未知错误'}`, 'ERROR');
     },
   });
 
@@ -315,13 +315,13 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
             const clientMasterApiHost = extractHostname(activeApiConfig.apiUrl);
              if (clientMasterApiHost && clientLocalForwardPort) {
                 targetStringToCopy = `${formatHostForDisplay(clientMasterApiHost)}:${clientLocalForwardPort}`;
-                copyTargetTitle = `客户端本地转发 (主控: ${activeApiConfig.name})`;
+                copyTunnelTitle = `客户端本地转发 (主控: ${activeApiConfig.name})`;
             } else if (clientLocalForwardPort) {
                 targetStringToCopy = `127.0.0.1:${clientLocalForwardPort}`; // Fallback if master host is not available
-                copyTargetTitle = `客户端本地转发 (主控地址未知)`;
+                copyTunnelTitle = `客户端本地转发 (主控地址未知)`;
             } else {
                 targetStringToCopy = parsedUrl.targetAddress || "N/A (解析失败)";
-                copyTargetTitle = "客户端本地转发目标";
+                copyTunnelTitle = "客户端本地转发目标";
             }
             displayTargetAddress = (
                <span
