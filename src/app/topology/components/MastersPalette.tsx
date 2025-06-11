@@ -12,10 +12,10 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { nodePassApi } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
-import { parseNodePassUrl, extractHostname, isWildcardHostname } from '@/lib/url-utils'; // Added isWildcardHostname
+import { parseNodePassUrl, extractHostname, isWildcardHostname } from '@/lib/url-utils';
 
 interface MasterPaletteItemProps {
   config: NamedApiConfig;
@@ -24,6 +24,7 @@ interface MasterPaletteItemProps {
 const MasterPaletteItem: React.FC<MasterPaletteItemProps> = ({ config }) => {
   const { getApiRootUrl, getToken } = useApiConfig();
   const { toast } = useToast();
+  const queryClient = useQueryClient(); // Get query client for manual refetch if needed
 
   const { data: instanceCounts, isLoading: isLoadingInstances, error, refetch } = useQuery<
     { clientCount: number; tunnelCount: number },
@@ -126,10 +127,7 @@ const MasterPaletteItem: React.FC<MasterPaletteItemProps> = ({ config }) => {
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="font-sans text-xs">
-           <DropdownMenuItem onClick={() => refetch()} disabled={isLoadingInstances}>
-            <RefreshCw className="mr-2 h-3.5 w-3.5" />
-            刷新实例计数
-          </DropdownMenuItem>
+           {/* Item removed from here, will be a global button */}
         </DropdownMenuContent>
       </DropdownMenu>
     </div>

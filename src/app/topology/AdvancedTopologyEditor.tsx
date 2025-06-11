@@ -15,10 +15,10 @@ import {
   type NodeChange,
   type NodeMouseHandler,
   Position,
-  type NodeProps, // Import NodeProps
+  type NodeProps,
 } from 'reactflow';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Server, Smartphone as ClientIcon, Globe, UserCircle2 as UserIcon, ListTree, Puzzle, Info as InfoIcon, Edit3, Trash2 } from 'lucide-react';
+import { Server, Smartphone as ClientIcon, Globe, UserCircle2 as UserIcon, ListTree, Puzzle, Info as InfoIcon, Edit3, Trash2, RefreshCw } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 
 import { TopologyCanvasWrapper } from './TopologyCanvas';
@@ -37,7 +37,7 @@ import { SubmitTopologyConfirmationDialog, type InstanceUrlConfigWithName } from
 import { EditTopologyNodeDialog } from './components/EditTopologyNodeDialog';
 
 import type { Node, CustomNodeData, NodeRole, TopologyContextMenu } from './topologyTypes';
-import { CardNode, MasterNode, nodeStyles } from './NodeRenderer'; // Import CardNode and MasterNode specifically
+import { CardNode, MasterNode, nodeStyles } from './NodeRenderer';
 import { ICON_ONLY_NODE_SIZE, EXPANDED_SC_NODE_WIDTH, EXPANDED_SC_NODE_BASE_HEIGHT, DETAIL_LINE_HEIGHT } from './topologyTypes';
 import { calculateClientTunnelAddressForServer } from './topologyLogic';
 
@@ -71,6 +71,7 @@ export function AdvancedTopologyEditor() {
   const queryClient = useQueryClient();
 
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isRefreshingCounts, setIsRefreshingCounts] = useState(false);
   const [isSubmitConfirmOpen, setIsSubmitConfirmOpen] = useState(false);
   const [instancesForConfirmation, setInstancesForConfirmation] = useState<InstanceUrlConfigWithName[]>([]);
   const [isEditNodeDialogOpen, setIsEditNodeDialogOpen] = useState(false);
@@ -85,7 +86,6 @@ export function AdvancedTopologyEditor() {
   const handshakeLogRegex = /Tunnel handshaked:.*?in\s+(\d+)\s*ms/i;
   const sseHandshakeAbortControllerRef = useRef<AbortController | null>(null);
 
-  // Moved these definitions earlier to resolve initialization errors
   const updateMasterNodeDimensions = useCallback((masterNodeId: string, currentNodes: Node[]): Node[] => {
     const masterNode = currentNodes.find(n => n.id === masterNodeId);
     if (!masterNode || !masterNode.data.isContainer || masterNode.data.role !== 'M') {
@@ -203,12 +203,12 @@ export function AdvancedTopologyEditor() {
       }
       return n;
     });
-  }, []); // initialActiveHandles is stable
+  }, []); 
 
   const handleOpenEditNodeDialog = useCallback((node: Node) => {
     setContextMenu(null);
 
-    const allNodes = getNodes(); // Use getNodes() to get current state from ReactFlow
+    const allNodes = getNodes();
     const allEdges = getEdges();
 
     let hasS = false;
@@ -276,7 +276,7 @@ export function AdvancedTopologyEditor() {
         if (edge.target !== nodeToDelete.id) nodeIdsToUpdateHandles.add(edge.target);
     });
 
-    deleteElements({ nodes: [{ id: nodeToDelete.id }], edges: edgesToRemove }); // Pass only node ID for deletion
+    deleteElements({ nodes: [{ id: nodeToDelete.id }], edges: edgesToRemove });
     toast({ title: `节点 "${nodeToDelete.data.label || nodeToDelete.id}" 已删除` });
 
     setContextMenu(null);
@@ -604,7 +604,7 @@ export function AdvancedTopologyEditor() {
         setEdgesAndUpdateHandles((eds) => addEdge(newEdgeBase, eds));
       }
     },
-    [getNodes, getEdges, setNodesInternal, setEdgesAndUpdateHandles, toast, getApiConfigById, getOptimalHandlesForConnection, updateAffectedNodeHandles] // Added updateAffectedNodeHandles
+    [getNodes, getEdges, setNodesInternal, setEdgesAndUpdateHandles, toast, getApiConfigById, getOptimalHandlesForConnection, updateAffectedNodeHandles]
   );
 
   const onSelectionChange = useCallback(({ nodes: selectedNodesList }: { nodes: Node[]; edges: Edge[] }) => {
@@ -612,7 +612,7 @@ export function AdvancedTopologyEditor() {
   }, []);
 
   const calculateExpandedNodeHeight = (data: CustomNodeData): number => {
-    let numDetails = 2;
+    let numDetails = 1; // Label is always there (even if combined with icon initially)
     if (data.tunnelAddress) numDetails++;
     if (data.targetAddress) numDetails++;
     if (data.submissionStatus) numDetails++;
@@ -867,6 +867,22 @@ export function AdvancedTopologyEditor() {
     fitView({ duration: 300, padding: 0.2 });
   }, [fitView]);
 
+  const handleRefreshAllInstanceCounts = useCallback(async () => {
+    setIsRefreshingCounts(true);
+    toast({ title: "正在刷新主控实例计数...", description: "请稍候。" });
+    try {
+      await queryClient.invalidateQueries({ queryKey: ['masterInstancesCount'] });
+      // Allow some time for invalidation and refetch to kick in
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      toast({ title: "实例计数已刷新", description: "主控列表中的实例数量已更新。" });
+    } catch (error) {
+      toast({ title: "刷新失败", description: "刷新实例计数时发生错误。", variant: "destructive" });
+      console.error("Failed to refresh instance counts:", error);
+    } finally {
+      setIsRefreshingCounts(false);
+    }
+  }, [queryClient, toast]);
+
 
   const prepareInstancesForSubmission = useCallback((): InstanceUrlConfigWithName[] => {
     const instancesToCreate: InstanceUrlConfigWithName[] = [];
@@ -917,7 +933,7 @@ export function AdvancedTopologyEditor() {
               tunnelAddress: node.data.tunnelAddress,
               targetAddress: node.data.targetAddress,
               logLevel: (node.data.logLevel as any) || masterConfigForNode.masterDefaultLogLevel || 'info',
-              tlsMode: (node.data.tlsMode as any) || '0', // Single-ended client usually means no nodepass-to-nodepass TLS
+              tlsMode: (node.data.tlsMode as any) || '0',
               certPath: node.data.certPath,
               keyPath: node.data.keyPath,
             };
@@ -1258,10 +1274,12 @@ export function AdvancedTopologyEditor() {
                 onSelectionChange={onSelectionChange} reactFlowWrapperRef={reactFlowWrapperRef} onNodeClick={onNodeClickHandler}
                 onCenterView={handleCenterViewCallback}
                 onClearCanvas={handleClearCanvasCallback} onTriggerSubmitTopology={handleTriggerSubmitTopology}
+                onTriggerRefreshAllInstanceCounts={handleRefreshAllInstanceCounts}
                 canSubmit={(nodesInternal.length > 0 || edgesInternal.length > 0) && !isSubmitting}
                 isSubmitting={isSubmitting}
+                isRefreshingCounts={isRefreshingCounts}
                 onNodeDropOnCanvas={handleNodeDroppedOnCanvas} onNodeContextMenu={onNodeContextMenu} onEdgeContextMenu={onEdgeContextMenu} onPaneClick={onPaneClick}
-                customNodeTypes={memoizedNodeTypes} // Pass the memoized node types with callbacks
+                customNodeTypes={memoizedNodeTypes}
               />
             </div>
           </div>

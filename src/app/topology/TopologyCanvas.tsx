@@ -12,7 +12,7 @@ import ReactFlow, {
   type OnNodesChange,
   type OnEdgesChange,
   type NodeMouseHandler,
-  type NodeTypes, // Import NodeTypes
+  type NodeTypes,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { useTheme } from 'next-themes';
@@ -20,7 +20,6 @@ import { TopologyToolbar } from './components/TopologyToolbar';
 import type { DraggableNodeType } from './components/ComponentsPalette';
 import type { NamedApiConfig } from '@/hooks/use-api-key';
 import type { Node } from './topologyTypes';
-// nodeTypes import from NodeRenderer is removed as it will be passed as a prop
 
 const initialZoomLevel = 0.5;
 
@@ -28,16 +27,20 @@ interface ToolbarWrapperProps {
   onCenterView: (instance: ReturnType<typeof useReactFlow>) => void;
   onClearCanvas: () => void;
   onSubmitTopology: () => void;
+  onRefreshAllInstanceCounts: () => void;
   canSubmit: boolean;
   isSubmitting: boolean;
+  isRefreshingCounts?: boolean;
 }
 
 const ToolbarWrapper: React.FC<ToolbarWrapperProps> = ({
   onCenterView,
   onClearCanvas,
   onSubmitTopology,
+  onRefreshAllInstanceCounts,
   canSubmit,
   isSubmitting,
+  isRefreshingCounts,
 }) => {
   const reactFlowInstance = useReactFlow();
   return (
@@ -45,8 +48,10 @@ const ToolbarWrapper: React.FC<ToolbarWrapperProps> = ({
       onCenterView={() => onCenterView(reactFlowInstance)}
       onClearCanvas={onClearCanvas}
       onSubmitTopology={onSubmitTopology}
+      onRefreshAllInstanceCounts={onRefreshAllInstanceCounts}
       canSubmit={canSubmit}
       isSubmitting={isSubmitting}
+      isRefreshingCounts={isRefreshingCounts}
     />
   );
 };
@@ -62,8 +67,10 @@ interface TopologyCanvasWrapperProps {
   onCenterView: (instance: ReturnType<typeof useReactFlow>) => void;
   onClearCanvas: () => void;
   onTriggerSubmitTopology: () => void;
+  onTriggerRefreshAllInstanceCounts: () => void;
   canSubmit: boolean;
   isSubmitting: boolean;
+  isRefreshingCounts?: boolean;
   onNodeDropOnCanvas: (
     type: DraggableNodeType | 'master',
     position: { x: number; y: number },
@@ -73,14 +80,15 @@ interface TopologyCanvasWrapperProps {
   onEdgeContextMenu: (event: React.MouseEvent, edge: Edge) => void;
   onPaneClick: () => void;
   onNodeClick?: NodeMouseHandler;
-  customNodeTypes: NodeTypes; // Changed from nodeTypes to customNodeTypes for clarity
+  customNodeTypes: NodeTypes;
 }
 
 export const TopologyCanvasWrapper: React.FC<TopologyCanvasWrapperProps> = ({
   nodes, edges, onNodesChange, onEdgesChange, onConnect, onSelectionChange,
   reactFlowWrapperRef, onCenterView, onClearCanvas, onTriggerSubmitTopology,
-  canSubmit, isSubmitting, onNodeDropOnCanvas, onNodeContextMenu,
-  onEdgeContextMenu, onPaneClick, onNodeClick, customNodeTypes // Use customNodeTypes
+  onTriggerRefreshAllInstanceCounts,
+  canSubmit, isSubmitting, isRefreshingCounts, onNodeDropOnCanvas, onNodeContextMenu,
+  onEdgeContextMenu, onPaneClick, onNodeClick, customNodeTypes
 }) => {
   const { resolvedTheme } = useTheme();
   const [isClient, setIsClient] = useState(false);
@@ -151,15 +159,17 @@ export const TopologyCanvasWrapper: React.FC<TopologyCanvasWrapperProps> = ({
         selectionOnDrag
         className="h-full w-full"
         nodeOrigin={[0, 0]}
-        nodeTypes={customNodeTypes} // Pass customNodeTypes here
+        nodeTypes={customNodeTypes}
       >
         <Panel position="top-right" className="!m-0 !p-2 bg-transparent">
           <ToolbarWrapper
             onCenterView={onCenterView}
             onClearCanvas={onClearCanvas}
             onSubmitTopology={onTriggerSubmitTopology}
+            onRefreshAllInstanceCounts={onTriggerRefreshAllInstanceCounts}
             canSubmit={canSubmit}
             isSubmitting={isSubmitting}
+            isRefreshingCounts={isRefreshingCounts}
           />
         </Panel>
         {memoizedMiniMap}
@@ -168,4 +178,3 @@ export const TopologyCanvasWrapper: React.FC<TopologyCanvasWrapperProps> = ({
     </div>
   );
 };
-

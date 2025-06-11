@@ -5,7 +5,7 @@ import React, { memo } from 'react';
 import type { NodeProps } from 'reactflow';
 import { Handle, Position } from 'reactflow';
 import { Loader2, Server, DatabaseZap, Globe, UserCircle2, Pencil, Trash2 } from 'lucide-react';
-import type { CustomNodeData, Node } from './topologyTypes'; // Added Node import
+import type { CustomNodeData, Node } from './topologyTypes';
 import { ICON_ONLY_NODE_SIZE, EXPANDED_SC_NODE_WIDTH, EXPANDED_SC_NODE_BASE_HEIGHT, DETAIL_LINE_HEIGHT } from './topologyTypes';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -79,14 +79,14 @@ export const CardNode: React.FC<
   const roleStyle = nodeStyles[data.role.toLowerCase() as keyof typeof nodeStyles];
   const isExpanded = !!data.isExpanded;
 
-  const baseCardClasses = `flex rounded-lg border-2 shadow-sm transition-all duration-200 ease-in-out relative`; // Added position: relative
+  const baseCardClasses = `flex rounded-lg border-2 shadow-sm transition-all duration-200 ease-in-out relative`;
   
   const nodeWidth = width || (isExpanded ? EXPANDED_SC_NODE_WIDTH : ICON_ONLY_NODE_SIZE);
   
   let calculatedHeight = height;
   if (!calculatedHeight) {
     if (isExpanded) {
-      let numDetails = 2; // Label, Role
+      let numDetails = 1; // Label is always there
       if (data.tunnelAddress) numDetails++;
       if (data.targetAddress) numDetails++;
       if (data.submissionStatus) numDetails++;
@@ -119,26 +119,30 @@ export const CardNode: React.FC<
         )}
         style={dynamicStyle}
       >
-        {isExpanded && data.role !== 'U' && ( // 'U' nodes typically don't have editable tunnel/target addresses
+        {isExpanded && (
           <div className="absolute top-1 right-1 flex space-x-0.5 z-10">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-6 w-6"
-              onClick={(e) => { e.stopPropagation(); onEditRequest?.(fullNodeProps); }}
-              title="编辑属性"
-            >
-              <Pencil size={12} />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-6 w-6 text-destructive hover:text-destructive hover:bg-destructive/10"
-              onClick={(e) => { e.stopPropagation(); onDeleteRequest?.(fullNodeProps); }}
-              title="删除角色"
-            >
-              <Trash2 size={12} />
-            </Button>
+            {data.role !== 'U' && onEditRequest && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6"
+                onClick={(e) => { e.stopPropagation(); onEditRequest(fullNodeProps); }}
+                title="编辑属性"
+              >
+                <Pencil size={12} />
+              </Button>
+            )}
+            {onDeleteRequest && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6 text-destructive hover:text-destructive hover:bg-destructive/10"
+                onClick={(e) => { e.stopPropagation(); onDeleteRequest(fullNodeProps); }}
+                title="删除角色"
+              >
+                <Trash2 size={12} />
+              </Button>
+            )}
           </div>
         )}
 
@@ -165,13 +169,13 @@ export const CardNode: React.FC<
 
         {isExpanded && (
           <div className="text-xs space-y-0.5 w-full pl-1 overflow-hidden text-ellipsis">
-            <p className="truncate" title={`角色: ${data.role}`}><strong>角色:</strong> {data.role}</p>
+            {/* Role information removed as per request */}
             {data.tunnelAddress && <p className="truncate" title={`隧道: ${data.tunnelAddress}`}><strong>隧道:</strong> {data.tunnelAddress}</p>}
             {data.targetAddress && <p className="truncate" title={`目标: ${data.targetAddress}`}><strong>目标:</strong> {data.targetAddress}</p>}
           </div>
         )}
         
-        {data.submissionStatus && (isExpanded || !isExpanded /* Always show for icon if status exists */) && (
+        {data.submissionStatus && (isExpanded || !isExpanded) && (
           <div className={cn(
             `text-xs p-0.5 rounded w-full text-center`,
             isExpanded ? 'mt-auto' : 'absolute bottom-0 left-0 right-0 text-[8px] leading-tight bg-opacity-75',
@@ -185,7 +189,6 @@ export const CardNode: React.FC<
         )}
       </div>
 
-      {/* Handles for S and C nodes (can be source or target on any side) */}
       {(data.role === 'S' || data.role === 'C') && (
         <>
           <Handle type="target" position={Position.Top} id="top" className={cn(handleBaseClasses, !data.activeHandles?.top && handleHiddenClasses)} />
@@ -195,7 +198,6 @@ export const CardNode: React.FC<
         </>
       )}
 
-      {/* Handles for U node (only source) */}
       {data.role === 'U' && (
         <>
           <Handle type="source" position={Position.Top} id="top" className={cn(handleBaseClasses, !data.activeHandles?.top && handleHiddenClasses)} />
@@ -205,7 +207,6 @@ export const CardNode: React.FC<
         </>
       )}
 
-      {/* Handles for T node (only target) */}
       {data.role === 'T' && (
         <>
           <Handle type="target" position={Position.Top} id="top" className={cn(handleBaseClasses, !data.activeHandles?.top && handleHiddenClasses)} />
@@ -219,10 +220,7 @@ export const CardNode: React.FC<
 });
 CardNode.displayName = 'CardNode';
 
-// Original nodeTypes export is kept for cases where no extra props are needed or for reference.
-// AdvancedTopologyEditor will define its own enhanced nodeTypes.
 export const nodeTypes = {
   cardNode: CardNode,
   masterNode: MasterNode,
 };
-
