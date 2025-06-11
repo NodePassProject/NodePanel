@@ -31,7 +31,6 @@ export function ApiConfigDialog({ open, onOpenChange, onSave, currentConfig, isE
   const [nameInput, setNameInput] = useState('');
   const [apiUrlInput, setApiUrlInput] = useState('');
   const [tokenInput, setTokenInput] = useState('');
-  // prefixPathInput state removed
   const [showToken, setShowToken] = useState(false);
   const [masterLogLevelInput, setMasterLogLevelInput] = useState<MasterLogLevel>('master');
   const [masterTlsModeInput, setMasterTlsModeInput] = useState<MasterTlsMode>('master');
@@ -39,18 +38,16 @@ export function ApiConfigDialog({ open, onOpenChange, onSave, currentConfig, isE
   useEffect(() => {
     if (open) {
       setNameInput(currentConfig?.name || '');
-      setApiUrlInput(currentConfig?.apiUrl || 'http://localhost:3000');
+      setApiUrlInput(currentConfig?.apiUrl || 'http://localhost:3000/api/v1'); // Default to include /api/v1
       setTokenInput(currentConfig?.token || '');
-      // prefixPathInput initialization removed
       setMasterLogLevelInput(currentConfig?.masterDefaultLogLevel || 'master');
       setMasterTlsModeInput(currentConfig?.masterDefaultTlsMode || 'master');
       setShowToken(false);
     } else {
       // Reset on close
       setNameInput('');
-      setApiUrlInput('http://localhost:3000');
+      setApiUrlInput('http://localhost:3000/api/v1'); // Default to include /api/v1
       setTokenInput('');
-      // prefixPathInput reset removed
       setMasterLogLevelInput('master');
       setMasterTlsModeInput('master');
       setShowToken(false);
@@ -65,7 +62,6 @@ export function ApiConfigDialog({ open, onOpenChange, onSave, currentConfig, isE
         name: nameInput.trim(),
         apiUrl: apiUrlInput.trim(),
         token: tokenInput.trim(),
-        // prefixPath removed from save object
         masterDefaultLogLevel: masterLogLevelInput,
         masterDefaultTlsMode: masterTlsModeInput,
       });
@@ -104,7 +100,7 @@ export function ApiConfigDialog({ open, onOpenChange, onSave, currentConfig, isE
                 id="api-url"
                 value={apiUrlInput}
                 onChange={(e) => setApiUrlInput(e.target.value)}
-                placeholder="例: http://localhost:3000"
+                placeholder="例: http://localhost:3000/api/v1" 
                 required
                 className="font-sans"
               />
@@ -133,7 +129,6 @@ export function ApiConfigDialog({ open, onOpenChange, onSave, currentConfig, isE
                 </Button>
               </div>
             </div>
-            {/* API Prefix Path input field removed */}
 
             <div className="my-3 border-t border-border"></div>
             <p className="text-sm text-muted-foreground font-sans pb-2">
