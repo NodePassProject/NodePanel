@@ -3,14 +3,13 @@
 
 import React from 'react';
 import { useApiConfig, type NamedApiConfig } from '@/hooks/use-api-key';
-import { Cog, MoreVertical, RefreshCw, Loader2 } from 'lucide-react';
+import { Cog, RefreshCw, Loader2 } from 'lucide-react'; // MoreVertical removed
 import { Skeleton } from '@/components/ui/skeleton';
-import { Button } from '@/components/ui/button';
-// DropdownMenu components are no longer needed here
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+// Button and DropdownMenu components are no longer needed here
+import { useQuery } from '@tanstack/react-query';
 import { nodePassApi } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
-import { parseNodePassUrl, extractHostname, isWildcardHostname } from '@/lib/url-utils';
+// parseNodePassUrl, extractHostname, isWildcardHostname removed as they are not used for total count
 
 interface MasterPaletteItemProps {
   config: NamedApiConfig;
@@ -19,10 +18,10 @@ interface MasterPaletteItemProps {
 const MasterPaletteItem: React.FC<MasterPaletteItemProps> = ({ config }) => {
   const { getApiRootUrl, getToken } = useApiConfig();
   const { toast } = useToast();
-  const queryClient = useQueryClient();
+  // queryClient removed as individual refresh is no longer here
 
   const { data: instanceCounts, isLoading: isLoadingInstances, error, refetch } = useQuery<
-    { clientCount: number; tunnelCount: number },
+    { totalInstanceCount: number }, // Updated return type
     Error
   >({
     queryKey: ['masterInstancesCount', config.id],
@@ -33,48 +32,8 @@ const MasterPaletteItem: React.FC<MasterPaletteItemProps> = ({ config }) => {
         throw new Error(`API configuration for master ${config.name} is incomplete.`);
       }
       const fetchedInstances = await nodePassApi.getInstances(apiRoot, token);
-      let clientCount = 0;
-      let serverCount = 0;
-      let externalClientConnections = 0;
-
-      const masterApiHost = extractHostname(config.apiUrl);
-
-      fetchedInstances.forEach(instance => {
-        if (instance.id === '********') return;
-        if (instance.type === 'client') {
-          clientCount++;
-          const parsedClientUrl = parseNodePassUrl(instance.url);
-          if (parsedClientUrl.tunnelAddress) {
-            const clientConnectsToHost = extractHostname(parsedClientUrl.tunnelAddress);
-            
-            if (clientConnectsToHost && masterApiHost && clientConnectsToHost.toLowerCase() !== masterApiHost.toLowerCase()) {
-               let isExternal = true;
-               for (const sInst of fetchedInstances) {
-                   if (sInst.type === 'server') {
-                       const parsedSUrl = parseNodePassUrl(sInst.url);
-                       if (parsedSUrl.tunnelAddress) {
-                           const serverListenHost = extractHostname(parsedSUrl.tunnelAddress);
-                           const serverListenPort = parsedSUrl.tunnelAddress.split(':').pop();
-                           const clientConnectsToPort = parsedClientUrl.tunnelAddress.split(':').pop();
-
-                           if (clientConnectsToPort === serverListenPort && (serverListenHost === clientConnectsToHost || (isWildcardHostname(serverListenHost) && clientConnectsToHost === masterApiHost) )) {
-                               isExternal = false;
-                               break;
-                           }
-                       }
-                   }
-               }
-               if (isExternal) {
-                 externalClientConnections++;
-               }
-            }
-          }
-        } else if (instance.type === 'server') {
-          serverCount++;
-        }
-      });
-      const tunnelCount = serverCount + externalClientConnections;
-      return { clientCount, tunnelCount };
+      const totalInstanceCount = fetchedInstances.filter(inst => inst.id !== '********').length;
+      return { totalInstanceCount };
     },
     enabled: !!config.id,
     staleTime: 5 * 60 * 1000,
@@ -98,7 +57,7 @@ const MasterPaletteItem: React.FC<MasterPaletteItemProps> = ({ config }) => {
     : error
     ? <RefreshCw className="h-3 w-3 ml-1 text-destructive cursor-pointer" onClick={() => refetch()} title="点击重试计数"/>
     : instanceCounts
-    ? `(${instanceCounts.clientCount}c/${instanceCounts.tunnelCount}t)`
+    ? `(${instanceCounts.totalInstanceCount} 个实例)` // Updated display format
     : '';
 
 
@@ -114,7 +73,6 @@ const MasterPaletteItem: React.FC<MasterPaletteItemProps> = ({ config }) => {
         <span className="truncate mr-1">{config.name}</span>
         {config.id && <span className="text-muted-foreground text-[10px]">{countsDisplay}</span>}
       </div>
-      {/* Removed DropdownMenu for individual master refresh */}
     </div>
   );
 };
