@@ -216,7 +216,8 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
         <TableCell><Skeleton className="h-4 w-24" /></TableCell>
         <TableCell><Skeleton className="h-4 w-16" /></TableCell>
         <TableCell><Skeleton className="h-4 w-16" /></TableCell>
-        <TableCell><Skeleton className="h-4 w-40" /></TableCell>
+        <TableCell><Skeleton className="h-4 w-32" /></TableCell>
+        <TableCell><Skeleton className="h-4 w-32" /></TableCell>
         <TableCell className="text-left">
           <div className="text-left">
             <Skeleton className="h-4 w-20 mb-1" />
@@ -231,77 +232,130 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
   const renderInstanceRow = (instance: Instance) => {
     const parsedUrl = instance.id !== '********' ? parseNodePassUrl(instance.url) : null;
 
-    let displayTargetTunnelContent: React.ReactNode = "N/A";
-    let copyTitle = "目标/隧道地址";
-    let stringToCopy = "";
+    let displayTargetAddress: React.ReactNode = "N/A";
+    let copyTargetTitle = "目标地址";
+    let targetStringToCopy = "";
+
+    let displayTunnelAddress: React.ReactNode = "N/A";
+    let copyTunnelTitle = "隧道地址";
+    let tunnelStringToCopy = "";
+
 
     if (instance.id === '********') {
-      stringToCopy = instance.url;
-      copyTitle = `主控 "${apiName}" 的 API 密钥`;
-      displayTargetTunnelContent = (
+      targetStringToCopy = "N/A";
+      copyTargetTitle = "目标地址 (不适用)";
+      displayTargetAddress = <span className="text-xs font-mono text-muted-foreground">不适用</span>;
+      
+      tunnelStringToCopy = instance.url;
+      copyTunnelTitle = `主控 "${apiName}" 的 API 密钥`;
+      displayTunnelAddress = (
         <span
           className="font-mono text-xs cursor-pointer hover:text-primary transition-colors duration-150"
-          title={`点击复制 ${copyTitle}`}
+          title={`点击复制 ${copyTunnelTitle}`}
           onClick={(e) => {
             e.stopPropagation();
-            handleCopyToClipboard(stringToCopy, copyTitle);
+            handleCopyToClipboard(tunnelStringToCopy, copyTunnelTitle);
           }}
         >
           {apiName || '未命名主控'} (API 密钥)
         </span>
       );
+
     } else if (instance.type === 'server' && parsedUrl) {
-        stringToCopy = parsedUrl.targetAddress || "N/A";
-        copyTitle = "服务端目标地址 (业务数据)";
-        displayTargetTunnelContent = (
+        targetStringToCopy = parsedUrl.targetAddress || "N/A";
+        copyTargetTitle = "服务端目标地址 (业务数据)";
+        displayTargetAddress = (
            <span
             className="font-mono text-xs cursor-pointer hover:text-primary transition-colors duration-150"
-            title={`点击复制: ${stringToCopy}`}
-            onClick={(e) => {
-                e.stopPropagation();
-                if (stringToCopy !== "N/A") {
-                  handleCopyToClipboard(stringToCopy, copyTitle);
-                }
-            }}
+            title={`点击复制: ${targetStringToCopy}`}
+            onClick={(e) => { e.stopPropagation(); if (targetStringToCopy !== "N/A") { handleCopyToClipboard(targetStringToCopy, copyTargetTitle); }}}
             >
-            {stringToCopy}
+            {targetStringToCopy}
             </span>
         );
-    } else if (instance.type === 'client' && parsedUrl && activeApiConfig) {
-        const clientMasterApiHost = extractHostname(activeApiConfig.apiUrl);
-        const isSingleEnded = parsedUrl.tunnelAddress && isWildcardHostname(extractHostname(parsedUrl.tunnelAddress));
 
-        if (isSingleEnded) {
-            const clientLocalListeningPort = extractPort(parsedUrl.tunnelAddress || '');
-            if (clientMasterApiHost && clientLocalListeningPort) {
-                stringToCopy = `${formatHostForDisplay(clientMasterApiHost)}:${clientLocalListeningPort}`;
-                copyTitle = `客户端本地监听 (单端模式, 主控: ${activeApiConfig.name})`;
-            } else {
-                stringToCopy = `[::]:${clientLocalListeningPort || '????'}`;
-                copyTitle = `客户端本地监听 (单端模式, 主控地址未知)`;
-            }
-        } else { 
-            const clientLocalForwardPort = extractPort(parsedUrl.targetAddress || '');
-             if (clientMasterApiHost && clientLocalForwardPort) {
-                stringToCopy = `${formatHostForDisplay(clientMasterApiHost)}:${clientLocalForwardPort}`;
-                copyTitle = `客户端本地转发 (主控: ${activeApiConfig.name})`;
-            } else if (clientLocalForwardPort) {
-                stringToCopy = `127.0.0.1:${clientLocalForwardPort}`;
-                copyTitle = `客户端本地转发 (主控地址未知)`;
-            } else {
-                stringToCopy = parsedUrl.targetAddress || "N/A (解析目标失败)";
-                copyTitle = "客户端本地转发目标";
-            }
-        }
-        displayTargetTunnelContent = (
+        tunnelStringToCopy = parsedUrl.tunnelAddress || "N/A";
+        copyTunnelTitle = "服务端监听隧道地址";
+        displayTunnelAddress = (
            <span
             className="font-mono text-xs cursor-pointer hover:text-primary transition-colors duration-150"
-            title={`点击复制: ${stringToCopy}`}
-            onClick={(e) => { e.stopPropagation(); if(stringToCopy && !stringToCopy.startsWith("N/A")) {handleCopyToClipboard(stringToCopy, copyTitle); }}}
-           >
-             {stringToCopy}
-           </span>
+            title={`点击复制: ${tunnelStringToCopy}`}
+            onClick={(e) => { e.stopPropagation(); if (tunnelStringToCopy !== "N/A") { handleCopyToClipboard(tunnelStringToCopy, copyTunnelTitle); }}}
+            >
+            {tunnelStringToCopy}
+            </span>
         );
+
+    } else if (instance.type === 'client' && parsedUrl && activeApiConfig) {
+        const isSingleEnded = parsedUrl.scheme === 'client' && parsedUrl.targetAddress && parsedUrl.tunnelAddress && isWildcardHostname(extractHostname(parsedUrl.tunnelAddress));
+        
+        if (isSingleEnded) { // Single-ended client
+            targetStringToCopy = parsedUrl.targetAddress || "N/A"; // This is the remote service address
+            copyTargetTitle = "客户端单端转发目标地址";
+            displayTargetAddress = (
+               <span
+                className="font-mono text-xs cursor-pointer hover:text-primary transition-colors duration-150"
+                title={`点击复制: ${targetStringToCopy}`}
+                onClick={(e) => { e.stopPropagation(); if (targetStringToCopy !== "N/A") { handleCopyToClipboard(targetStringToCopy, copyTargetTitle); }}}
+                >
+                {targetStringToCopy}
+                </span>
+            );
+
+            const clientLocalListeningPort = extractPort(parsedUrl.tunnelAddress || ''); // tunnelAddress stores local listen for single-ended
+            const clientMasterApiHost = extractHostname(activeApiConfig.apiUrl);
+            if (clientMasterApiHost && clientLocalListeningPort) {
+                tunnelStringToCopy = `${formatHostForDisplay(clientMasterApiHost)}:${clientLocalListeningPort}`;
+                copyTunnelTitle = `客户端本地监听 (单端模式, 主控: ${activeApiConfig.name})`;
+            } else {
+                tunnelStringToCopy = `${parsedUrl.tunnelAddress || '[::]:????'}`; // Show the raw listen address if master host unknown
+                copyTunnelTitle = `客户端本地监听 (单端模式, 主控地址未知)`;
+            }
+            displayTunnelAddress = (
+               <span
+                className="font-mono text-xs cursor-pointer hover:text-primary transition-colors duration-150"
+                title={`点击复制: ${tunnelStringToCopy}`}
+                onClick={(e) => { e.stopPropagation(); if(tunnelStringToCopy && !tunnelStringToCopy.includes("????")) {handleCopyToClipboard(tunnelStringToCopy, copyTunnelTitle); }}}
+               >
+                 {tunnelStringToCopy}
+               </span>
+            );
+
+        } else { // Normal client (connects to a NodePass server)
+            const clientLocalForwardPort = extractPort(parsedUrl.targetAddress || ''); // targetAddress stores local forward for normal client
+            const clientMasterApiHost = extractHostname(activeApiConfig.apiUrl);
+             if (clientMasterApiHost && clientLocalForwardPort) {
+                targetStringToCopy = `${formatHostForDisplay(clientMasterApiHost)}:${clientLocalForwardPort}`;
+                copyTargetTitle = `客户端本地转发 (主控: ${activeApiConfig.name})`;
+            } else if (clientLocalForwardPort) {
+                targetStringToCopy = `127.0.0.1:${clientLocalForwardPort}`; // Fallback if master host is not available
+                copyTargetTitle = `客户端本地转发 (主控地址未知)`;
+            } else {
+                targetStringToCopy = parsedUrl.targetAddress || "N/A (解析失败)";
+                copyTargetTitle = "客户端本地转发目标";
+            }
+            displayTargetAddress = (
+               <span
+                className="font-mono text-xs cursor-pointer hover:text-primary transition-colors duration-150"
+                title={`点击复制: ${targetStringToCopy}`}
+                onClick={(e) => { e.stopPropagation(); if(targetStringToCopy && !targetStringToCopy.startsWith("N/A")) {handleCopyToClipboard(targetStringToCopy, copyTargetTitle); }}}
+               >
+                 {targetStringToCopy}
+               </span>
+            );
+
+            tunnelStringToCopy = parsedUrl.tunnelAddress || "N/A"; // This is the server's tunnel address client connects to
+            copyTunnelTitle = "客户端连接的服务端隧道地址";
+            displayTunnelAddress = (
+               <span
+                className="font-mono text-xs cursor-pointer hover:text-primary transition-colors duration-150"
+                title={`点击复制: ${tunnelStringToCopy}`}
+                onClick={(e) => { e.stopPropagation(); if (tunnelStringToCopy !== "N/A") { handleCopyToClipboard(tunnelStringToCopy, copyTunnelTitle); }}}
+                >
+                {tunnelStringToCopy}
+                </span>
+            );
+        }
     }
 
 
@@ -343,16 +397,18 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
           ) : (
             <InstanceStatusBadge status={instance.status} />
           )
-        }</TableCell><TableCell
+        }</TableCell>
+        <TableCell
           className="truncate max-w-[200px] text-xs font-mono cursor-pointer hover:text-primary transition-colors duration-150"
-          title={copyTitle}
-          onClick={(e) => {
-            e.stopPropagation();
-            if (stringToCopy && stringToCopy !== "N/A" && !stringToCopy.startsWith("N/A (")) {
-                handleCopyToClipboard(stringToCopy, copyTitle);
-            }
-          }}
-        >{displayTargetTunnelContent}</TableCell><TableCell className="text-left">
+          title={copyTargetTitle}
+          onClick={(e) => { e.stopPropagation(); if (targetStringToCopy && targetStringToCopy !== "N/A" && !targetStringToCopy.startsWith("N/A (")) { handleCopyToClipboard(targetStringToCopy, copyTargetTitle); }}}
+        >{displayTargetAddress}</TableCell>
+        <TableCell
+          className="truncate max-w-[200px] text-xs font-mono cursor-pointer hover:text-primary transition-colors duration-150"
+          title={copyTunnelTitle}
+          onClick={(e) => { e.stopPropagation(); if (tunnelStringToCopy && tunnelStringToCopy !== "N/A" && !tunnelStringToCopy.startsWith("N/A (")) { handleCopyToClipboard(tunnelStringToCopy, copyTunnelTitle); }}}
+        >{displayTunnelAddress}</TableCell>
+        <TableCell className="text-left">
           <div className="text-xs whitespace-nowrap font-mono">
             {instance.id === '********' ? (
               "N/A"
@@ -429,7 +485,7 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
     }
     return (
       <TableRow>
-        <TableCell colSpan={7} className="text-center h-24 font-sans">
+        <TableCell colSpan={8} className="text-center h-24 font-sans">
           {message}
         </TableCell>
       </TableRow>
@@ -508,7 +564,8 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
                 <TableHead className="font-sans">ID</TableHead>
                 <TableHead className="font-sans">类型</TableHead>
                 <TableHead className="font-sans">状态</TableHead>
-                <TableHead className="font-sans">目标/隧道地址</TableHead>
+                <TableHead className="font-sans">目标地址</TableHead>
+                <TableHead className="font-sans">隧道地址</TableHead>
                 <TableHead className="text-left whitespace-nowrap font-sans">流量 (TCP | UDP)</TableHead>
                 <TableHead className="text-right font-sans">操作</TableHead>
               </TableRow>
@@ -549,3 +606,4 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
     </Card>
   );
 }
+
