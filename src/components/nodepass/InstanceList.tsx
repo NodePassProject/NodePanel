@@ -389,21 +389,6 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
         }</TableCell>
         <TableCell
           className="truncate max-w-[200px] text-xs font-mono"
-          title={copyTargetTitle}
-        >
-          {instance.id === '********' ? (
-             <span className="text-muted-foreground">-</span>
-          ) : (
-            <span
-              className="cursor-pointer hover:text-primary transition-colors duration-150"
-              onClick={(e) => { e.stopPropagation(); if (targetStringToCopy && targetStringToCopy !== "N/A" && !targetStringToCopy.startsWith("N/A (")) { handleCopyToClipboard(targetStringToCopy, copyTargetTitle); }}}
-            >
-              {displayTargetAddress}
-            </span>
-          )}
-        </TableCell>
-        <TableCell
-          className="truncate max-w-[200px] text-xs font-mono"
           title={copyTunnelTitle}
         >
           {instance.id === '********' ? (
@@ -414,6 +399,21 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
               onClick={(e) => { e.stopPropagation(); if (tunnelStringToCopy && tunnelStringToCopy !== "N/A" && !tunnelStringToCopy.startsWith("N/A (")) { handleCopyToClipboard(tunnelStringToCopy, copyTunnelTitle); }}}
             >
              {displayTunnelAddress}
+            </span>
+          )}
+        </TableCell>
+        <TableCell
+          className="truncate max-w-[200px] text-xs font-mono"
+          title={copyTargetTitle}
+        >
+          {instance.id === '********' ? (
+             <span className="text-muted-foreground">-</span>
+          ) : (
+            <span
+              className="cursor-pointer hover:text-primary transition-colors duration-150"
+              onClick={(e) => { e.stopPropagation(); if (targetStringToCopy && targetStringToCopy !== "N/A" && !targetStringToCopy.startsWith("N/A (")) { handleCopyToClipboard(targetStringToCopy, copyTargetTitle); }}}
+            >
+              {displayTargetAddress}
             </span>
           )}
         </TableCell>
@@ -573,8 +573,8 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
                 <TableHead className="font-sans">ID</TableHead>
                 <TableHead className="font-sans">类型</TableHead>
                 <TableHead className="font-sans">状态</TableHead>
-                <TableHead className="font-sans">目标地址</TableHead>
                 <TableHead className="font-sans">隧道地址</TableHead>
+                <TableHead className="font-sans">目标地址</TableHead>
                 <TableHead className="text-left whitespace-nowrap font-sans">流量 (TCP | UDP)</TableHead>
                 <TableHead className="text-right font-sans">操作</TableHead>
               </TableRow>
