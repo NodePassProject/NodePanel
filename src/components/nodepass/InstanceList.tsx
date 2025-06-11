@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { AlertTriangle, Eye, Trash2, ServerIcon, SmartphoneIcon, Search, KeyRound, PlusCircle } from 'lucide-react';
+import { AlertTriangle, Eye, Trash2, ServerIcon, SmartphoneIcon, Search, KeyRound, PlusCircle, CheckCircle } from 'lucide-react';
 import type { Instance, UpdateInstanceRequest } from '@/types/nodepass';
 import { InstanceStatusBadge } from './InstanceStatusBadge';
 import { InstanceControls } from './InstanceControls';
@@ -242,24 +242,13 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
 
 
     if (instance.id === '********') {
-      targetStringToCopy = "N/A";
+      targetStringToCopy = "-";
       copyTargetTitle = "目标地址 (不适用)";
-      displayTargetAddress = <span className="text-xs font-mono text-muted-foreground">不适用</span>;
+      displayTargetAddress = <span className="text-xs font-mono text-muted-foreground">-</span>;
       
-      tunnelStringToCopy = instance.url;
-      copyTunnelTitle = `主控 "${apiName}" 的 API 密钥`;
-      displayTunnelAddress = (
-        <span
-          className="font-mono text-xs cursor-pointer hover:text-primary transition-colors duration-150"
-          title={`点击复制 ${copyTunnelTitle}`}
-          onClick={(e) => {
-            e.stopPropagation();
-            handleCopyToClipboard(tunnelStringToCopy, copyTunnelTitle);
-          }}
-        >
-          {apiName || '未命名主控'} (API 密钥)
-        </span>
-      );
+      tunnelStringToCopy = "-";
+      copyTunnelTitle = "隧道地址 (不适用)";
+      displayTunnelAddress = <span className="text-xs font-mono text-muted-foreground">-</span>;
 
     } else if (instance.type === 'server' && parsedUrl) {
         targetStringToCopy = parsedUrl.targetAddress || "N/A";
@@ -390,28 +379,48 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
           )
         }</TableCell><TableCell>{
           instance.id === '********' ? (
-            <Badge variant="outline" className="border-yellow-500 text-yellow-600 whitespace-nowrap font-sans text-xs py-0.5 px-1.5">
-              <KeyRound className="mr-1 h-3.5 w-3.5" />
-              监听中
+            <Badge variant="outline" className="border-green-500 text-green-600 whitespace-nowrap font-sans text-xs py-0.5 px-1.5">
+              <CheckCircle className="mr-1 h-3.5 w-3.5" />
+              可用
             </Badge>
           ) : (
             <InstanceStatusBadge status={instance.status} />
           )
         }</TableCell>
         <TableCell
-          className="truncate max-w-[200px] text-xs font-mono cursor-pointer hover:text-primary transition-colors duration-150"
+          className="truncate max-w-[200px] text-xs font-mono"
           title={copyTargetTitle}
-          onClick={(e) => { e.stopPropagation(); if (targetStringToCopy && targetStringToCopy !== "N/A" && !targetStringToCopy.startsWith("N/A (")) { handleCopyToClipboard(targetStringToCopy, copyTargetTitle); }}}
-        >{displayTargetAddress}</TableCell>
+        >
+          {instance.id === '********' ? (
+             <span className="text-muted-foreground">-</span>
+          ) : (
+            <span
+              className="cursor-pointer hover:text-primary transition-colors duration-150"
+              onClick={(e) => { e.stopPropagation(); if (targetStringToCopy && targetStringToCopy !== "N/A" && !targetStringToCopy.startsWith("N/A (")) { handleCopyToClipboard(targetStringToCopy, copyTargetTitle); }}}
+            >
+              {displayTargetAddress}
+            </span>
+          )}
+        </TableCell>
         <TableCell
-          className="truncate max-w-[200px] text-xs font-mono cursor-pointer hover:text-primary transition-colors duration-150"
+          className="truncate max-w-[200px] text-xs font-mono"
           title={copyTunnelTitle}
-          onClick={(e) => { e.stopPropagation(); if (tunnelStringToCopy && tunnelStringToCopy !== "N/A" && !tunnelStringToCopy.startsWith("N/A (")) { handleCopyToClipboard(tunnelStringToCopy, copyTunnelTitle); }}}
-        >{displayTunnelAddress}</TableCell>
+        >
+          {instance.id === '********' ? (
+             <span className="text-muted-foreground">-</span>
+          ) : (
+            <span
+              className="cursor-pointer hover:text-primary transition-colors duration-150"
+              onClick={(e) => { e.stopPropagation(); if (tunnelStringToCopy && tunnelStringToCopy !== "N/A" && !tunnelStringToCopy.startsWith("N/A (")) { handleCopyToClipboard(tunnelStringToCopy, copyTunnelTitle); }}}
+            >
+             {displayTunnelAddress}
+            </span>
+          )}
+        </TableCell>
         <TableCell className="text-left">
           <div className="text-xs whitespace-nowrap font-mono">
             {instance.id === '********' ? (
-              "N/A"
+              <span className="text-muted-foreground">-</span>
             ) : (
               <>
                 <div>TCP: {formatBytes(instance.tcprx)} / {formatBytes(instance.tcptx)}</div>
