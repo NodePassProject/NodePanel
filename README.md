@@ -1,8 +1,13 @@
 # NodePanel 轻量化管理面板
 
-这是一个为 [NodePass (yosebyte/nodepass)](https://github.com/yosebyte/nodepass) 设计的前端管理面板。它提供了一个用户友好的界面来管理您的 NodePass 服务。
+这是一个为 [NodePass (yosebyte/nodepass)](https://github.com/yosebyte/nodepass) 设计的前端管理面板。它提供了一个用户友好的WebUI来管理您的 NodePass 服务。
 
-> ⚠️ 本项目为社区贡献的前端实现，代码质量不代表 NodePass 官方或核心开发者的实际水平。旨在抛砖引玉，欢迎更多开发者提交更优秀的作品，共同丰富 NodePass 的前端生态。
+> ⚠️ 本项目为社区贡献的前端实现，旨在抛砖引玉，代码质量不代表 NodePass 官方或核心开发者的实际水平。欢迎更多开发者提交更优秀的作品，共同丰富 NodePass 的前端生态！
+
+## Demo
+
+1. [Deployed on OpenBSD](https://node-panel.lesliealexander.eu)
+2. [Deployed on Vercel](https://node-panel.vercel.app)
 
 ## 部署
 
@@ -46,7 +51,7 @@ Cloudflare Pages 对 Next.js 应用提供了良好的支持，能够将其部署
 
 ## 📄 许可证
 
-该项目使用 [MIT](LICENSE) 许可证。
+该项目基于 [MIT](LICENSE) 许可证发布。
 
 ## 🙏 致谢
 
