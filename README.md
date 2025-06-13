@@ -40,7 +40,7 @@ Cloudflare Pages 对 Next.js 应用提供了良好的支持，能够将其部署
    * **构建命令**：`npx @cloudflare/next-on-pages@1`；
    * **构建输出目录**：`.vercel/output/static`。
 8. 点击 **Save and Deploy** 开始部署。
-9. 如构建失败，请前往「设置 → 运行时 → 兼容性标志」，输入 `nodejs_compat` 并保存，然后重新部署。
+9. 如构建失败，请前往「设置 → 运行时 → 兼容性标志」，输入并选择 `nodejs_compat` 保存，然后**重新部署** 。
 
 部署完成后，Cloudflare Pages 将为你的项目分配一个 `*.pages.dev` 域名，例如：`your-project.pages.dev`。你可以通过此域名访问你的前端页面。
 
