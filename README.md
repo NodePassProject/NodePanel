@@ -1,5 +1,9 @@
 # NodePanel 轻量化管理面板
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+![GitHub last commit](https://img.shields.io/github/last-commit/NodePassProject/NodePanel)
+
 这是一个由 [NodePass (yosebyte/nodepass)](https://github.com/yosebyte/nodepass) 强力驱动的前端管理面板，提供了一个用户友好的WebUI来管理您的 NodePass 服务。
 
 ![image](https://i.postimg.cc/KvYVC4yz/2025-06-16-165051.png)
@@ -51,12 +55,13 @@ Cloudflare Pages 对 Next.js 应用提供了良好的支持，能够将其部署
 
 部署完成后，Cloudflare Pages 将为你的项目分配一个 `*.pages.dev` 域名，例如：`your-project.pages.dev`。你可以通过此域名访问你的前端页面。
 
-## 📄 许可证
-
-该项目基于 [MIT](LICENSE) 许可证发布。
-
 ## 🙏 致谢
 
-*   [Yosebyte](https://github.com/yosebyte/) - [NodePass(yosebyte/nodepass)](https://github.com/yosebyte/nodepass) 核心创始人。
+*   [Yosebyte](https://github.com/yosebyte/) - [NodePass](https://github.com/yosebyte/nodepass)核心创始人。
+*   参与本项目的所有社区成员 [![Contributors](https://contrib.rocks/image?repo=NodePassProject/NodePanel)](https://github.com/NodePassProject/NodePanel/graphs/contributors)
+
+## ⭐ Star
+
+[![Stargazers over time](https://starchart.cc/NodePassProject/NodePanel.svg?variant=adaptive)](https://starchart.cc/NodePassProject/NodePanel)
 
 ##### > ⚠️ 本项目为社区贡献的前端实现，旨在抛砖引玉，代码质量不代表 NodePass 官方或核心开发者的实际水平。欢迎更多开发者提交更优秀的作品，共同丰富 NodePass 的前端生态！
