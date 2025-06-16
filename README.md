@@ -10,6 +10,7 @@
 这是一个由 [NodePass (yosebyte/nodepass)](https://github.com/yosebyte/nodepass) 强力驱动的前端管理面板，提供了一个用户友好的WebUI来管理您的 NodePass 服务。
 
 ![image](https://i.postimg.cc/KvYVC4yz/2025-06-16-165051.png)
+![image](https://i.postimg.cc/kGyqyvpw/2025-06-16-190750.png)
 
 ## Demo
 
