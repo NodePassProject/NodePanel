@@ -2,6 +2,8 @@
 
 这是一个由 [NodePass (yosebyte/nodepass)](https://github.com/yosebyte/nodepass) 强力驱动的前端管理面板，提供了一个用户友好的WebUI来管理您的 NodePass 服务。
 
+![image](https://i.postimg.cc/WztYzCzL/2025-06-15-233405.png)
+
 ## Demo
 
 1. [Deployed on OpenBSD](https://node-panel.lesliealexander.eu)
@@ -10,6 +12,7 @@
 ## 部署
 
 ### 部署到 Vercel
+<img src="https://cdn.jsdelivr.net/gh/HappyLeslieAlexander/OSS/Vercel.png" width="30" height="30" alt="Vercel">
 
 Vercel 是部署此前端面板的推荐方式之一。
 
@@ -23,6 +26,7 @@ Vercel 是部署此前端面板的推荐方式之一。
 部署完成后，你将获得一个 Vercel 域名 (例如 `xxx.vercel.app`)，前端面板将通过该域名访问。
 
 ### 部署到 Cloudflare Pages
+<img src="https://cdn.jsdelivr.net/gh/HappyLeslieAlexander/OSS/Cloudflare02.png" width="108.2" height="36.8" alt="Cloudflare">
 
 Cloudflare Pages 对 Next.js 应用提供了良好的支持，能够将其部署到 Cloudflare 的全球边缘网络，实现快速、稳定的访问体验。
 
