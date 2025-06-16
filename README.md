@@ -73,5 +73,3 @@ Cloudflare Pages 对 Next.js 应用提供了良好的支持，能够将其部署
 ## ⭐ Star
 
 [![Stargazers over time](https://starchart.cc/NodePassProject/NodePanel.svg?variant=adaptive)](https://starchart.cc/NodePassProject/NodePanel)
-
-##### > ⚠️ 本项目为社区贡献的前端实现，旨在抛砖引玉，代码质量不代表 NodePass 官方或核心开发者的实际水平。欢迎更多开发者提交更优秀的作品，共同丰富 NodePass 的前端生态！
