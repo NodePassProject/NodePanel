@@ -22,7 +22,7 @@ export default function HelpPage() {
         <div>
           <h1 className="text-3xl font-bold font-title mb-2">帮助与说明</h1>
           <p className="text-lg text-muted-foreground font-sans">
-            欢迎使用 NodePass 管理器！本页面提供功能概览、操作指南及常见问题排查。
+            欢迎使用 NodePanel ！本页面提供功能概览、操作指南及常见问题排查。
           </p>
         </div>
 
@@ -30,12 +30,12 @@ export default function HelpPage() {
           <CardHeader>
             <CardTitle className="font-title flex items-center">
               <Info size={22} className="mr-2 text-primary" />
-              关于 NodePass 管理器
+              关于 NodePanel
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3 text-sm font-sans">
             <p>
-              NodePass 管理器是一个为 <a href="https://github.com/yosebyte/nodepass" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">NodePass</a> 后端服务设计的前端管理面板。它提供了一个用户友好的界面来集中管理您的 NodePass 主控连接、实例（服务端/客户端）、可视化连接拓扑以及监控流量。
+              NodePanel 是一个为 <a href="https://github.com/yosebyte/nodepass" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">NodePass</a> 后端服务设计的前端管理面板。它提供了一个用户友好的界面来集中管理您的 NodePass 主控连接、实例（服务端/客户端）、可视化连接拓扑以及监控流量。
             </p>
           </CardContent>
         </Card>
@@ -120,18 +120,18 @@ export default function HelpPage() {
               <AlertTitle className="font-title text-base text-blue-700">HTTP 主控连接问题 (混合内容)</AlertTitle>
               <ShadAlertDescription className="mt-1 space-y-2">
                 <p>
-                  如果您的 NodePass 主控 API 通过 <strong>HTTP (非 HTTPS)</strong> 提供服务，而本管理器通过 HTTPS 访问，浏览器可能阻止连接。
+                  如果您的 NodePass 主控 API 通过 <strong>HTTP (非 HTTPS)</strong> 提供服务，而 NodePanel 通过 HTTPS 访问，浏览器可能阻止连接。
                 </p>
                 <p className="font-semibold">解决方案:</p>
                 <ol className="list-decimal list-outside pl-5 space-y-1">
                   <li>
                     在 Chrome 地址栏输入: <code className="bg-card p-1 rounded text-xs select-all">chrome://settings/content/siteDetails?site={appDomain || 'YOUR_APP_DOMAIN'}</code>
                     {appDomain && <span className="block text-xs text-muted-foreground">(当前应用域名已自动填充)</span>}
-                    {!appDomain && <span className="block text-xs text-muted-foreground">(请将 YOUR_APP_DOMAIN 替换为当前 NodePass 管理器应用的域名)</span>}
+                    {!appDomain && <span className="block text-xs text-muted-foreground">(请将 YOUR_APP_DOMAIN 替换为当前 NodePanel 应用的域名)</span>}
                   </li>
                   <li>找到 “<strong>不安全内容</strong>”(Insecure content) 设置。</li>
                   <li>更改为 “<strong>允许</strong>”(Allow)。</li>
-                  <li>刷新本 NodePass 管理器页面。</li>
+                  <li>刷新本 NodePanel 页面。</li>
                 </ol>
               </ShadAlertDescription>
             </Alert>
@@ -155,7 +155,7 @@ export default function HelpPage() {
                   <li>
                     点击 “<strong>继续前往 {<em>主控API域名</em>} (不安全)</strong>” (Proceed to {<em>api_domain</em>} (unsafe))。
                   </li>
-                  <li>接受证书后，返回本 NodePass 管理器页面并刷新。</li>
+                  <li>接受证书后，返回本 NodePanel 页面并刷新。</li>
                 </ol>
               </ShadAlertDescription>
             </Alert>
@@ -175,7 +175,7 @@ export default function HelpPage() {
                 NodePass (后端) 相关问题: <a href="https://github.com/yosebyte/nodepass/issues" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">NodePass GitHub Issues <ExternalLink size={14} className="inline-block ml-0.5" /></a>
               </li>
               <li>
-                NodePass 管理器 (本前端) 相关问题: <a href="https://github.com/MK85Pilot/nodepass-panel/issues" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">NodePass Panel GitHub Issues <ExternalLink size={14} className="inline-block ml-0.5" /></a>
+                NodePanel (本前端) 相关问题: <a href="https://github.com/MK85Pilot/nodepass-panel/issues" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">NodePass Panel GitHub Issues <ExternalLink size={14} className="inline-block ml-0.5" /></a>
               </li>
             </ul>
           </CardContent>

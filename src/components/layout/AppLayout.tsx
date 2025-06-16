@@ -74,7 +74,7 @@ export function AppLayout({ children, onLog }: AppLayoutProps) {
         // onLog prop will be handled by the parent if needed, or ApiConfigDialog can log itself
       />
       <footer className="py-6 text-center text-sm text-muted-foreground border-t border-border bg-muted/30">
-        NodePass 管理器 &copy; {new Date().getFullYear()} | 
+        NodePanel &copy; {new Date().getFullYear()} | 
         由 <a 
             href="https://github.com/yosebyte/nodepass" 
             target="_blank" 

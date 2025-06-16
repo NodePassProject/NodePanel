@@ -54,7 +54,7 @@ export function Header({ onManageApiConfigs, onClearActiveConfig, hasActiveApiCo
         <div className="flex items-center">
           <Link href="/" className="flex items-center" aria-label="主页">
             <AppLogo className="h-[20px] sm:h-[24px] w-auto mr-2" /> 
-            <h1 className="text-flow-effect text-xl font-title tracking-tight sm:text-2xl">NodePass 管理器</h1>
+            <h1 className="text-flow-effect text-xl font-title tracking-tight sm:text-2xl">NodePanel</h1>
           </Link>
            {activeApiConfig && (
             <span className="ml-3 text-xs px-2 py-1 bg-muted text-muted-foreground rounded-full hidden sm:inline-block font-sans">

@@ -26,7 +26,7 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'NodePass 管理器',
+  title: 'NodePanel',
   description: 'NodePass 实例管理。',
   // icons: [{ rel: 'icon', url: '/logo.svg', type: 'image/svg+xml' }], // Using direct link in head for now
 };
