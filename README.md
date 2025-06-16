@@ -1,8 +1,11 @@
-# NodePanel 轻量化管理面板
+<h1 align="center">NodePanel 轻量化管理面板</h1>
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-
-![GitHub last commit](https://img.shields.io/github/last-commit/NodePassProject/NodePanel)
+<p align="center">
+  <a href="https://opensource.org/licenses/MIT">
+    <img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT">
+  </a>
+  <img src="https://img.shields.io/github/last-commit/NodePassProject/NodePanel" alt="GitHub last commit">
+</p>
 
 这是一个由 [NodePass (yosebyte/nodepass)](https://github.com/yosebyte/nodepass) 强力驱动的前端管理面板，提供了一个用户友好的WebUI来管理您的 NodePass 服务。
 
