@@ -18,8 +18,10 @@
 
 ## 部署
 
-### 部署到 Vercel
-<img src="https://cdn.jsdelivr.net/gh/HappyLeslieAlexander/OSS/Vercel.png" width="30" height="30" alt="Vercel">
+<h3>
+  部署到 Vercel
+  <img src="https://cdn.jsdelivr.net/gh/HappyLeslieAlexander/OSS/Vercel.png" width="30" height="30" alt="Vercel" style="vertical-align: middle;">
+</h3>
 
 Vercel 是部署此前端面板的推荐方式之一。
 
@@ -32,8 +34,10 @@ Vercel 是部署此前端面板的推荐方式之一。
 
 部署完成后，你将获得一个 Vercel 域名 (例如 `xxx.vercel.app`)，前端面板将通过该域名访问。
 
-### 部署到 Cloudflare Pages
-<img src="https://cdn.jsdelivr.net/gh/HappyLeslieAlexander/OSS/Cloudflare02.png" width="108.2" height="36.8" alt="Cloudflare">
+<h3>
+  部署到 Cloudflare Pages
+  <img src="https://cdn.jsdelivr.net/gh/HappyLeslieAlexander/OSS/Cloudflare02.png" width="108.2" height="36.8" alt="Cloudflare" style="vertical-align: middle;">
+</h3>
 
 Cloudflare Pages 对 Next.js 应用提供了良好的支持，能够将其部署到 Cloudflare 的全球边缘网络，实现快速、稳定的访问体验。
 
@@ -61,7 +65,9 @@ Cloudflare Pages 对 Next.js 应用提供了良好的支持，能够将其部署
 ## 🙏 致谢
 
 *   [Yosebyte](https://github.com/yosebyte/) - [NodePass](https://github.com/yosebyte/nodepass)核心创始人。
-*   参与本项目的所有社区成员 [![Contributors](https://contrib.rocks/image?repo=NodePassProject/NodePanel)](https://github.com/NodePassProject/NodePanel/graphs/contributors)
+*   参与本项目的所有社区成员
+
+    [![Contributors](https://contrib.rocks/image?repo=NodePassProject/NodePanel)](https://github.com/NodePassProject/NodePanel/graphs/contributors)
 
 ## ⭐ Star
 
