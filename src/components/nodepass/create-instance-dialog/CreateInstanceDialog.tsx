@@ -24,12 +24,11 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { nodePassApi } from '@/lib/api';
 import { useApiConfig, type NamedApiConfig } from '@/hooks/use-api-key';
 import type { AppLogEntry } from '../EventLog';
-import { extractHostname } from '@/lib/url-utils'; // isWildcardHostname removed as it's not used
+import { extractHostname } from '@/lib/url-utils'; 
 import { useInstanceAliases } from '@/hooks/use-instance-aliases';
 
 import { CreateInstanceFormFields } from './CreateInstanceFormFields';
 import { buildUrlFromFormValues, type BuildUrlParams, prepareClientUrlParams, prepareServerUrlParams } from './utils';
-// MASTER_TLS_MODE_DISPLAY_MAP removed as it's handled in CreateInstanceFormFields
 
 interface CreateInstanceDialogProps {
   open: boolean;
@@ -45,7 +44,7 @@ interface CreateInstanceDialogProps {
 export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiToken, apiName, activeApiConfig, onLog }: CreateInstanceDialogProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const { apiConfigsList, getApiRootUrl, getToken } = useApiConfig(); // getApiConfigById removed
+  const { apiConfigsList, getApiRootUrl, getToken } = useApiConfig(); 
   const { setAlias: saveInstanceAlias } = useInstanceAliases();
   const [externalApiSuggestion, setExternalApiSuggestion] = useState<string | null>(null);
   const [showDetailedDescriptions, setShowDetailedDescriptions] = useState(false);
@@ -121,7 +120,6 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
       }
 
       const localHostnames = ['localhost', '127.0.0.1', '::', '::1', ''];
-      // isWildcardHostname removed from condition as it's covered by localHostnames or not relevant for this simple check
       if (localHostnames.includes(clientTunnelHost.toLowerCase())) {
         setExternalApiSuggestion(null);
         return;
@@ -161,6 +159,8 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
       });
       onLog?.('实例创建成功于 ' + masterNameForToast + ': ' + (createdInstance.type === 'server' ? '服务端' : '客户端') + ' - ' + createdInstance.id.substring(0,8) + '... (URL: ' + shortUrl + ')', 'SUCCESS');
       
+      // Alias is saved in onSubmitHandler now, after mutateAsync resolves.
+      // Invalidate queries after alias is potentially saved.
       queryClient.invalidateQueries({ queryKey: ['instances', variables.useApiRoot === apiRoot ? apiId : apiConfigsList.find(c => getApiRootUrl(c.id) === variables.useApiRoot)?.id] });
       queryClient.invalidateQueries({ queryKey: ['allInstancesForTraffic']});
     },
@@ -219,20 +219,31 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
          });
 
          if (primaryCreatedInstance && values.alias && values.alias.trim() !== "") {
-            saveInstanceAlias(primaryCreatedInstance.id, values.alias); // Alias saved here
+            saveInstanceAlias(primaryCreatedInstance.id, values.alias.trim());
             onLog?.(`为实例 ${primaryCreatedInstance.id.substring(0,8)}... 设置别名: "${values.alias.trim()}"`, 'INFO');
          }
       }
 
-      const wasAnyMutationInErrorState = createInstanceMutation.isError;
-
-      if (!wasAnyMutationInErrorState) {
+      // If mutation was successful (no exception thrown), this point is reached.
+      // The onSuccess callback of the mutation will handle toasts and query invalidations.
+      // Now, reset form and close dialog if everything up to here was fine.
+      // The createInstanceMutation.isError check might be redundant if await throws,
+      // but it's a safeguard.
+      if (!createInstanceMutation.isError) {
          form.reset();
          onOpenChange(false);
       }
     } catch (error: any) {
-       console.error("创建实例序列中发生错误:", error);
-       onLog?.('创建实例序列中发生错误: ' + error.message, 'ERROR');
+       // This catch block handles errors from mutateAsync directly (if it throws)
+       // or any other synchronous errors in this try block.
+       // Note: createInstanceMutation.onError already handles toast/log for mutation failures.
+       console.error("创建实例或保存别名时发生错误:", error);
+       // Optionally, add a generic toast here if the error isn't from the mutation itself
+       // (though most errors would likely be from mutateAsync).
+       if (!createInstanceMutation.isError) { // If error is not from the mutation handled by its onError
+          toast({ title: "操作失败", description: "创建实例过程中发生意外错误。", variant: "destructive" });
+          onLog?.('创建实例或保存别名时发生错误: ' + error.message, 'ERROR');
+       }
     }
   }
 

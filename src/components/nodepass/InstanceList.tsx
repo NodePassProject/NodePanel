@@ -54,7 +54,7 @@ interface InstanceListProps {
 export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfig, apiConfigsList, onLog, onOpenCreateInstanceDialog }: InstanceListProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const { getAlias, isLoadingAliases, removeAlias } = useInstanceAliases();
+  const { getAlias, isLoadingAliases, removeAlias, aliases: allAliasesObject } = useInstanceAliases();
 
   const [selectedInstanceForDetails, setSelectedInstanceForDetails] = useState<Instance | null>(null);
   const [selectedInstanceForDelete, setSelectedInstanceForDelete] = useState<Instance | null>(null);
@@ -113,7 +113,7 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
         description: `实例 ${instanceId.substring(0,8)}... 已删除。`,
       });
       onLog?.(`实例 ${instanceId.substring(0,8)}... 已删除。`, 'SUCCESS');
-      removeAlias(instanceId); // Remove alias from localStorage
+      removeAlias(instanceId); 
       queryClient.invalidateQueries({ queryKey: ['instances', apiId] });
       queryClient.invalidateQueries({ queryKey: ['allInstancesForTraffic']});
       setSelectedInstanceForDelete(null);
@@ -147,16 +147,18 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
     }
   };
 
-  const filteredInstances = instances?.filter(instance => {
-    const instanceAlias = (instance.id !== '********' && !isLoadingAliases) ? getAlias(instance.id) : '';
-    return (
-      instance.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (instanceAlias || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-      instance.url.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (instance.id !== '********' && instance.type.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (instance.id === '********' && ('api key'.includes(searchTerm.toLowerCase()) || '密钥'.includes(searchTerm.toLowerCase()) || (apiName && apiName.toLowerCase().includes(searchTerm.toLowerCase())) ))
-    );
-  });
+  const filteredInstances = useMemo(() => {
+    return instances?.filter(instance => {
+      const instanceAlias = (instance.id !== '********' && !isLoadingAliases) ? allAliasesObject[instance.id] : '';
+      return (
+        instance.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (instanceAlias || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+        instance.url.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (instance.id !== '********' && instance.type.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (instance.id === '********' && ('api key'.includes(searchTerm.toLowerCase()) || '密钥'.includes(searchTerm.toLowerCase()) || (apiName && apiName.toLowerCase().includes(searchTerm.toLowerCase())) ))
+      );
+    });
+  }, [instances, searchTerm, isLoadingAliases, allAliasesObject, apiName]);
 
 
   const deletableInstances = useMemo(() => filteredInstances?.filter(inst => inst.id !== '********') || [], [filteredInstances]);
@@ -222,7 +224,7 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
       <TableRow key={`skeleton-${i}`}>
         <TableCell className="w-10"><Skeleton className="h-4 w-4" /></TableCell>{/*
      */}<TableCell><Skeleton className="h-4 w-24" /></TableCell>{/*
-     */}<TableCell><Skeleton className="h-4 w-20" /></TableCell>{/* Alias skeleton */}{/*
+     */}<TableCell><Skeleton className="h-4 w-20" /></TableCell>{/*
      */}<TableCell><Skeleton className="h-4 w-16" /></TableCell>{/*
      */}<TableCell><Skeleton className="h-4 w-16" /></TableCell>{/*
      */}<TableCell><Skeleton className="h-4 w-32" /></TableCell>{/*
@@ -240,7 +242,8 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
 
   const renderInstanceRow = (instance: Instance) => {
     const parsedUrl = instance.id !== '********' ? parseNodePassUrl(instance.url) : null;
-    const alias = instance.id !== '********' ? getAlias(instance.id) : undefined;
+    const alias = (instance.id !== '********' && !isLoadingAliases) ? allAliasesObject[instance.id] : undefined;
+
 
     let displayTargetAddress: React.ReactNode = "N/A";
     let copyTargetTitle = "目标地址";
@@ -291,8 +294,8 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
     } else if (instance.type === 'client' && parsedUrl && activeApiConfig) {
         const isSingleEnded = parsedUrl.scheme === 'client' && parsedUrl.targetAddress && parsedUrl.tunnelAddress && isWildcardHostname(extractHostname(parsedUrl.tunnelAddress));
 
-        if (isSingleEnded) { // Single-ended client
-            targetStringToCopy = parsedUrl.targetAddress || "N/A"; // This is the remote service address
+        if (isSingleEnded) { 
+            targetStringToCopy = parsedUrl.targetAddress || "N/A"; 
             copyTargetTitle = "客户端单端转发目标地址";
             displayTargetAddress = (
                <span
@@ -304,13 +307,13 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
                 </span>
             );
 
-            const clientLocalListeningPort = extractPort(parsedUrl.tunnelAddress || ''); // tunnelAddress stores local listen for single-ended
+            const clientLocalListeningPort = extractPort(parsedUrl.tunnelAddress || ''); 
             const clientMasterApiHost = extractHostname(activeApiConfig.apiUrl);
             if (clientMasterApiHost && clientLocalListeningPort) {
                 tunnelStringToCopy = `${formatHostForDisplay(clientMasterApiHost)}:${clientLocalListeningPort}`;
                 copyTunnelTitle = `客户端本地监听 (单端模式, 主控: ${activeApiConfig.name})`;
             } else {
-                tunnelStringToCopy = `${parsedUrl.tunnelAddress || '[::]:????'}`; // Show the raw listen address if master host unknown
+                tunnelStringToCopy = `${parsedUrl.tunnelAddress || '[::]:????'}`; 
                 copyTunnelTitle = `客户端本地监听 (单端模式, 主控地址未知)`;
             }
             displayTunnelAddress = (
@@ -323,14 +326,14 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
                </span>
             );
 
-        } else { // Normal client (connects to a NodePass server)
-            const clientLocalForwardPort = extractPort(parsedUrl.targetAddress || ''); // targetAddress stores local forward for normal client
+        } else { 
+            const clientLocalForwardPort = extractPort(parsedUrl.targetAddress || ''); 
             const clientMasterApiHost = extractHostname(activeApiConfig.apiUrl);
              if (clientMasterApiHost && clientLocalForwardPort) {
                 targetStringToCopy = `${formatHostForDisplay(clientMasterApiHost)}:${clientLocalForwardPort}`;
                 copyTunnelTitle = `客户端本地转发 (主控: ${activeApiConfig.name})`;
             } else if (clientLocalForwardPort) {
-                targetStringToCopy = `127.0.0.1:${clientLocalForwardPort}`; // Fallback if master host is not available
+                targetStringToCopy = `127.0.0.1:${clientLocalForwardPort}`; 
                 copyTunnelTitle = `客户端本地转发 (主控地址未知)`;
             } else {
                 targetStringToCopy = parsedUrl.targetAddress || "N/A (解析失败)";
@@ -346,7 +349,7 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
                </span>
             );
 
-            tunnelStringToCopy = parsedUrl.tunnelAddress || "N/A"; // This is the server's tunnel address client connects to
+            tunnelStringToCopy = parsedUrl.tunnelAddress || "N/A"; 
             copyTunnelTitle = "客户端连接的服务端隧道地址";
             displayTunnelAddress = (
                <span
@@ -525,7 +528,6 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
     } else if (!apiId) {
         message = "请选择活动主控以查看实例。";
     } else if (instancesError) {
-        // Error already handled above
         return null;
     }
     return (
@@ -652,6 +654,3 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
     </Card>
   );
 }
-
-    
-
