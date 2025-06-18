@@ -7,7 +7,7 @@ import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, For
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Info, Settings2, Share2, Zap } from 'lucide-react';
+import { Info, Settings2, Share2, Zap, Tag } from 'lucide-react'; // Added Tag
 import type { CreateInstanceFormValues } from '@/zod-schemas/nodepass';
 import type { NamedApiConfig } from '@/hooks/use-api-key';
 import { MASTER_TLS_MODE_DISPLAY_MAP } from './constants';
@@ -65,6 +65,33 @@ export function CreateInstanceFormFields({
                   <SelectItem value="服务端" className="font-sans text-xs">服务端</SelectItem>
                 </SelectContent>
               </Select>
+              <FormMessage className="text-xs" />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="alias"
+          render={({ field }) => (
+            <FormItem className="space-y-1">
+              <FormLabel className="font-sans text-xs flex items-center">
+                <Tag size={14} className="mr-1 text-muted-foreground" />
+                实例别名 (可选)
+              </FormLabel>
+              <FormControl>
+                <Input
+                  className="text-xs font-sans h-9"
+                  placeholder="例: 我的测试服务"
+                  {...field}
+                  value={field.value || ""} 
+                />
+              </FormControl>
+              {showDetailedDescriptions && (
+                <FormDescription className="font-sans text-xs mt-0.5">
+                  为此实例设置一个易于记忆的名称，将显示在实例列表中。
+                </FormDescription>
+              )}
               <FormMessage className="text-xs" />
             </FormItem>
           )}

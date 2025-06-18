@@ -12,12 +12,13 @@ import {
 import { Badge } from '@/components/ui/badge';
 import type { Instance } from '@/types/nodepass';
 import { InstanceStatusBadge } from './InstanceStatusBadge';
-import { ArrowDownCircle, ArrowUpCircle, ServerIcon, SmartphoneIcon, Fingerprint, Cable, KeyRound, Eye, EyeOff, ScrollText, Network, AlertTriangle, Info as InfoIcon, MessageSquare, AlertCircle, Bug, HelpCircle, FileText } from 'lucide-react';
+import { ArrowDownCircle, ArrowUpCircle, ServerIcon, SmartphoneIcon, Fingerprint, Cable, KeyRound, Eye, EyeOff, ScrollText, Network, AlertTriangle, Info as InfoIcon, MessageSquare, AlertCircle, Bug, HelpCircle, FileText, Tag } from 'lucide-react'; // Added Tag
 import { useToast } from '@/hooks/use-toast';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { getEventsUrl } from '@/lib/api';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from "@/lib/utils";
+import { useInstanceAliases } from '@/hooks/use-instance-aliases';
 
 interface InstanceDetailsModalProps {
   instance: Instance | null;
@@ -162,6 +163,8 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const logCounterRef = useRef(0);
   const hasConnectedAtLeastOnceRef = useRef(false);
+  const { getAlias, isLoadingAliases } = useInstanceAliases();
+
 
   const addLogEntry = useCallback((entry: ParsedLogEntry) => {
     setInstanceLogs(prevLogs => {
@@ -396,6 +399,8 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
 
   if (!instance) return null;
   const isApiKeyInstance = instance.id === '********';
+  const alias = !isApiKeyInstance && !isLoadingAliases ? getAlias(instance.id) : undefined;
+
 
   const detailItems = [
     {
@@ -411,6 +416,22 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
       ),
       icon: <Fingerprint className="h-4 w-4 text-muted-foreground" />
     },
+    ...(!isApiKeyInstance ? [{
+      label: "别名",
+      value: (
+        isLoadingAliases ? <span className="text-xs">加载中...</span> :
+        alias ? (
+          <span
+            className="font-sans text-xs cursor-pointer hover:text-primary transition-colors duration-150"
+            title={`点击复制: ${alias}`}
+            onClick={() => handleCopyToClipboard(alias, "别名")}
+          >
+            {alias}
+          </span>
+        ) : <span className="text-xs text-muted-foreground">-</span>
+      ),
+      icon: <Tag className="h-4 w-4 text-muted-foreground" />
+    }] : []),
     {
       label: "类型",
       value: isApiKeyInstance ? (

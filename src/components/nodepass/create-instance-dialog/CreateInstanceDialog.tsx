@@ -18,13 +18,14 @@ import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { createInstanceFormSchema, type CreateInstanceFormValues, createInstanceApiSchema } from '@/zod-schemas/nodepass';
-import type { CreateInstanceRequest } from '@/types/nodepass';
+import type { CreateInstanceRequest, Instance } from '@/types/nodepass';
 import { PlusCircle, Loader2 } from 'lucide-react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { nodePassApi } from '@/lib/api';
 import { useApiConfig, type NamedApiConfig } from '@/hooks/use-api-key';
 import type { AppLogEntry } from '../EventLog';
 import { extractHostname } from '@/lib/url-utils'; // isWildcardHostname removed as it's not used
+import { useInstanceAliases } from '@/hooks/use-instance-aliases';
 
 import { CreateInstanceFormFields } from './CreateInstanceFormFields';
 import { buildUrlFromFormValues, type BuildUrlParams, prepareClientUrlParams, prepareServerUrlParams } from './utils';
@@ -45,6 +46,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { apiConfigsList, getApiRootUrl, getToken } = useApiConfig(); // getApiConfigById removed
+  const { setAlias: saveInstanceAlias } = useInstanceAliases();
   const [externalApiSuggestion, setExternalApiSuggestion] = useState<string | null>(null);
   const [showDetailedDescriptions, setShowDetailedDescriptions] = useState(false);
 
@@ -52,10 +54,11 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
     resolver: zodResolver(createInstanceFormSchema),
     defaultValues: {
       instanceType: '客户端',
+      alias: '',
       isSingleEndedForward: false,
       tunnelAddress: '',
       targetAddress: '',
-      logLevel: 'master', // Default log level changed to master
+      logLevel: 'master', 
       tlsMode: 'master',
       certPath: '',
       keyPath: '',
@@ -71,10 +74,11 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
     if (open) {
       form.reset({
         instanceType: '客户端',
+        alias: '',
         isSingleEndedForward: false,
         tunnelAddress: '',
         targetAddress: '',
-        logLevel: 'master', // Default log level changed to master
+        logLevel: 'master', 
         tlsMode: 'master',
         certPath: '',
         keyPath: '',
@@ -156,7 +160,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
         description: '实例 (URL: ' + shortUrl + ') -> ID: ' + createdInstance.id.substring(0,8) + '...',
       });
       onLog?.('实例创建成功于 ' + masterNameForToast + ': ' + (createdInstance.type === 'server' ? '服务端' : '客户端') + ' - ' + createdInstance.id.substring(0,8) + '... (URL: ' + shortUrl + ')', 'SUCCESS');
-
+      
       queryClient.invalidateQueries({ queryKey: ['instances', variables.useApiRoot === apiRoot ? apiId : apiConfigsList.find(c => getApiRootUrl(c.id) === variables.useApiRoot)?.id] });
       queryClient.invalidateQueries({ queryKey: ['allInstancesForTraffic']});
     },
@@ -180,6 +184,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
     }
 
     let primaryUrlParams: BuildUrlParams | null = null;
+    let primaryCreatedInstance: Instance | null = null;
 
     const localOnLog = (message: string, type: 'INFO' | 'WARN' | 'ERROR') => {
       if (type === 'ERROR') toast({ title: "配置错误", description: message, variant: "destructive" });
@@ -207,11 +212,16 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
 
     try {
       if (primaryInstanceUrl) {
-        await createInstanceMutation.mutateAsync({
+        primaryCreatedInstance = await createInstanceMutation.mutateAsync({
             data: { url: primaryInstanceUrl },
             useApiRoot: apiRoot,
             useApiToken: apiToken,
          });
+
+         if (primaryCreatedInstance && values.alias && values.alias.trim() !== "") {
+            saveInstanceAlias(primaryCreatedInstance.id, values.alias); // Alias saved here
+            onLog?.(`为实例 ${primaryCreatedInstance.id.substring(0,8)}... 设置别名: "${values.alias.trim()}"`, 'INFO');
+         }
       }
 
       const wasAnyMutationInErrorState = createInstanceMutation.isError;

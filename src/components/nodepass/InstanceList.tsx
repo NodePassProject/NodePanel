@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { AlertTriangle, Eye, Trash2, ServerIcon, SmartphoneIcon, Search, KeyRound, PlusCircle, CheckCircle, ArrowDown, ArrowUp } from 'lucide-react';
+import { AlertTriangle, Eye, Trash2, ServerIcon, SmartphoneIcon, Search, KeyRound, PlusCircle, CheckCircle, ArrowDown, ArrowUp, Tag } from 'lucide-react'; // Added Tag
 import type { Instance, UpdateInstanceRequest } from '@/types/nodepass';
 import { InstanceStatusBadge } from './InstanceStatusBadge';
 import { InstanceControls } from './InstanceControls';
@@ -29,6 +29,7 @@ import { extractHostname, extractPort, parseNodePassUrl, isWildcardHostname, for
 import { Checkbox } from '@/components/ui/checkbox';
 import { Button } from '@/components/ui/button';
 import { BulkDeleteInstancesDialog } from './BulkDeleteInstancesDialog';
+import { useInstanceAliases } from '@/hooks/use-instance-aliases';
 
 
 function formatBytes(bytes: number) {
@@ -53,6 +54,7 @@ interface InstanceListProps {
 export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfig, apiConfigsList, onLog, onOpenCreateInstanceDialog }: InstanceListProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { getAlias, isLoadingAliases, removeAlias } = useInstanceAliases();
 
   const [selectedInstanceForDetails, setSelectedInstanceForDetails] = useState<Instance | null>(null);
   const [selectedInstanceForDelete, setSelectedInstanceForDelete] = useState<Instance | null>(null);
@@ -111,6 +113,7 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
         description: `实例 ${instanceId} 已删除。`,
       });
       onLog?.(`实例 ${instanceId} 已删除。`, 'SUCCESS');
+      removeAlias(instanceId); // Remove alias from localStorage
       queryClient.invalidateQueries({ queryKey: ['instances', apiId] });
       queryClient.invalidateQueries({ queryKey: ['allInstancesForTraffic']});
       setSelectedInstanceForDelete(null);
@@ -144,12 +147,17 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
     }
   };
 
-  const filteredInstances = instances?.filter(instance =>
-    instance.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    instance.url.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (instance.id !== '********' && instance.type.toLowerCase().includes(searchTerm.toLowerCase())) ||
-    (instance.id === '********' && ('api key'.includes(searchTerm.toLowerCase()) || '密钥'.includes(searchTerm.toLowerCase()) || (apiName && apiName.toLowerCase().includes(searchTerm.toLowerCase())) ))
-  );
+  const filteredInstances = instances?.filter(instance => {
+    const instanceAlias = (instance.id !== '********' && !isLoadingAliases) ? getAlias(instance.id) : '';
+    return (
+      instance.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (instanceAlias || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      instance.url.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (instance.id !== '********' && instance.type.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (instance.id === '********' && ('api key'.includes(searchTerm.toLowerCase()) || '密钥'.includes(searchTerm.toLowerCase()) || (apiName && apiName.toLowerCase().includes(searchTerm.toLowerCase())) ))
+    );
+  });
+
 
   const deletableInstances = useMemo(() => filteredInstances?.filter(inst => inst.id !== '********') || [], [filteredInstances]);
 
@@ -214,6 +222,7 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
       <TableRow key={`skeleton-${i}`}>
         <TableCell className="w-10"><Skeleton className="h-4 w-4" /></TableCell>
         <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+        <TableCell><Skeleton className="h-4 w-20" /></TableCell> {/* Alias skeleton */}
         <TableCell><Skeleton className="h-4 w-16" /></TableCell>
         <TableCell><Skeleton className="h-4 w-16" /></TableCell>
         <TableCell><Skeleton className="h-4 w-32" /></TableCell>
@@ -231,6 +240,7 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
 
   const renderInstanceRow = (instance: Instance) => {
     const parsedUrl = instance.id !== '********' ? parseNodePassUrl(instance.url) : null;
+    const alias = instance.id !== '********' ? getAlias(instance.id) : undefined;
 
     let displayTargetAddress: React.ReactNode = "N/A";
     let copyTargetTitle = "目标地址";
@@ -366,7 +376,14 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
               disabled={isBulkDeleting}
             />
           )
-        }</TableCell><TableCell className="font-medium font-mono text-xs break-all" title={instance.id}>{instance.id}</TableCell><TableCell>{
+        }</TableCell><TableCell className="font-medium font-mono text-xs break-all" title={instance.id}>{instance.id}</TableCell>
+        <TableCell className="text-xs font-sans truncate max-w-[150px]" title={alias}>
+          {isLoadingAliases && instance.id !== '********' ? <Skeleton className="h-4 w-20" /> : 
+           alias ? <span className="flex items-center"><Tag size={12} className="mr-1 text-muted-foreground" />{alias}</span> : 
+           (instance.id !== '********' ? <span className="text-muted-foreground">-</span> : '')
+          }
+        </TableCell>
+        <TableCell>{
           instance.id === '********' ? (
             <Badge variant="outline" className="border-yellow-500 text-yellow-600 items-center whitespace-nowrap text-xs py-0.5 px-1.5 font-sans">
               <KeyRound className="h-3 w-3 mr-1" />API 密钥
@@ -504,7 +521,7 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
     }
     return (
       <TableRow>
-        <TableCell colSpan={8} className="text-center h-24 font-sans">
+        <TableCell colSpan={9} className="text-center h-24 font-sans"> {/* Updated colSpan to 9 */}
           {message}
         </TableCell>
       </TableRow>
@@ -581,6 +598,7 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
                   />
                 </TableHead>
                 <TableHead className="font-sans">ID</TableHead>
+                <TableHead className="font-sans">别名</TableHead>
                 <TableHead className="font-sans">类型</TableHead>
                 <TableHead className="font-sans">状态</TableHead>
                 <TableHead className="font-sans">隧道地址</TableHead>

@@ -6,6 +6,7 @@ export const createInstanceFormSchema = z.object({
   instanceType: z.enum(["客户端", "服务端"], {
     required_error: "实例类型是必需的。",
   }),
+  alias: z.string().trim().max(50, "别名最长50字符").optional(),
   isSingleEndedForward: z.optional(z.boolean()),
   tunnelAddress: z.string().min(1, "此字段是必需的。"),
   targetAddress: z.optional(z.string()),
@@ -106,4 +107,5 @@ export const createInstanceApiSchema = z.object({
 export const updateInstanceSchema = z.object({
   action: z.enum(["start", "stop", "restart"]),
 });
+
 
