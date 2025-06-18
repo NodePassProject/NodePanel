@@ -330,7 +330,7 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
                <span
                 className="font-mono text-xs cursor-pointer hover:text-primary transition-colors duration-150"
                 title={`点击复制: ${targetStringToCopy}`}
-                onClick={(e) => { e.stopPropagation(); if(targetStringToCopy && !targetStringToCopy.startsWith("N/A")) {handleCopyToClipboard(targetStringToCopy, copyTargetTitle); }}}
+                onClick={(e) => { e.stopPropagation(); if(targetStringToCopy && !targetStringToCopy.startsWith("N/A")) {handleCopyToClipboard(targetStringToCopy, copyTunnelTitle); }}}
                >
                  {targetStringToCopy}
                </span>
@@ -425,11 +425,12 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
             {instance.id === '********' ? (
               <span className="text-muted-foreground">-</span>
             ) : (
-              <div className="flex flex-col">
+              <div className="flex items-center space-x-2">
                 <span className="flex items-center" title={`接收: TCP ${formatBytes(instance.tcprx)}, UDP ${formatBytes(instance.udprx)}`}>
                   <ArrowDown className="h-3 w-3 mr-1 text-blue-500" />
                   {formatBytes(totalRx)}
                 </span>
+                <span className="text-muted-foreground">/</span>
                 <span className="flex items-center" title={`发送: TCP ${formatBytes(instance.tcptx)}, UDP ${formatBytes(instance.udptx)}`}>
                   <ArrowUp className="h-3 w-3 mr-1 text-green-500" />
                   {formatBytes(totalTx)}
@@ -584,7 +585,7 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
                 <TableHead className="font-sans">状态</TableHead>
                 <TableHead className="font-sans">隧道地址</TableHead>
                 <TableHead className="font-sans">目标地址</TableHead>
-                <TableHead className="text-left whitespace-nowrap font-sans">总流量 (接收 ↓ / 发送 ↑)</TableHead>
+                <TableHead className="text-left whitespace-nowrap font-sans">实例用量</TableHead>
                 <TableHead className="text-right font-sans">操作</TableHead>
               </TableRow>
             </TableHeader>
