@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { AlertTriangle, Eye, Trash2, ServerIcon, SmartphoneIcon, Search, KeyRound, PlusCircle, CheckCircle, ArrowDown, ArrowUp, Tag } from 'lucide-react'; // Added Tag
+import { AlertTriangle, Eye, Trash2, ServerIcon, SmartphoneIcon, Search, KeyRound, PlusCircle, CheckCircle, ArrowDown, ArrowUp, Tag } from 'lucide-react';
 import type { Instance, UpdateInstanceRequest } from '@/types/nodepass';
 import { InstanceStatusBadge } from './InstanceStatusBadge';
 import { InstanceControls } from './InstanceControls';
@@ -85,9 +85,9 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
       const actionText = actionTextMap[variables.action] || variables.action;
       toast({
         title: `实例操作: ${actionText}`,
-        description: `实例 ${data.id} 状态已改为 ${data.status}。`,
+        description: `实例 ${data.id.substring(0,8)}... 状态已改为 ${data.status}。`,
       });
-      onLog?.(`实例 ${data.id} ${actionText}成功，状态: ${data.status}`, 'SUCCESS');
+      onLog?.(`实例 ${data.id.substring(0,8)}... ${actionText}成功，状态: ${data.status}`, 'SUCCESS');
       queryClient.invalidateQueries({ queryKey: ['instances', apiId] });
     },
     onError: (error: any, variables) => {
@@ -95,10 +95,10 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
       const actionText = actionTextMap[variables.action] || variables.action;
       toast({
         title: '实例操作失败',
-        description: `实例 ${variables.instanceId} ${actionText}失败: ${error.message || '未知错误。'}`,
+        description: `实例 ${variables.instanceId.substring(0,8)}... ${actionText}失败: ${error.message || '未知错误。'}`,
         variant: 'destructive',
       });
-      onLog?.(`实例 ${variables.instanceId} ${actionText}失败: ${error.message || '未知错误'}`, 'ERROR');
+      onLog?.(`实例 ${variables.instanceId.substring(0,8)}... ${actionText}失败: ${error.message || '未知错误'}`, 'ERROR');
     },
   });
 
@@ -110,9 +110,9 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
     onSuccess: (_, instanceId) => {
       toast({
         title: '实例已删除',
-        description: `实例 ${instanceId} 已删除。`,
+        description: `实例 ${instanceId.substring(0,8)}... 已删除。`,
       });
-      onLog?.(`实例 ${instanceId} 已删除。`, 'SUCCESS');
+      onLog?.(`实例 ${instanceId.substring(0,8)}... 已删除。`, 'SUCCESS');
       removeAlias(instanceId); // Remove alias from localStorage
       queryClient.invalidateQueries({ queryKey: ['instances', apiId] });
       queryClient.invalidateQueries({ queryKey: ['allInstancesForTraffic']});
@@ -126,10 +126,10 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
     onError: (error: any, instanceId) => {
       toast({
         title: '删除实例出错',
-        description: `删除实例 ${instanceId} 失败: ${error.message || '未知错误。'}`,
+        description: `删除实例 ${instanceId.substring(0,8)}... 失败: ${error.message || '未知错误。'}`,
         variant: 'destructive',
       });
-       onLog?.(`删除实例 ${instanceId} 失败: ${error.message || '未知错误'}`, 'ERROR');
+       onLog?.(`删除实例 ${instanceId.substring(0,8)}... 失败: ${error.message || '未知错误'}`, 'ERROR');
     },
   });
 
@@ -258,7 +258,7 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
       targetStringToCopy = "-";
       copyTargetTitle = "目标地址 (不适用)";
       displayTargetAddress = <span className="text-xs font-mono text-muted-foreground">-</span>;
-      
+
       tunnelStringToCopy = "-";
       copyTunnelTitle = "隧道地址 (不适用)";
       displayTunnelAddress = <span className="text-xs font-mono text-muted-foreground">-</span>;
@@ -290,7 +290,7 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
 
     } else if (instance.type === 'client' && parsedUrl && activeApiConfig) {
         const isSingleEnded = parsedUrl.scheme === 'client' && parsedUrl.targetAddress && parsedUrl.tunnelAddress && isWildcardHostname(extractHostname(parsedUrl.tunnelAddress));
-        
+
         if (isSingleEnded) { // Single-ended client
             targetStringToCopy = parsedUrl.targetAddress || "N/A"; // This is the remote service address
             copyTargetTitle = "客户端单端转发目标地址";
@@ -367,24 +367,28 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
         className="text-foreground/90 hover:text-foreground"
         onDoubleClick={() => instance.id !== '********' && setSelectedInstanceForDetails(instance)}
         data-state={selectedInstanceIds.has(instance.id) ? "selected" : ""}
-      ><TableCell className="w-10">{
-          instance.id !== '********' && (
+      >
+        <TableCell className="w-10">
+          {instance.id !== '********' ? (
             <Checkbox
               checked={selectedInstanceIds.has(instance.id)}
               onCheckedChange={() => handleSelectInstance(instance.id)}
               aria-label={`选择实例 ${instance.id}`}
               disabled={isBulkDeleting}
             />
-          )
-        }</TableCell><TableCell className="font-medium font-mono text-xs break-all" title={instance.id}>{instance.id}</TableCell>
-        <TableCell className="text-xs font-sans truncate max-w-[150px]" title={alias}>
-          {isLoadingAliases && instance.id !== '********' ? <Skeleton className="h-4 w-20" /> : 
-           alias ? <span className="flex items-center"><Tag size={12} className="mr-1 text-muted-foreground" />{alias}</span> : 
-           (instance.id !== '********' ? <span className="text-muted-foreground">-</span> : '')
-          }
+          ) : null}
         </TableCell>
-        <TableCell>{
-          instance.id === '********' ? (
+        <TableCell className="font-medium font-mono text-xs break-all" title={instance.id}>{instance.id}</TableCell>
+        <TableCell className="text-xs font-sans truncate max-w-[150px]" title={alias}>
+          <>
+            {isLoadingAliases && instance.id !== '********' ? <Skeleton className="h-4 w-20" /> :
+            alias ? <span className="flex items-center"><Tag size={12} className="mr-1 text-muted-foreground" />{alias}</span> :
+            (instance.id !== '********' ? <span className="text-muted-foreground">-</span> : null)
+            }
+          </>
+        </TableCell>
+        <TableCell>
+          {instance.id === '********' ? (
             <Badge variant="outline" className="border-yellow-500 text-yellow-600 items-center whitespace-nowrap text-xs py-0.5 px-1.5 font-sans">
               <KeyRound className="h-3 w-3 mr-1" />API 密钥
             </Badge>
@@ -396,17 +400,18 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
               {instance.type === 'server' ? <ServerIcon size={12} className="mr-1" /> : <SmartphoneIcon size={12} className="mr-1" />}
               {instance.type === 'server' ? '服务端' : '客户端'}
             </Badge>
-          )
-        }</TableCell><TableCell>{
-          instance.id === '********' ? (
+          )}
+        </TableCell>
+        <TableCell>
+          {instance.id === '********' ? (
             <Badge variant="outline" className="border-green-500 text-green-600 whitespace-nowrap font-sans text-xs py-0.5 px-1.5">
               <CheckCircle className="mr-1 h-3.5 w-3.5" />
               可用
             </Badge>
           ) : (
             <InstanceStatusBadge status={instance.status} />
-          )
-        }</TableCell>
+          )}
+        </TableCell>
         <TableCell
           className="truncate max-w-[200px] text-xs font-mono"
           title={copyTunnelTitle}
@@ -455,7 +460,8 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
               </div>
             )}
           </div>
-        </TableCell><TableCell className="text-right">
+        </TableCell>
+        <TableCell className="text-right">
           <div className="flex justify-end items-center space-x-1">
             {instance.id !== '********' && (
               <InstanceControls
@@ -482,7 +488,8 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
               </button>
             )}
           </div>
-        </TableCell></TableRow>
+        </TableCell>
+      </TableRow>
     );
   }
 
@@ -644,3 +651,4 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
   );
 }
 
+    
