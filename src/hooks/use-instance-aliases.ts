@@ -39,6 +39,13 @@ export function useInstanceAliases() {
     return aliases[instanceId];
   }, [aliases]);
 
+  const removeAlias = useCallback((instanceId: string) => {
+    if (!instanceId) return;
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { [instanceId]: _, ...restAliases } = aliases;
+    saveAliases(restAliases);
+  }, [aliases, saveAliases]);
+
   const setAlias = useCallback((instanceId: string, alias: string) => {
     if (!instanceId) return;
     const trimmedAlias = alias.trim();
@@ -48,14 +55,7 @@ export function useInstanceAliases() {
     }
     const updatedAliases = { ...aliases, [instanceId]: trimmedAlias };
     saveAliases(updatedAliases);
-  }, [aliases, saveAliases, removeAlias]); // removeAlias added to dependency
-
-  const removeAlias = useCallback((instanceId: string) => {
-    if (!instanceId) return;
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { [instanceId]: _, ...restAliases } = aliases;
-    saveAliases(restAliases);
-  }, [aliases, saveAliases]);
+  }, [aliases, saveAliases, removeAlias]);
 
   const getAllAliases = useCallback((): InstanceAliases => {
     return aliases;
