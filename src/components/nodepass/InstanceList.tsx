@@ -220,20 +220,20 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
   const renderSkeletons = () => {
     return Array.from({ length: 3 }).map((_, i) => (
       <TableRow key={`skeleton-${i}`}>
-        <TableCell className="w-10"><Skeleton className="h-4 w-4" /></TableCell>
-        <TableCell><Skeleton className="h-4 w-24" /></TableCell>
-        <TableCell><Skeleton className="h-4 w-20" /></TableCell> {/* Alias skeleton */}
-        <TableCell><Skeleton className="h-4 w-16" /></TableCell>
-        <TableCell><Skeleton className="h-4 w-16" /></TableCell>
-        <TableCell><Skeleton className="h-4 w-32" /></TableCell>
-        <TableCell><Skeleton className="h-4 w-32" /></TableCell>
-        <TableCell className="text-left">
+        <TableCell className="w-10"><Skeleton className="h-4 w-4" /></TableCell>{/*
+     */}<TableCell><Skeleton className="h-4 w-24" /></TableCell>{/*
+     */}<TableCell><Skeleton className="h-4 w-20" /></TableCell>{/* Alias skeleton */}{/*
+     */}<TableCell><Skeleton className="h-4 w-16" /></TableCell>{/*
+     */}<TableCell><Skeleton className="h-4 w-16" /></TableCell>{/*
+     */}<TableCell><Skeleton className="h-4 w-32" /></TableCell>{/*
+     */}<TableCell><Skeleton className="h-4 w-32" /></TableCell>{/*
+     */}<TableCell className="text-left">
           <div className="text-left">
             <Skeleton className="h-4 w-20 mb-1" />
             <Skeleton className="h-4 w-20" />
           </div>
-        </TableCell>
-        <TableCell className="text-right"><Skeleton className="h-8 w-24 ml-auto" /></TableCell>
+        </TableCell>{/*
+     */}<TableCell className="text-right"><Skeleton className="h-8 w-24 ml-auto" /></TableCell>
       </TableRow>
     ));
   };
@@ -505,7 +505,9 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
         rowsToRender.push(renderInstanceRow(apiKeyInstance));
       }
       if (otherInstances) {
-        rowsToRender.push(...otherInstances.map(instance => renderInstanceRow(instance)));
+        otherInstances.forEach(instance => {
+            rowsToRender.push(renderInstanceRow(instance));
+        });
       }
     }
 
@@ -528,7 +530,7 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
     }
     return (
       <TableRow>
-        <TableCell colSpan={9} className="text-center h-24 font-sans"> {/* Updated colSpan to 9 */}
+        <TableCell colSpan={9} className="text-center h-24 font-sans">
           {message}
         </TableCell>
       </TableRow>
@@ -652,3 +654,4 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
 }
 
     
+
