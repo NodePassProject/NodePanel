@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { AlertTriangle, Eye, Trash2, ServerIcon, SmartphoneIcon, Search, KeyRound, PlusCircle, CheckCircle } from 'lucide-react';
+import { AlertTriangle, Eye, Trash2, ServerIcon, SmartphoneIcon, Search, KeyRound, PlusCircle, CheckCircle, ArrowDown, ArrowUp } from 'lucide-react';
 import type { Instance, UpdateInstanceRequest } from '@/types/nodepass';
 import { InstanceStatusBadge } from './InstanceStatusBadge';
 import { InstanceControls } from './InstanceControls';
@@ -240,6 +240,9 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
     let copyTunnelTitle = "隧道地址";
     let tunnelStringToCopy = "";
 
+    const totalRx = instance.tcprx + instance.udprx;
+    const totalTx = instance.tcptx + instance.udptx;
+
 
     if (instance.id === '********') {
       targetStringToCopy = "-";
@@ -422,10 +425,16 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
             {instance.id === '********' ? (
               <span className="text-muted-foreground">-</span>
             ) : (
-              <>
-                <div>TCP: {formatBytes(instance.tcprx)} / {formatBytes(instance.tcptx)}</div>
-                <div>UDP: {formatBytes(instance.udprx)} / {formatBytes(instance.udptx)}</div>
-              </>
+              <div className="flex flex-col">
+                <span className="flex items-center" title={`接收: TCP ${formatBytes(instance.tcprx)}, UDP ${formatBytes(instance.udprx)}`}>
+                  <ArrowDown className="h-3 w-3 mr-1 text-blue-500" />
+                  {formatBytes(totalRx)}
+                </span>
+                <span className="flex items-center" title={`发送: TCP ${formatBytes(instance.tcptx)}, UDP ${formatBytes(instance.udptx)}`}>
+                  <ArrowUp className="h-3 w-3 mr-1 text-green-500" />
+                  {formatBytes(totalTx)}
+                </span>
+              </div>
             )}
           </div>
         </TableCell><TableCell className="text-right">
@@ -575,7 +584,7 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
                 <TableHead className="font-sans">状态</TableHead>
                 <TableHead className="font-sans">隧道地址</TableHead>
                 <TableHead className="font-sans">目标地址</TableHead>
-                <TableHead className="text-left whitespace-nowrap font-sans">流量 (TCP | UDP)</TableHead>
+                <TableHead className="text-left whitespace-nowrap font-sans">总流量 (接收 ↓ / 发送 ↑)</TableHead>
                 <TableHead className="text-right font-sans">操作</TableHead>
               </TableRow>
             </TableHeader>
