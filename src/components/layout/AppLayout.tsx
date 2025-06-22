@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { type ReactNode } from 'react';
+import React, { type ReactNode, useState, useEffect } from 'react';
 import { Header } from '@/components/layout/Header';
 import { useApiConfig, type NamedApiConfig } from '@/hooks/use-api-key';
 import { useToast } from '@/hooks/use-toast';
@@ -14,20 +14,21 @@ interface AppLayoutProps {
 }
 
 export function AppLayout({ children, onLog }: AppLayoutProps) {
-  const { 
-    activeApiConfig, 
-    addOrUpdateApiConfig, 
-    clearActiveApiConfig, 
-    setActiveApiConfigId 
+  const {
+    activeApiConfig,
+    addOrUpdateApiConfig,
+    clearActiveApiConfig,
+    setActiveApiConfigId
   } = useApiConfig();
   const { toast } = useToast();
   const [isApiConfigDialogOpen, setIsApiConfigDialogOpen] = React.useState(false);
   const [editingApiConfig, setEditingApiConfig] = React.useState<NamedApiConfig | null>(null);
 
+
   const handleSaveApiConfig = (configToSave: Omit<NamedApiConfig, 'id'> & { id?: string }) => {
     const isNew = !configToSave.id;
     const savedConfig = addOrUpdateApiConfig(configToSave);
-    setActiveApiConfigId(savedConfig.id); 
+    setActiveApiConfigId(savedConfig.id);
     setEditingApiConfig(null);
     setIsApiConfigDialogOpen(false);
     const actionText = isNew ? '添加' : '更新';
@@ -37,13 +38,13 @@ export function AppLayout({ children, onLog }: AppLayoutProps) {
     });
     onLog?.(`主控 "${savedConfig.name}" 已${actionText}并激活。`, 'SUCCESS');
   };
-  
+
   const handleOpenApiConfigDialog = (configToEdit?: NamedApiConfig | null) => {
     setEditingApiConfig(configToEdit || null);
     setIsApiConfigDialogOpen(true);
   };
 
-  const handleClearActiveConfig = () => { 
+  const handleClearActiveConfig = () => {
     if (activeApiConfig) {
       onLog?.(`断开与主控 "${activeApiConfig.name}" 的连接。`, 'INFO');
     }
@@ -56,9 +57,9 @@ export function AppLayout({ children, onLog }: AppLayoutProps) {
 
   return (
     <div className="flex flex-col min-h-screen bg-background">
-      <Header 
+      <Header
         onManageApiConfigs={handleOpenApiConfigDialog}
-        hasActiveApiConfig={!!activeApiConfig} 
+        hasActiveApiConfig={!!activeApiConfig}
         onClearActiveConfig={handleClearActiveConfig} // Changed from onLogout to onClearActiveConfig
         onLog={onLog}
       />
@@ -73,16 +74,23 @@ export function AppLayout({ children, onLog }: AppLayoutProps) {
         isEditing={!!editingApiConfig}
         // onLog prop will be handled by the parent if needed, or ApiConfigDialog can log itself
       />
-      <footer className="py-6 text-center text-sm text-muted-foreground border-t border-border bg-muted/30">
-        NodePanel &copy; {new Date().getFullYear()} | 
-        由 <a 
-            href="https://github.com/yosebyte/nodepass" 
-            target="_blank" 
-            rel="noopener noreferrer"
-            className="font-medium text-primary hover:text-primary/80 transition-colors"
-          >
-          NodePass
-        </a> 驱动
+      <footer className="py-6 text-center text-xs sm:text-sm text-muted-foreground border-t border-border bg-muted/30">
+        <div className="font-sans">
+          <span>NodePanel &copy; {new Date().getFullYear()}</span>
+          <span className="mx-1.5">&bull;</span>
+          <span>
+            由 <a
+                href="https://github.com/yosebyte/nodepass"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-medium text-primary hover:text-primary/80 transition-colors"
+              >
+              NodePass
+            </a> 驱动
+          </span>
+          <span className="mx-1.5">&bull;</span>
+          <span>版本: 1.0.6</span>
+        </div>
       </footer>
     </div>
   );

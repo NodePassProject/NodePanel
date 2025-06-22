@@ -18,7 +18,7 @@ import {
   type NodeProps,
 } from 'reactflow';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Server, Smartphone as ClientIcon, Globe, UserCircle2 as UserIcon, ListTree, Puzzle, Info as InfoIcon, Edit3, Trash2, RefreshCw } from 'lucide-react';
+import { Server, Smartphone as ClientIcon, Globe, UserCircle2 as UserIcon, ListTree, Puzzle, Info as InfoIconLucide, Edit3, Trash2, RefreshCw, Smartphone, X, PanelLeft } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 
 import { TopologyCanvasWrapper } from './TopologyCanvas';
@@ -30,9 +30,9 @@ import { useToast } from '@/hooks/use-toast';
 import { Separator } from '@/components/ui/separator';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { nodePassApi, type Instance as ApiInstanceType, getEventsUrl } from '@/lib/api';
-import { buildUrlFromFormValues, type BuildUrlParams } from '@/components/nodepass/create-instance-dialog/utils';
-import { extractPort, parseNodePassUrl, isWildcardHostname } from '@/lib/url-utils';
+import { nodePassApi, getEventsUrl } from '@/lib/api';
+import { buildUrlFromFormValues, type BuildUrlParams, prepareClientUrlParams, prepareServerUrlParams } from '@/components/nodepass/create-instance-dialog/utils';
+import { extractPort, parseNodePassUrl } from '@/lib/url-utils'; // parseNodePassUrl now used
 import { SubmitTopologyConfirmationDialog, type InstanceUrlConfigWithName } from './components/SubmitTopologyConfirmationDialog';
 import { EditTopologyNodeDialog } from './components/EditTopologyNodeDialog';
 
@@ -40,6 +40,9 @@ import type { Node, CustomNodeData, NodeRole, TopologyContextMenu } from './topo
 import { CardNode, MasterNode, nodeStyles } from './NodeRenderer';
 import { ICON_ONLY_NODE_SIZE, EXPANDED_SC_NODE_WIDTH, EXPANDED_SC_NODE_BASE_HEIGHT, DETAIL_LINE_HEIGHT } from './topologyTypes';
 import { calculateClientTunnelAddressForServer } from './topologyLogic';
+import { useIsMobile } from '@/hooks/use-mobile';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 
 
 const initialNodes: Node[] = [];
@@ -52,13 +55,13 @@ const M_NODE_SCALE_FACTOR_PER_CHILD = 1.2;
 const initialActiveHandles = {
   S: { top: true, bottom: true, left: false, right: false },
   C: { top: true, bottom: true, left: false, right: false },
-  U: { top: false, bottom: true, left: false, right: false }, // Can only connect from bottom
-  T: { top: true, bottom: false, left: false, right: false }, // Can only connect to top
-  M: { top: true, bottom: true, left: true, right: true }, // Master nodes are containers
+  U: { top: false, bottom: true, left: false, right: false },
+  T: { top: true, bottom: false, left: false, right: false },
+  M: { top: true, bottom: true, left: true, right: true },
 };
 
 export function AdvancedTopologyEditor() {
-  const { deleteElements, fitView, getNodes, getEdges, setEdges: setReactFlowEdges } = useReactFlow();
+  const { deleteElements, fitView, getNodes, getEdges, setEdges: setReactFlowEdges, project } = useReactFlow();
   const [nodesInternal, setNodesInternal, onNodesChangeInternalCallback] = useNodesState<Node>(initialNodes);
   const [edgesInternal, setEdgesInternal, onEdgesChangeInternal] = useEdgesState(initialEdges);
   const [nodeIdCounter, setNodeIdCounter] = useState(0);
@@ -85,6 +88,11 @@ export function AdvancedTopologyEditor() {
 
   const handshakeLogRegex = /Tunnel handshaked:.*?in\s+(\d+)\s*ms/i;
   const sseHandshakeAbortControllerRef = useRef<AbortController | null>(null);
+
+  const isMobile = useIsMobile();
+  const [showMobileInfoAlert, setShowMobileInfoAlert] = useState(true);
+  const [isPaletteDrawerOpen, setIsPaletteDrawerOpen] = useState(false);
+
 
   const updateMasterNodeDimensions = useCallback((masterNodeId: string, currentNodes: Node[]): Node[] => {
     const masterNode = currentNodes.find(n => n.id === masterNodeId);
@@ -126,41 +134,34 @@ export function AdvancedTopologyEditor() {
  const getOptimalHandlesForConnection = useCallback((sourceNode: Node, targetNode: Node): { sourceHandle: string, targetHandle: string } => {
     let sh: Position, th: Position;
 
-    const dy = (targetNode.positionAbsolute!.y + (targetNode.height! / 2)) - 
+    const dy = (targetNode.positionAbsolute!.y + (targetNode.height! / 2)) -
                (sourceNode.positionAbsolute!.y + (sourceNode.height! / 2));
 
-    // Determine basic vertical preference
-    if (dy >= 0) { // Target is below or at same level
+    if (dy >= 0) {
         sh = Position.Bottom;
         th = Position.Top;
-    } else { // Target is above
+    } else {
         sh = Position.Top;
         th = Position.Bottom;
     }
 
-    // Override for U (source)
     if (sourceNode.data.role === 'U') {
         sh = Position.Bottom;
-        // If U connects to S/C, target S/C should connect on Top
         if (targetNode.data.role === 'S' || targetNode.data.role === 'C') {
             th = Position.Top;
         }
     }
-    // Override for T (target)
     if (targetNode.data.role === 'T') {
         th = Position.Top;
-        // If S/C connects to T, source S/C should connect from Bottom
         if (sourceNode.data.role === 'S' || sourceNode.data.role === 'C') {
-            // Re-evaluate source handle based on relative position to T if T dictates Top
-             if (dy >= 0) { // Target T is below or at same level
+             if (dy >= 0) {
                 sh = Position.Bottom;
-            } else { // Target T is above
+            } else {
                 sh = Position.Top;
             }
         }
     }
-    
-    // This case should be caught by connection validation, but handles it defensively
+
     if (sourceNode.data.role === 'U' && targetNode.data.role === 'T') {
         sh = Position.Bottom;
         th = Position.Top;
@@ -183,7 +184,7 @@ export function AdvancedTopologyEditor() {
         let newActiveHandles = { ...initialActiveHandles[n.data.role as keyof typeof initialActiveHandles] };
 
         if (relevantConnections.length === 0) {
-          // No change from initialActiveHandles if no relevant connections
+          // No change from initialActiveHandles
         } else if (n.data.role === 'U') {
             newActiveHandles = { top: false, bottom: true, left: false, right: false };
         } else if (n.data.role === 'T') {
@@ -191,7 +192,7 @@ export function AdvancedTopologyEditor() {
         } else if (n.data.role === 'S' || n.data.role === 'C') {
             newActiveHandles = { top: true, bottom: true, left: false, right: false };
         }
-        
+
         newActiveHandles.left = false;
         newActiveHandles.right = false;
 
@@ -199,7 +200,7 @@ export function AdvancedTopologyEditor() {
       }
       return n;
     });
-  }, []); 
+  }, []);
 
   const handleOpenEditNodeDialog = useCallback((node: Node) => {
     setContextMenu(null);
@@ -218,11 +219,9 @@ export function AdvancedTopologyEditor() {
             hasS = allNodes.some(n => n.parentNode === targetParentNode.id && n.data.role === 'S');
         }
 
-        const incomingEdge = allEdges.find(edge => edge.target === node.id);
-        const outgoingEdge = allEdges.find(edge => edge.source === node.id);
-
-        if (incomingEdge && allNodes.find(n=> n.id === incomingEdge.source)?.data.role === 'S') {
-            const sourceSNode = allNodes.find(n => n.id === incomingEdge.source)!;
+        const incomingEdgeToC = allEdges.find(edge => edge.target === node.id && allNodes.find(n=> n.id === edge.source)?.data.role === 'S');
+        if (incomingEdgeToC) {
+            const sourceSNode = allNodes.find(n => n.id === incomingEdgeToC.source)!;
             const sourceParentNode = sourceSNode.parentNode ? allNodes.find(n => n.id === sourceSNode.parentNode) : undefined;
             const cNodeParentNode = node.parentNode ? allNodes.find(n => n.id === node.parentNode) : undefined;
 
@@ -236,20 +235,23 @@ export function AdvancedTopologyEditor() {
                     toast({ title: '无法确定隧道地址', description: '无法自动计算源 S 节点的隧道地址。', variant: "warning" });
                 }
             }
-        } else if (outgoingEdge && allNodes.find(n=> n.id === outgoingEdge.target)?.data.role === 'S') {
-            const targetSNode = allNodes.find(n => n.id === outgoingEdge.target)!;
-            const targetParentNode = targetSNode.parentNode ? allNodes.find(n => n.id === targetSNode.parentNode) : undefined;
-            const cNodeParentNode = node.parentNode ? allNodes.find(n => n.id === node.parentNode) : undefined;
+        } else {
+            const outgoingEdgeFromC = allEdges.find(edge => edge.source === node.id && allNodes.find(n => n.id === edge.target)?.data.role === 'S');
+            if (outgoingEdgeFromC) {
+                 const targetSNode = allNodes.find(n => n.id === outgoingEdgeFromC.target)!;
+                 const targetParentNode = targetSNode.parentNode ? allNodes.find(n => n.id === targetSNode.parentNode) : undefined;
+                 const cNodeParentNode = node.parentNode ? allNodes.find(n => n.id === node.parentNode) : undefined;
 
-            if (targetParentNode && cNodeParentNode && targetParentNode.data.masterId !== cNodeParentNode.data.masterId) {
-                 isInterMaster = true;
-                 const targetMasterConfig = getApiConfigById(targetParentNode.data.masterId!);
-                 const newClientTunnelAddress = calculateClientTunnelAddressForServer(targetSNode.data, targetMasterConfig);
-                 if (newClientTunnelAddress && newClientTunnelAddress.trim() !== "") {
-                    sourceInfo = { serverTunnelAddress: newClientTunnelAddress };
-                } else {
-                    toast({ title: '无法确定隧道地址', description: '无法自动计算目标 S 节点的隧道地址。', variant: "warning" });
-                }
+                 if(targetParentNode && cNodeParentNode && targetParentNode.data.masterId !== cNodeParentNode.data.masterId) {
+                    isInterMaster = true;
+                    const targetMasterConfig = getApiConfigById(targetParentNode.data.masterId!);
+                    const newClientTunnelAddress = calculateClientTunnelAddressForServer(targetSNode.data, targetMasterConfig);
+                    if (newClientTunnelAddress && newClientTunnelAddress.trim() !== "") {
+                        sourceInfo = { serverTunnelAddress: newClientTunnelAddress };
+                    } else {
+                         toast({ title: '无法确定隧道地址', description: '无法自动计算目标 S 节点的隧道地址。', variant: "warning" });
+                    }
+                 }
             }
         }
     }
@@ -505,18 +507,37 @@ export function AdvancedTopologyEditor() {
         return;
       }
 
-
       const { sourceHandle, targetHandle } = getOptimalHandlesForConnection(sourceNode, targetNode);
-      const newEdgeBase = {
+
+      const newEdgeBase: Edge = {
         ...params,
         sourceHandle,
         targetHandle,
         id: `edge-${uuidv4()}`,
-        animated: true,
-        style: { strokeDasharray: '5 5' },
-        type: 'smoothstep',
+        style: { strokeWidth: 3.5 },
         markerEnd: { type: MarkerType.ArrowClosed },
+        type: 'smoothstep',
       };
+
+      if (sourceRole === 'S' && targetRole === 'C') {
+        newEdgeBase.animated = true;
+        newEdgeBase.style!.strokeDasharray = '5 5';
+        newEdgeBase.style!.stroke = 'hsl(var(--primary))';
+      } else if (sourceRole === 'C' && targetRole === 'S') {
+        newEdgeBase.animated = true;
+        newEdgeBase.style!.strokeDasharray = '5 5';
+        newEdgeBase.style!.stroke = 'hsl(var(--accent))';
+      } else if (
+        (sourceRole === 'U' && (targetRole === 'S' || targetRole === 'C')) ||
+        ((sourceRole === 'S' || sourceRole === 'C') && targetRole === 'T')
+      ) {
+        newEdgeBase.animated = true;
+        newEdgeBase.style!.stroke = 'hsl(var(--chart-4))';
+      } else {
+        newEdgeBase.animated = false;
+        newEdgeBase.style!.stroke = 'hsl(var(--muted-foreground))';
+      }
+
 
       let nodesToUpdateForAddress: Node[] = [];
       let clientNodeForUpdate: Node | null = null;
@@ -600,7 +621,7 @@ export function AdvancedTopologyEditor() {
         setEdgesAndUpdateHandles((eds) => addEdge(newEdgeBase, eds));
       }
     },
-    [getNodes, getEdges, setNodesInternal, setEdgesAndUpdateHandles, toast, getApiConfigById, getOptimalHandlesForConnection, updateAffectedNodeHandles]
+    [getNodes, getEdges, setNodesInternal, setEdgesAndUpdateHandles, toast, getApiConfigById, getOptimalHandlesForConnection]
   );
 
   const onSelectionChange = useCallback(({ nodes: selectedNodesList }: { nodes: Node[]; edges: Edge[] }) => {
@@ -608,7 +629,7 @@ export function AdvancedTopologyEditor() {
   }, []);
 
   const calculateExpandedNodeHeight = (data: CustomNodeData): number => {
-    let numDetails = 1; // Label is always there (even if combined with icon initially)
+    let numDetails = 1;
     if (data.tunnelAddress) numDetails++;
     if (data.targetAddress) numDetails++;
     if (data.submissionStatus) numDetails++;
@@ -767,6 +788,9 @@ export function AdvancedTopologyEditor() {
              logLevel: 'master',
              isExpanded: false,
              activeHandles: { ...initialActiveHandles[nodeRole as keyof typeof initialActiveHandles] },
+             tunnelKey: "",
+             minPoolSize: undefined,
+             maxPoolSize: undefined,
           };
 
           if (nodeRole === 'S') {
@@ -839,7 +863,9 @@ export function AdvancedTopologyEditor() {
                 newData.isSingleEndedForwardC = undefined;
                 if (!newData.tunnelAddress || newData.tunnelAddress.startsWith("remote")) newData.tunnelAddress = `[::]:${10000 + nodeIdCounter}`;
                 if (!newData.targetAddress || newData.targetAddress.startsWith("[")) newData.targetAddress = `127.0.0.1:${3000 + nodeIdCounter}`;
-            } else {
+                newData.minPoolSize = undefined;
+                newData.maxPoolSize = undefined;
+            } else { // C
                 newData.isSingleEndedForwardC = false;
                 if (!newData.tunnelAddress || newData.tunnelAddress.startsWith("[")) newData.tunnelAddress = `remote.server.com:${10000 + nodeIdCounter}`;
                 if (!newData.targetAddress || newData.targetAddress.startsWith("127")) newData.targetAddress = `[::]:${3000 + nodeIdCounter + 1}`;
@@ -868,7 +894,6 @@ export function AdvancedTopologyEditor() {
     toast({ title: "正在刷新主控实例计数...", description: "请稍候。" });
     try {
       await queryClient.invalidateQueries({ queryKey: ['masterInstancesCount'] });
-      // Allow some time for invalidation and refetch to kick in
       await new Promise(resolve => setTimeout(resolve, 1000));
       toast({ title: "实例计数已刷新", description: "主控列表中的实例数量已更新。" });
     } catch (error) {
@@ -883,89 +908,96 @@ export function AdvancedTopologyEditor() {
   const prepareInstancesForSubmission = useCallback((): InstanceUrlConfigWithName[] => {
     const instancesToCreate: InstanceUrlConfigWithName[] = [];
     const allCurrentNodes = getNodes();
+    const allCurrentEdges = getEdges();
+    const localOnLog = (message: string, type: 'INFO' | 'WARN' | 'ERROR') => {
+      if (type === 'ERROR') toast({ title: "配置错误", description: message, variant: "destructive" });
+      if (type === 'WARN') toast({ title: "配置警告", description: message, variant: "warning" });
+    };
 
     for (const node of allCurrentNodes) {
-      if (node.data.role === 'S' || node.data.role === 'C') {
-        let masterId: string | undefined;
-        let masterConfigForNode: NamedApiConfig | null = null;
+        if (node.data.role !== 'S' && node.data.role !== 'C') continue;
 
         const parentMNode = allCurrentNodes.find(n => n.id === node.parentNode);
-        if (parentMNode) {
-            masterId = parentMNode.data.masterId;
-            masterConfigForNode = masterId ? getApiConfigById(masterId) : null;
+        if (!parentMNode || !parentMNode.data.masterId) {
+            setNodesInternal(nds => nds.map(n => n.id === node.id ? { ...n, data: { ...n.data, submissionStatus: 'error', submissionMessage: '父主控丢失' } } : n));
+            continue;
         }
-
-        if (!masterId || !masterConfigForNode) {
-          setNodesInternal(nds => nds.map(n => n.id === node.id ? { ...n, data: { ...n.data, submissionStatus: 'error', submissionMessage: '主控配置丢失' } } : n));
-          continue;
+        const masterConfigForNode = getApiConfigById(parentMNode.data.masterId);
+        if (!masterConfigForNode) {
+            setNodesInternal(nds => nds.map(n => n.id === node.id ? { ...n, data: { ...n.data, submissionStatus: 'error', submissionMessage: '主控配置未找到' } } : n));
+            continue;
         }
 
         let urlParams: BuildUrlParams | null = null;
-        const instanceTypeForBuild: "客户端" | "服务端" = node.data.role === 'S' ? "服务端" : "客户端";
+        const nodeLabelForDialog = node.data.label.replace(/^(服务端|客户端)\s*/, '').trim();
 
         if (node.data.role === 'S') {
-          if (!node.data.targetAddress || !node.data.tunnelAddress) {
-            setNodesInternal(nds => nds.map(n => n.id === node.id ? { ...n, data: { ...n.data, submissionStatus: 'error', submissionMessage: '地址不完整' } } : n));
-            continue;
-          }
-          urlParams = {
-            instanceType: instanceTypeForBuild,
-            tunnelAddress: node.data.tunnelAddress,
-            targetAddress: node.data.targetAddress,
-            logLevel: (node.data.logLevel as any) || masterConfigForNode.masterDefaultLogLevel || 'info',
-            tlsMode: (node.data.tlsMode as any) || masterConfigForNode.masterDefaultTlsMode || 'master',
-            certPath: node.data.certPath,
-            keyPath: node.data.keyPath,
-          };
+            const sNode = node;
+            const isReverseTunnelForU = allCurrentEdges.some(edgeFromU =>
+                allCurrentNodes.find(uNode => uNode.id === edgeFromU.source)?.data.role === 'U' &&
+                edgeFromU.target === sNode.id &&
+                allCurrentEdges.some(edgeToC =>
+                    edgeToC.source === sNode.id &&
+                    allCurrentNodes.find(cNode => cNode.id === edgeToC.target)?.data.role === 'C'
+                )
+            );
+
+            let sTargetAddressForUrl = sNode.data.targetAddress;
+            if (isReverseTunnelForU) {
+                const sListenPortStr = extractPort(sNode.data.tunnelAddress || "");
+                if (sListenPortStr) {
+                    const sListenPortNum = parseInt(sListenPortStr, 10);
+                    sTargetAddressForUrl = `[::]:${sListenPortNum + 1}`;
+                    localOnLog(`U->S->C 链 (反向): 服务端 ${sNode.data.label} 的目标地址推断为 ${sTargetAddressForUrl}。C 将连接此 S 的 ${sNode.data.tunnelAddress}，并转发到 C 自己的目标地址。`, 'INFO');
+                } else {
+                     localOnLog(`警告: U->S->C 链 (反向) 中的服务端 ${sNode.data.label} (${sNode.id.substring(0,8)}) 监听地址 (${sNode.data.tunnelAddress}) 无法解析端口。将使用其配置的业务目标地址。`, 'WARN');
+                }
+            }
+
+            const sSubmission = prepareServerUrlParams({
+                instanceType: "服务端",
+                tunnelAddress: sNode.data.tunnelAddress,
+                targetAddress: sTargetAddressForUrl, // Use potentially modified target address
+                logLevel: (sNode.data.logLevel as any),
+                tlsMode: (sNode.data.tlsMode as any),
+                certPath: sNode.data.certPath,
+                keyPath: sNode.data.keyPath,
+                tunnelKey: sNode.data.tunnelKey,
+            }, localOnLog);
+            if (sSubmission) urlParams = sSubmission.serverParams;
+
         } else if (node.data.role === 'C') {
-          if (node.data.isSingleEndedForwardC) {
-            if (!node.data.tunnelAddress || !node.data.targetAddress) {
-              setNodesInternal(nds => nds.map(n => n.id === node.id ? { ...n, data: { ...n.data, submissionStatus: 'error', submissionMessage: '单端转发地址不完整' } } : n));
-              continue;
-            }
-            urlParams = {
-              instanceType: instanceTypeForBuild,
-              isSingleEndedForward: true,
-              tunnelAddress: node.data.tunnelAddress,
-              targetAddress: node.data.targetAddress,
-              logLevel: (node.data.logLevel as any) || masterConfigForNode.masterDefaultLogLevel || 'info',
-              tlsMode: (node.data.tlsMode as any) || '0',
-              certPath: node.data.certPath,
-              keyPath: node.data.keyPath,
-            };
-          } else {
-            if (!node.data.tunnelAddress || !node.data.targetAddress) {
-              setNodesInternal(nds => nds.map(n => n.id === node.id ? { ...n, data: { ...n.data, submissionStatus: 'error', submissionMessage: '地址不完整' } } : n));
-              continue;
-            }
-            urlParams = {
-              instanceType: instanceTypeForBuild,
-              isSingleEndedForward: false,
-              tunnelAddress: node.data.tunnelAddress,
-              targetAddress: node.data.targetAddress,
-              logLevel: (node.data.logLevel as any) || masterConfigForNode.masterDefaultLogLevel || 'info',
-              tlsMode: (node.data.tlsMode as any) || masterConfigForNode.masterDefaultTlsMode || 'master',
-              certPath: node.data.certPath,
-              keyPath: node.data.keyPath,
-            };
-          }
+            const cNode = node;
+            const cSubmission = prepareClientUrlParams({
+                instanceType: "客户端",
+                isSingleEndedForwardC: !!cNode.data.isSingleEndedForwardC,
+                tunnelAddress: cNode.data.tunnelAddress,
+                targetAddress: cNode.data.targetAddress,
+                logLevel: (cNode.data.logLevel as any),
+                tlsMode: (cNode.data.tlsMode as any),
+                certPath: cNode.data.certPath,
+                keyPath: cNode.data.keyPath,
+                tunnelKey: cNode.data.tunnelKey,
+                minPoolSize: cNode.data.minPoolSize,
+                maxPoolSize: cNode.data.maxPoolSize,
+            }, masterConfigForNode, localOnLog);
+            if (cSubmission) urlParams = cSubmission.clientParams;
         }
 
+
         if (urlParams) {
-          const finalUrl = buildUrlFromFormValues(urlParams, masterConfigForNode);
-          instancesToCreate.push({
-            nodeId: node.id,
-            nodeLabel: node.data.label,
-            masterId: masterConfigForNode.id,
-            masterName: masterConfigForNode.name,
-            url: finalUrl,
-            instanceType: node.data.role === 'S' ? '出口(s)' : '入口(c)'
-          });
+            const finalUrl = buildUrlFromFormValues(urlParams, masterConfigForNode);
+            instancesToCreate.push({
+                nodeId: node.id, nodeLabel: nodeLabelForDialog,
+                masterId: masterConfigForNode.id, masterName: masterConfigForNode.name,
+                url: finalUrl, instanceType: node.data.role === 'S' ? "服务端" : "客户端",
+            });
+        } else {
+             setNodesInternal(nds => nds.map(n => n.id === node.id ? { ...n, data: { ...n.data, submissionStatus: 'error', submissionMessage: 'URL参数准备失败' } } : n));
         }
-      }
     }
     return instancesToCreate;
-  }, [getNodes, getApiConfigById, setNodesInternal, activeApiConfig]);
+  }, [getNodes, getEdges, getApiConfigById, setNodesInternal, toast]);
 
 
   const handleTriggerSubmitTopology = useCallback(async () => {
@@ -1235,33 +1267,108 @@ export function AdvancedTopologyEditor() {
     });
   };
 
+  const handleAddItemFromMobilePalette = useCallback((
+    type: DraggableNodeType | 'master',
+    itemData?: NamedApiConfig
+  ) => {
+    if (!reactFlowWrapperRef.current) {
+      toast({ title: "无法添加节点", description: "编辑器未完全加载。", variant: "warning" });
+      return;
+    }
+    const reactFlowBounds = reactFlowWrapperRef.current.getBoundingClientRect();
+    const centerX = reactFlowBounds.width / 2;
+    const centerY = reactFlowBounds.height / 2;
+
+    const projectedPosition = project({ x: centerX, y: centerY });
+
+    // Apply a small random offset to prevent stacking if multiple items are added quickly
+    projectedPosition.x += (Math.random() - 0.5) * 10;
+    projectedPosition.y += (Math.random() - 0.5) * 10;
+
+    handleNodeDroppedOnCanvas(type, projectedPosition, itemData);
+    setIsPaletteDrawerOpen(false); // Close drawer after adding
+  }, [project, handleNodeDroppedOnCanvas, toast, setIsPaletteDrawerOpen]);
+
 
   return (
     <div ref={editorContainerRef} className="flex flex-col flex-grow h-full relative">
+       {isMobile && showMobileInfoAlert && (
+        <Alert variant="default" className="mb-2 border-blue-500 bg-blue-50 dark:bg-blue-900/30 dark:border-blue-700/60">
+          <Smartphone className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+          <AlertTitle className="font-title text-blue-700 dark:text-blue-300">移动设备优化提示</AlertTitle>
+          <AlertDescription className="text-blue-600 dark:text-blue-400 font-sans text-xs">
+            拓扑编辑器在桌面设备上体验更佳。移动端部分复杂操作可能受限。
+          </AlertDescription>
+           <Button
+            variant="ghost"
+            size="sm"
+            className="absolute top-2 right-2 h-6 w-6 p-0 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-800/50"
+            onClick={() => setShowMobileInfoAlert(false)}
+            aria-label="关闭提示"
+          >
+            <X size={16} />
+          </Button>
+        </Alert>
+      )}
       <div className="flex flex-row flex-grow h-full overflow-hidden">
-        <ScrollArea className="w-60 flex-shrink-0 border-r bg-muted/30 p-2">
-          <div className="flex flex-col h-full bg-background rounded-lg shadow-md border">
-            <div className="flex flex-col p-3">
-              <h2 className="text-sm font-semibold font-title mb-1 flex items-center">
-                <ListTree size={16} className="mr-2 text-primary" />
-                主控列表
-              </h2>
-              <p className="text-xs text-muted-foreground font-sans mb-2">拖拽主控到画布。</p>
-              <ScrollArea className="flex-grow pr-1 max-h-60">
-                <MastersPalette />
+        {!isMobile && (
+            <ScrollArea className="w-60 flex-shrink-0 border-r bg-muted/30 p-2">
+            <div className="flex flex-col h-full bg-background rounded-lg shadow-md border">
+                <div className="flex flex-col p-3">
+                <h2 className="text-sm font-semibold font-title mb-1 flex items-center">
+                    <ListTree size={16} className="mr-2 text-primary" />
+                    主控列表
+                </h2>
+                <p className="text-xs text-muted-foreground font-sans mb-2">拖拽主控到画布。</p>
+                <ScrollArea className="flex-grow pr-1 max-h-60">
+                    <MastersPalette />
+                </ScrollArea>
+                </div>
+                <Separator className="my-0" />
+                <div className="flex flex-col p-3">
+                <h2 className="text-sm font-semibold font-title mb-1 flex items-center">
+                    <Puzzle size={16} className="mr-2 text-primary" />
+                    组件卡片
+                </h2>
+                <p className="text-xs text-muted-foreground font-sans mb-2">拖拽实例到主控内部。</p>
+                <div className="flex-grow overflow-y-auto pr-1"><ComponentsPalette /></div>
+                </div>
+            </div>
+            </ScrollArea>
+        )}
+
+        {isMobile && (
+          <Sheet open={isPaletteDrawerOpen} onOpenChange={setIsPaletteDrawerOpen}>
+            <SheetContent side="left" className="w-[260px] p-0 flex flex-col">
+              <SheetHeader className="p-3 border-b">
+                <SheetTitle className="font-title text-base">组件与主控</SheetTitle>
+                 <SheetDescription className="text-xs font-sans text-left pt-1">点按项目以将其添加到画布中央。</SheetDescription>
+              </SheetHeader>
+              <ScrollArea className="flex-grow">
+                <div className="p-3 space-y-4">
+                  <div>
+                    <h2 className="text-sm font-semibold font-title mb-1 flex items-center">
+                      <ListTree size={16} className="mr-2 text-primary" />
+                      主控列表
+                    </h2>
+                    <p className="text-xs text-muted-foreground font-sans mb-2">点按主控以添加到画布。</p>
+                    <MastersPalette isMobileClickToAdd={isMobile} onItemClick={handleAddItemFromMobilePalette} />
+                  </div>
+                  <Separator />
+                  <div>
+                    <h2 className="text-sm font-semibold font-title mb-1 flex items-center">
+                      <Puzzle size={16} className="mr-2 text-primary" />
+                      组件卡片
+                    </h2>
+                    <p className="text-xs text-muted-foreground font-sans mb-2">点按实例以添加到主控内部或画布。</p>
+                    <ComponentsPalette isMobileClickToAdd={isMobile} onItemClick={handleAddItemFromMobilePalette} />
+                  </div>
+                </div>
               </ScrollArea>
-            </div>
-            <Separator className="my-0" />
-            <div className="flex flex-col p-3">
-              <h2 className="text-sm font-semibold font-title mb-1 flex items-center">
-                <Puzzle size={16} className="mr-2 text-primary" />
-                组件卡片
-              </h2>
-              <p className="text-xs text-muted-foreground font-sans mb-2">拖拽实例到主控内部。</p>
-              <div className="flex-grow overflow-y-auto pr-1"><ComponentsPalette /></div>
-            </div>
-          </div>
-        </ScrollArea>
+            </SheetContent>
+          </Sheet>
+        )}
+
         <div className="flex-grow flex flex-col overflow-hidden p-2">
           <div className="flex-grow relative">
             <div className="absolute inset-0">
@@ -1276,6 +1383,8 @@ export function AdvancedTopologyEditor() {
                 isRefreshingCounts={isRefreshingCounts}
                 onNodeDropOnCanvas={handleNodeDroppedOnCanvas} onNodeContextMenu={onNodeContextMenu} onEdgeContextMenu={onEdgeContextMenu} onPaneClick={onPaneClick}
                 customNodeTypes={memoizedNodeTypes}
+                isMobile={isMobile}
+                onToggleMobilePalette={() => setIsPaletteDrawerOpen(true)}
               />
             </div>
           </div>
@@ -1327,4 +1436,3 @@ export function AdvancedTopologyEditor() {
     </div>
   );
 }
-

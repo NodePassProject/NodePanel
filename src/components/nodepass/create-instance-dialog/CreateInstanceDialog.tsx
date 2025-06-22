@@ -14,21 +14,19 @@ import {
   DialogClose,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Switch } from '@/components/ui/switch';
-import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { createInstanceFormSchema, type CreateInstanceFormValues, createInstanceApiSchema } from '@/zod-schemas/nodepass';
-import type { CreateInstanceRequest } from '@/types/nodepass';
+import type { CreateInstanceRequest, Instance } from '@/types/nodepass';
 import { PlusCircle, Loader2 } from 'lucide-react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { nodePassApi } from '@/lib/api';
 import { useApiConfig, type NamedApiConfig } from '@/hooks/use-api-key';
 import type { AppLogEntry } from '../EventLog';
-import { extractHostname } from '@/lib/url-utils'; // isWildcardHostname removed as it's not used
+import { extractHostname } from '@/lib/url-utils';
+import { useInstanceAliases } from '@/hooks/use-instance-aliases';
 
 import { CreateInstanceFormFields } from './CreateInstanceFormFields';
 import { buildUrlFromFormValues, type BuildUrlParams, prepareClientUrlParams, prepareServerUrlParams } from './utils';
-// MASTER_TLS_MODE_DISPLAY_MAP removed as it's handled in CreateInstanceFormFields
 
 interface CreateInstanceDialogProps {
   open: boolean;
@@ -44,21 +42,25 @@ interface CreateInstanceDialogProps {
 export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiToken, apiName, activeApiConfig, onLog }: CreateInstanceDialogProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const { apiConfigsList, getApiRootUrl, getToken } = useApiConfig(); // getApiConfigById removed
+  const { apiConfigsList, getApiRootUrl, getToken } = useApiConfig();
+  const { setAlias: saveInstanceAlias } = useInstanceAliases();
   const [externalApiSuggestion, setExternalApiSuggestion] = useState<string | null>(null);
-  const [showDetailedDescriptions, setShowDetailedDescriptions] = useState(false);
 
   const form = useForm<CreateInstanceFormValues>({
     resolver: zodResolver(createInstanceFormSchema),
     defaultValues: {
       instanceType: '客户端',
+      alias: '',
+      tunnelKey: '',
       isSingleEndedForward: false,
       tunnelAddress: '',
       targetAddress: '',
-      logLevel: 'master', // Default log level changed to master
+      logLevel: 'master',
       tlsMode: 'master',
       certPath: '',
       keyPath: '',
+      minPoolSize: undefined,
+      maxPoolSize: undefined,
     },
   });
 
@@ -71,16 +73,19 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
     if (open) {
       form.reset({
         instanceType: '客户端',
+        alias: '',
+        tunnelKey: '',
         isSingleEndedForward: false,
         tunnelAddress: '',
         targetAddress: '',
-        logLevel: 'master', // Default log level changed to master
+        logLevel: 'master',
         tlsMode: 'master',
         certPath: '',
         keyPath: '',
+        minPoolSize: undefined,
+        maxPoolSize: undefined,
       });
       setExternalApiSuggestion(null);
-      setShowDetailedDescriptions(false);
     }
   }, [open, form]);
 
@@ -104,6 +109,9 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
             if (form.getValues("certPath") !== '') form.setValue("certPath", '');
             if (form.getValues("keyPath") !== '') form.setValue("keyPath", '');
         }
+        // For server, min/max pool size are not applicable, ensure they are undefined
+        if (form.getValues("minPoolSize") !== undefined) form.setValue("minPoolSize", undefined);
+        if (form.getValues("maxPoolSize") !== undefined) form.setValue("maxPoolSize", undefined);
     }
   }, [instanceType, form, isSingleEndedForwardWatched, tlsModeWatch]);
 
@@ -117,7 +125,6 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
       }
 
       const localHostnames = ['localhost', '127.0.0.1', '::', '::1', ''];
-      // isWildcardHostname removed from condition as it's covered by localHostnames or not relevant for this simple check
       if (localHostnames.includes(clientTunnelHost.toLowerCase())) {
         setExternalApiSuggestion(null);
         return;
@@ -180,6 +187,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
     }
 
     let primaryUrlParams: BuildUrlParams | null = null;
+    let primaryCreatedInstance: Instance | null = null;
 
     const localOnLog = (message: string, type: 'INFO' | 'WARN' | 'ERROR') => {
       if (type === 'ERROR') toast({ title: "配置错误", description: message, variant: "destructive" });
@@ -207,22 +215,28 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
 
     try {
       if (primaryInstanceUrl) {
-        await createInstanceMutation.mutateAsync({
+        primaryCreatedInstance = await createInstanceMutation.mutateAsync({
             data: { url: primaryInstanceUrl },
             useApiRoot: apiRoot,
             useApiToken: apiToken,
          });
+
+         if (primaryCreatedInstance && values.alias && values.alias.trim() !== "") {
+            saveInstanceAlias(primaryCreatedInstance.id, values.alias.trim());
+            onLog?.(`为实例 ${primaryCreatedInstance.id.substring(0,8)}... 设置别名: "${values.alias.trim()}"`, 'INFO');
+         }
       }
 
-      const wasAnyMutationInErrorState = createInstanceMutation.isError;
-
-      if (!wasAnyMutationInErrorState) {
+      if (!createInstanceMutation.isError) {
          form.reset();
          onOpenChange(false);
       }
     } catch (error: any) {
-       console.error("创建实例序列中发生错误:", error);
-       onLog?.('创建实例序列中发生错误: ' + error.message, 'ERROR');
+       console.error("创建实例或保存别名时发生错误:", error);
+       if (!createInstanceMutation.isError) {
+          toast({ title: "操作失败", description: "创建实例过程中发生意外错误。", variant: "destructive" });
+          onLog?.('创建实例或保存别名时发生错误: ' + error.message, 'ERROR');
+       }
     }
   }
 
@@ -238,16 +252,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
             <DialogDescription className="font-sans text-xs mr-4">
               为当前主控 “{apiName || 'N/A'}” 配置新实例。
             </DialogDescription>
-            <div className="flex items-center space-x-2 flex-shrink-0">
-              <Switch
-                id="toggle-descriptions"
-                checked={showDetailedDescriptions}
-                onCheckedChange={setShowDetailedDescriptions}
-                aria-label="切换详细参数说明"
-                className="h-4 w-7 data-[state=checked]:bg-primary data-[state=unchecked]:bg-input [&_span]:h-3 [&_span]:w-3 [&_span]:data-[state=checked]:translate-x-3.5 [&_span]:data-[state=unchecked]:translate-x-0.5"
-              />
-              <Label htmlFor="toggle-descriptions" className="font-sans text-xs cursor-pointer">参数说明</Label>
-            </div>
+            {/* Removed Switch and Label for "参数说明" */}
           </div>
         </DialogHeader>
 
@@ -262,7 +267,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
             isLoadingServerInstances={false}
             externalApiSuggestion={externalApiSuggestion}
             onSubmitHandler={onSubmitHandler}
-            showDetailedDescriptions={showDetailedDescriptions}
+            showDetailedDescriptions={false} // Hardcoded to false
         />
 
         <DialogFooter className="pt-3 font-sans">

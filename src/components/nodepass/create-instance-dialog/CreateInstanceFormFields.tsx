@@ -7,7 +7,7 @@ import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, For
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Info, Settings2, Share2, Zap } from 'lucide-react';
+import { Info, Settings2, Share2, Zap, Tag, KeyRound, Users, Minimize, Expand } from 'lucide-react';
 import type { CreateInstanceFormValues } from '@/zod-schemas/nodepass';
 import type { NamedApiConfig } from '@/hooks/use-api-key';
 import { MASTER_TLS_MODE_DISPLAY_MAP } from './constants';
@@ -23,7 +23,7 @@ interface CreateInstanceFormFieldsProps {
   isLoadingServerInstances: false; // This prop is no longer used
   externalApiSuggestion: string | null;
   onSubmitHandler: (values: CreateInstanceFormValues) => void;
-  showDetailedDescriptions: boolean;
+  showDetailedDescriptions: boolean; // Prop kept for signature but effectively unused
 }
 
 export function CreateInstanceFormFields({
@@ -34,7 +34,7 @@ export function CreateInstanceFormFields({
   activeApiConfig,
   externalApiSuggestion,
   onSubmitHandler,
-  showDetailedDescriptions,
+  // showDetailedDescriptions, // Parameter is effectively unused now
 }: CreateInstanceFormFieldsProps) {
 
   const masterLogLevelDisplay = activeApiConfig?.masterDefaultLogLevel && activeApiConfig.masterDefaultLogLevel !== 'master'
@@ -70,6 +70,53 @@ export function CreateInstanceFormFields({
           )}
         />
 
+        <FormField
+          control={form.control}
+          name="alias"
+          render={({ field }) => (
+            <FormItem className="space-y-1">
+              <FormLabel className="font-sans text-xs flex items-center">
+                <Tag size={14} className="mr-1 text-muted-foreground" />
+                实例别名 (可选)
+              </FormLabel>
+              <FormControl>
+                <Input
+                  className="text-xs font-sans h-9"
+                  placeholder="例: 我的测试服务"
+                  {...field}
+                  value={field.value || ""}
+                />
+              </FormControl>
+              <FormMessage className="text-xs" />
+            </FormItem>
+          )}
+        />
+
+        {!(instanceType === '客户端' && isSingleEndedForward) && (
+            <FormField
+            control={form.control}
+            name="tunnelKey"
+            render={({ field }) => (
+                <FormItem className="space-y-1">
+                <FormLabel className="font-sans text-xs flex items-center">
+                    <KeyRound size={14} className="mr-1 text-muted-foreground" />
+                    隧道密钥 (可选)
+                </FormLabel>
+                <FormControl>
+                    <Input
+                    className="text-xs font-sans h-9"
+                    placeholder="留空则使用端口派生密钥"
+                    {...field}
+                    value={field.value || ""}
+                    />
+                </FormControl>
+                <FormMessage className="text-xs" />
+                </FormItem>
+            )}
+            />
+        )}
+
+
         {instanceType === '客户端' && (
           <FormField
             control={form.control}
@@ -89,11 +136,6 @@ export function CreateInstanceFormFields({
                     <Zap size={13} className="mr-1 text-yellow-500" />
                     单端转发模式
                   </FormLabel>
-                  {showDetailedDescriptions && (
-                    <FormDescription className="font-sans text-xs mt-0.5">
-                      启用后，仅需配置本地监听地址和远程目标转发地址。
-                    </FormDescription>
-                  )}
                 </div>
               </FormItem>
             )}
@@ -125,16 +167,7 @@ export function CreateInstanceFormFields({
                   {...field}
                 />
               </FormControl>
-               {showDetailedDescriptions && (
-                <FormDescription className="font-sans text-xs mt-0.5">
-                  {instanceType === "服务端"
-                    ? "服务端在此地址监听控制连接。"
-                    : (isSingleEndedForward
-                        ? "客户端在此本地地址 (IP:端口) 监听传入连接。"
-                        : "客户端连接此服务端地址的控制通道.")}
-                </FormDescription>
-               )}
-              {externalApiSuggestion && showDetailedDescriptions && instanceType === '客户端' && !isSingleEndedForward && (
+              {externalApiSuggestion && instanceType === '客户端' && !isSingleEndedForward && (
                 <FormDescription className="text-xs text-amber-600 dark:text-amber-400 mt-0.5 font-sans">
                   <Info size={12} className="inline-block mr-1 align-text-bottom" />
                   {externalApiSuggestion}
@@ -165,19 +198,62 @@ export function CreateInstanceFormFields({
                   {...field}
                 />
               </FormControl>
-              {showDetailedDescriptions && (
-                <FormDescription className="font-sans text-xs mt-0.5">
-                  {instanceType === "服务端"
-                    ? "服务端将业务数据转发到此地址。"
-                    : (isSingleEndedForward
-                        ? "客户端将流量转发到的远程目标服务地址。"
-                        : "客户端将流量转发到的本地服务端口 (主机固定为 [::])。若留空，将使用 (服务端隧道端口+1) 自动生成。")}
-                </FormDescription>
-              )}
               <FormMessage className="text-xs" />
             </FormItem>
           )}
         />
+
+        {instanceType === '客户端' && (
+            <div className="grid grid-cols-2 gap-3">
+                <FormField
+                control={form.control}
+                name="minPoolSize"
+                render={({ field }) => (
+                    <FormItem className="space-y-1">
+                    <FormLabel className="font-sans text-xs flex items-center">
+                        <Minimize size={14} className="mr-1 text-muted-foreground" />
+                        最小连接池 (可选)
+                    </FormLabel>
+                    <FormControl>
+                        <Input
+                        type="number"
+                        className="text-xs font-mono h-9"
+                        placeholder="默认: 64"
+                        {...field}
+                        onChange={event => field.onChange(event.target.value === '' ? undefined : +event.target.value)}
+                        value={field.value ?? ""}
+                        />
+                    </FormControl>
+                    <FormMessage className="text-xs" />
+                    </FormItem>
+                )}
+                />
+                <FormField
+                control={form.control}
+                name="maxPoolSize"
+                render={({ field }) => (
+                    <FormItem className="space-y-1">
+                    <FormLabel className="font-sans text-xs flex items-center">
+                        <Expand size={14} className="mr-1 text-muted-foreground" />
+                        最大连接池 (可选)
+                    </FormLabel>
+                    <FormControl>
+                        <Input
+                        type="number"
+                        className="text-xs font-mono h-9"
+                        placeholder="默认: 8192"
+                        {...field}
+                        onChange={event => field.onChange(event.target.value === '' ? undefined : +event.target.value)}
+                        value={field.value ?? ""}
+                        />
+                    </FormControl>
+                    <FormMessage className="text-xs" />
+                    </FormItem>
+                )}
+                />
+            </div>
+        )}
+
 
         <FormField
           control={form.control}
@@ -199,11 +275,6 @@ export function CreateInstanceFormFields({
                   <SelectItem value="error" className="font-sans text-xs">Error</SelectItem>
                 </SelectContent>
               </Select>
-              {showDetailedDescriptions && (
-                <FormDescription className="font-sans text-xs mt-0.5">
-                  实例的日志记录级别。选择 '默认 (主控配置)' 时，将采用当前活动主控中设置的默认日志级别。若主控也设为'未指定'，则继承 NodePass 全局默认日志级别。
-                </FormDescription>
-              )}
               <FormMessage className="text-xs" />
             </FormItem>
           )}
@@ -235,13 +306,6 @@ export function CreateInstanceFormFields({
                       <SelectItem value="2" className="font-sans text-xs">2: 自定义</SelectItem>
                     </SelectContent>
                   </Select>
-                  {showDetailedDescriptions && (
-                    <FormDescription className="font-sans text-xs mt-0.5">
-                      {instanceType === '服务端'
-                        ? "服务端数据通道的TLS加密模式。"
-                        : "客户端连接目标服务端的TLS行为。"}
-                    </FormDescription>
-                  )}
                   <FormMessage className="text-xs" />
                 </FormItem>
               )}
@@ -262,11 +326,6 @@ export function CreateInstanceFormFields({
                           value={field.value || ""}
                         />
                       </FormControl>
-                      {showDetailedDescriptions && (
-                        <FormDescription className="font-sans text-xs mt-0.5">
-                          {instanceType === '客户端' ? "用于客户端连接服务端 (mTLS)。" : "用于服务端数据通道。"}
-                        </FormDescription>
-                      )}
                       <FormMessage className="text-xs" />
                     </FormItem>
                   )}
@@ -285,11 +344,6 @@ export function CreateInstanceFormFields({
                           value={field.value || ""}
                         />
                       </FormControl>
-                      {showDetailedDescriptions && (
-                        <FormDescription className="font-sans text-xs mt-0.5">
-                         {instanceType === '客户端' ? "用于客户端连接服务端 (mTLS)。" : "用于服务端数据通道。"}
-                        </FormDescription>
-                      )}
                       <FormMessage className="text-xs" />
                     </FormItem>
                   )}
@@ -298,15 +352,8 @@ export function CreateInstanceFormFields({
             )}
           </>
         )}
-        {instanceType === '客户端' && isSingleEndedForward && showDetailedDescriptions && (
-            <FormDescription className="font-sans text-xs mt-0.5">
-                <Info size={12} className="inline-block mr-1 align-text-bottom" />
-                单端转发模式下，客户端直接连接目标，不涉及连接NodePass服务端的TLS配置。
-            </FormDescription>
-        )}
       </form>
     </Form>
   );
 }
 
-    

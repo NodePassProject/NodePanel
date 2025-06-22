@@ -12,12 +12,13 @@ import {
 import { Badge } from '@/components/ui/badge';
 import type { Instance } from '@/types/nodepass';
 import { InstanceStatusBadge } from './InstanceStatusBadge';
-import { ArrowDownCircle, ArrowUpCircle, ServerIcon, SmartphoneIcon, Fingerprint, Cable, KeyRound, Eye, EyeOff, ScrollText, Network, AlertTriangle, Info as InfoIcon, MessageSquare, AlertCircle, Bug, HelpCircle, FileText } from 'lucide-react';
+import { ArrowDownCircle, ArrowUpCircle, ServerIcon, SmartphoneIcon, Fingerprint, Cable, KeyRound, Eye, EyeOff, ScrollText, Network, AlertTriangle, Info as InfoIcon, MessageSquare, AlertCircle, Bug, HelpCircle, FileText, Tag } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { getEventsUrl } from '@/lib/api';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from "@/lib/utils";
+import { useInstanceAliases } from '@/hooks/use-instance-aliases';
 
 interface InstanceDetailsModalProps {
   instance: Instance | null;
@@ -162,6 +163,8 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const logCounterRef = useRef(0);
   const hasConnectedAtLeastOnceRef = useRef(false);
+  const { getAlias, isLoadingAliases } = useInstanceAliases();
+
 
   const addLogEntry = useCallback((entry: ParsedLogEntry) => {
     setInstanceLogs(prevLogs => {
@@ -252,6 +255,7 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
         buffer = messageBlocks.pop() || '';
 
         for (const block of messageBlocks) {
+          if (signal.aborted) break;
           if (block.trim() === '') continue;
 
           let eventName = 'message'; 
@@ -270,15 +274,25 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
           if (eventName === 'instance' && eventData) {
             try {
               const jsonData = JSON.parse(eventData);
-              const eventInstanceId = jsonData.instance?.id || 
-                                    (Array.isArray(jsonData.instance) && jsonData.instance.length > 0 ? jsonData.instance[0]?.id : null);
+              const eventInstanceField = jsonData.instance;
+              let eventInstanceId: string | null = null;
+              let eventInstanceStatus: string | null = null;
+
+              if (typeof eventInstanceField === 'object' && eventInstanceField !== null) {
+                if (typeof eventInstanceField.id === 'string') {
+                  eventInstanceId = eventInstanceField.id;
+                }
+                if (typeof eventInstanceField.status === 'string') {
+                  eventInstanceStatus = eventInstanceField.status;
+                }
+              }
               
-              if (eventInstanceId === '********' && ['initial', 'create', 'update', 'delete'].includes(jsonData.type)) {
-                continue;
+              if (eventInstanceId === '********' && instance.id !== '********') {
+                continue; 
               }
 
               if (jsonData.type === 'log') {
-                if (jsonData.instance?.id === instance.id) {
+                if (eventInstanceId === instance.id) { 
                   let rawLogData = jsonData.logs || '';
                   if (typeof rawLogData === 'string') {
                     addLogEntry(parseAndFormatLogLine(rawLogData, logCounterRef.current++)); 
@@ -297,27 +311,37 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
                 }
                 return; 
               } else if (jsonData.type === 'initial') {
-                  if (Array.isArray(jsonData.instance)) {
-                    addLogEntry(parseAndFormatLogLine(`收到初始实例数据 (${jsonData.instance.length} 个)。`, logCounterRef.current++, 'INFO'));
-                  } else if (typeof jsonData.instance === 'object' && jsonData.instance !== null && jsonData.instance.id !== '********') {
-                    addLogEntry(parseAndFormatLogLine(`收到单个实例初始数据: ${jsonData.instance.id}`, logCounterRef.current++, 'INFO'));
+                let currentInstanceDataInEvent;
+                if (Array.isArray(eventInstanceField)) {
+                    currentInstanceDataInEvent = eventInstanceField.find(instData => instData.id === instance.id);
+                } else if (eventInstanceId === instance.id) {
+                    currentInstanceDataInEvent = eventInstanceField;
+                }
+                if (currentInstanceDataInEvent) {
+                    const statusFromEvent = currentInstanceDataInEvent.status;
+                    if (statusFromEvent !== instance.status) { // Only log if status changed
+                         addLogEntry(parseAndFormatLogLine(`收到本实例的初始状态数据 (ID: ${instance.id}, 状态: ${statusFromEvent})。`, logCounterRef.current++, 'INFO'));
+                    }
+                }
+              } else if (jsonData.type === 'create' && eventInstanceId === instance.id) {
+                  addLogEntry(parseAndFormatLogLine(`本实例已创建 (ID: ${instance.id})。`, logCounterRef.current++, 'INFO'));
+              } else if (jsonData.type === 'update' && eventInstanceId === instance.id) {
+                  if (eventInstanceStatus && eventInstanceStatus !== instance.status) { // Only log if status changed
+                    addLogEntry(parseAndFormatLogLine(`本实例已更新 (ID: ${instance.id}, 新状态: ${eventInstanceStatus})。`, logCounterRef.current++, 'INFO'));
                   }
-              } else if (jsonData.type === 'create' && jsonData.instance && jsonData.instance.id !== '********') {
-                  addLogEntry(parseAndFormatLogLine(`实例已创建: ${jsonData.instance.id}`, logCounterRef.current++, 'INFO'));
-              } else if (jsonData.type === 'update' && jsonData.instance && jsonData.instance.id !== '********') {
-                  addLogEntry(parseAndFormatLogLine(`实例已更新: ${jsonData.instance.id} 状态: ${jsonData.instance.status}`, logCounterRef.current++, 'INFO'));
-              } else if (jsonData.type === 'delete' && jsonData.instance && jsonData.instance.id !== '********') {
-                  addLogEntry(parseAndFormatLogLine(`实例已删除: ${jsonData.instance.id}`, logCounterRef.current++, 'INFO'));
-              } else if (eventInstanceId !== '********') { 
-                addLogEntry(parseAndFormatLogLine(`未识别的 'instance' 事件数据类型: ${jsonData.type}. Data: ${JSON.stringify(jsonData).substring(0,100)}...`, logCounterRef.current++, 'WARN'));
+              } else if (jsonData.type === 'delete' && eventInstanceId === instance.id) {
+                  addLogEntry(parseAndFormatLogLine(`本实例已删除 (ID: ${instance.id})。`, logCounterRef.current++, 'INFO'));
+              } else if (jsonData.type === 'error' && eventInstanceId === instance.id) { 
+                  const errorMessage = jsonData.error || jsonData.message || '未知实例错误';
+                  addLogEntry(parseAndFormatLogLine(`实例错误: ${errorMessage} (ID: ${instance.id})`, logCounterRef.current++, 'ERROR'));
               }
 
             } catch (e: any) {
-                 if (instance.id !== '********') {
+                 if (instance.id !== '********') { 
                     addLogEntry(parseAndFormatLogLine(`解析 'instance' 事件数据错误: ${e.message}. Data snippet: ${eventData.substring(0,100)}...`, logCounterRef.current++, 'ERROR'));
                  }
             }
-          } else if (eventData && eventName !== 'instance' && instance.id !== '********') { 
+          } else if (eventData && instance.id !== '********') { 
              addLogEntry(parseAndFormatLogLine(`收到事件 "${eventName}" (预期 "instance"). Data: ${eventData.substring(0, 50)}...`, logCounterRef.current++, 'WARN'));
           }
         }
@@ -330,7 +354,7 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
         if (typeof error.message === 'string' && (error.message.toLowerCase().includes('failed to fetch') || error.message.toLowerCase().includes('networkerror'))) {
             displayError = '网络错误。请检查连接或服务器CORS设置。';
         }
-        if (instance.id !== '********') {
+        if (instance.id !== '********') { 
           addLogEntry(parseAndFormatLogLine(`事件流连接错误: ${displayError} ${RECONNECT_DELAY / 1000}秒后尝试重连...`, logCounterRef.current++, 'ERROR'));
           if (!signal.aborted) {
             reconnectTimeoutRef.current = setTimeout(connectToSse, RECONNECT_DELAY);
@@ -371,7 +395,7 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
       }
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, instance, apiRoot, apiToken]); 
+  }, [open, instance, apiRoot, apiToken]); // connectToSse is stable due to useCallback
 
 
   useEffect(() => {
@@ -396,6 +420,8 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
 
   if (!instance) return null;
   const isApiKeyInstance = instance.id === '********';
+  const alias = !isApiKeyInstance && !isLoadingAliases ? getAlias(instance.id) : undefined;
+
 
   const detailItems = [
     {
@@ -411,6 +437,22 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
       ),
       icon: <Fingerprint className="h-4 w-4 text-muted-foreground" />
     },
+    ...(!isApiKeyInstance ? [{
+      label: "别名",
+      value: (
+        isLoadingAliases ? <span className="text-xs">加载中...</span> :
+        alias ? (
+          <span
+            className="font-sans text-xs cursor-pointer hover:text-primary transition-colors duration-150"
+            title={`点击复制: ${alias}`}
+            onClick={() => handleCopyToClipboard(alias, "别名")}
+          >
+            {alias}
+          </span>
+        ) : <span className="text-xs text-muted-foreground">-</span>
+      ),
+      icon: <Tag className="h-4 w-4 text-muted-foreground" />
+    }] : []),
     {
       label: "类型",
       value: isApiKeyInstance ? (
@@ -589,3 +631,4 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
   );
 }
 
+    

@@ -13,15 +13,14 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { KeyRound, Eye, EyeOff, Info } from 'lucide-react'; 
-import type { NamedApiConfig, MasterLogLevel, MasterTlsMode } from '@/hooks/use-api-key'; 
+import { KeyRound, Eye, EyeOff } from 'lucide-react';
+import type { NamedApiConfig } from '@/hooks/use-api-key';
 import type { AppLogEntry } from './EventLog';
 
 interface ApiConfigDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSave: (config: Omit<NamedApiConfig, 'id'> & { id?: string }) => void; 
+  onSave: (config: Omit<NamedApiConfig, 'id'> & { id?: string }) => void;
   currentConfig?: NamedApiConfig | null;
   isEditing?: boolean;
   onLog?: (message: string, type: AppLogEntry['type']) => void;
@@ -32,24 +31,18 @@ export function ApiConfigDialog({ open, onOpenChange, onSave, currentConfig, isE
   const [apiUrlInput, setApiUrlInput] = useState('');
   const [tokenInput, setTokenInput] = useState('');
   const [showToken, setShowToken] = useState(false);
-  const [masterLogLevelInput, setMasterLogLevelInput] = useState<MasterLogLevel>('master');
-  const [masterTlsModeInput, setMasterTlsModeInput] = useState<MasterTlsMode>('master');
 
   useEffect(() => {
     if (open) {
       setNameInput(currentConfig?.name || '');
-      setApiUrlInput(currentConfig?.apiUrl || 'http://localhost:3000/api/v1'); // Default to include /api/v1
+      setApiUrlInput(currentConfig?.apiUrl || 'http://localhost:3000/api/v1');
       setTokenInput(currentConfig?.token || '');
-      setMasterLogLevelInput(currentConfig?.masterDefaultLogLevel || 'master');
-      setMasterTlsModeInput(currentConfig?.masterDefaultTlsMode || 'master');
       setShowToken(false);
     } else {
-      // Reset on close
+      // Reset fields when dialog is closed
       setNameInput('');
-      setApiUrlInput('http://localhost:3000/api/v1'); // Default to include /api/v1
+      setApiUrlInput('http://localhost:3000/api/v1');
       setTokenInput('');
-      setMasterLogLevelInput('master');
-      setMasterTlsModeInput('master');
       setShowToken(false);
     }
   }, [open, currentConfig]);
@@ -57,14 +50,15 @@ export function ApiConfigDialog({ open, onOpenChange, onSave, currentConfig, isE
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (nameInput.trim() && apiUrlInput.trim() && tokenInput.trim()) {
-      onSave({
-        id: currentConfig?.id, 
+      const configToSave: Omit<NamedApiConfig, 'id'> & { id?: string } = {
+        id: currentConfig?.id,
         name: nameInput.trim(),
         apiUrl: apiUrlInput.trim(),
         token: tokenInput.trim(),
-        masterDefaultLogLevel: masterLogLevelInput,
-        masterDefaultTlsMode: masterTlsModeInput,
-      });
+        // masterDefaultLogLevel and masterDefaultTlsMode are intentionally omitted.
+        // The useApiConfig hook will default them to 'master' if they're not present.
+      };
+      onSave(configToSave);
       onOpenChange(false);
     }
   };
@@ -76,10 +70,10 @@ export function ApiConfigDialog({ open, onOpenChange, onSave, currentConfig, isE
           <DialogHeader>
             <DialogTitle className="flex items-center font-title">
               <KeyRound className="mr-2 h-5 w-5 text-primary" />
-              {isEditing ? '编辑主控' : '添加新主控'}
+              {isEditing ? '编辑主控连接' : '添加新主控连接'}
             </DialogTitle>
             <DialogDescription className="font-sans">
-              为此 NodePass 主控配置连接。信息将保存在浏览器本地。
+              {isEditing ? `修改主控 "${currentConfig?.name}" 的连接配置。` : '为此 NodePass 主控配置连接。信息将保存在浏览器本地。'}
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4 max-h-[60vh] overflow-y-auto pr-2">
@@ -100,7 +94,7 @@ export function ApiConfigDialog({ open, onOpenChange, onSave, currentConfig, isE
                 id="api-url"
                 value={apiUrlInput}
                 onChange={(e) => setApiUrlInput(e.target.value)}
-                placeholder="例: http://localhost:3000/api/v1" 
+                placeholder="例: http://localhost:3000/api/v1"
                 required
                 className="font-sans"
               />
@@ -128,49 +122,6 @@ export function ApiConfigDialog({ open, onOpenChange, onSave, currentConfig, isE
                   {showToken ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </Button>
               </div>
-            </div>
-
-            <div className="my-3 border-t border-border"></div>
-            <p className="text-sm text-muted-foreground font-sans pb-2">
-              以下可选字段用于记录此主控的默认启动配置，供创建实例时参考。
-            </p>
-
-            <div className="space-y-1">
-              <Label htmlFor="master-log-level" className="font-sans flex items-center">
-                <Info size={14} className="mr-1.5 text-muted-foreground" />
-                主控默认日志级别 (参考)
-              </Label>
-              <Select value={masterLogLevelInput} onValueChange={(value) => setMasterLogLevelInput(value as MasterLogLevel)}>
-                <SelectTrigger className="font-sans text-sm">
-                  <SelectValue placeholder="选择日志级别" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="master">未指定</SelectItem>
-                  <SelectItem value="debug">Debug</SelectItem>
-                  <SelectItem value="info">Info</SelectItem>
-                  <SelectItem value="warn">Warn</SelectItem>
-                  <SelectItem value="error">Error</SelectItem>
-                  <SelectItem value="event">Event</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-1">
-              <Label htmlFor="master-tls-mode" className="font-sans flex items-center">
-                 <Info size={14} className="mr-1.5 text-muted-foreground" />
-                主控默认TLS模式 (参考)
-              </Label>
-              <Select value={masterTlsModeInput} onValueChange={(value) => setMasterTlsModeInput(value as MasterTlsMode)}>
-                <SelectTrigger className="font-sans text-sm">
-                  <SelectValue placeholder="选择TLS模式" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="master">未指定</SelectItem>
-                  <SelectItem value="0">0: 无TLS (明文)</SelectItem>
-                  <SelectItem value="1">1: 自签名证书</SelectItem>
-                  <SelectItem value="2">2: 自定义证书</SelectItem>
-                </SelectContent>
-              </Select>
             </div>
           </div>
           <DialogFooter className="font-sans">
