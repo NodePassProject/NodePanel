@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useEffect, useRef } from 'react';
@@ -42,15 +41,15 @@ export function EventLog({ logs }: EventLogProps) {
 
   const handleCopyToClipboard = async (textToCopy: string, entity: string) => {
     if (!navigator.clipboard) {
-      toast({ title: '复制失败', description: '浏览器不支持剪贴板。', variant: 'destructive' });
+      toast({ title: 'Copy Failed', description: 'Browser does not support clipboard.', variant: 'destructive' });
       return;
     }
     try {
       await navigator.clipboard.writeText(textToCopy);
-      toast({ title: '复制成功', description: `${entity} 已复制到剪贴板。` });
+      toast({ title: 'Copy Successful', description: `${entity} has been copied to clipboard.` });
     } catch (err) {
-      toast({ title: '复制失败', description: `无法复制 ${entity}。`, variant: 'destructive' });
-      console.error('复制失败: ', err);
+      toast({ title: 'Copy Failed', description: `Unable to copy ${entity}.`, variant: 'destructive' });
+      console.error('Copy failed: ', err);
     }
   };
 
@@ -70,11 +69,11 @@ export function EventLog({ logs }: EventLogProps) {
       case 'ERROR': return <AlertTriangle className="h-3.5 w-3.5 mr-1.5 text-destructive" />;
       case 'INFO': return <Info className="h-3.5 w-3.5 mr-1.5 text-blue-500" />;
       case 'ACTION':
-        if (message.includes('创建')) return <Pencil className="h-3.5 w-3.5 mr-1.5 text-muted-foreground"/>;
-        if (message.includes('删除')) return <Trash2 className="h-3.5 w-3.5 mr-1.5 text-muted-foreground"/>;
-        if (message.includes('启动')) return <Play className="h-3.5 w-3.5 mr-1.5 text-muted-foreground"/>;
-        if (message.includes('停止')) return <Square className="h-3.5 w-3.5 mr-1.5 text-muted-foreground"/>;
-        if (message.includes('重启')) return <RotateCcw className="h-3.5 w-3.5 mr-1.5 text-muted-foreground"/>;
+        if (message.includes('Create')) return <Pencil className="h-3.5 w-3.5 mr-1.5 text-muted-foreground"/>;
+        if (message.includes('Delete')) return <Trash2 className="h-3.5 w-3.5 mr-1.5 text-muted-foreground"/>;
+        if (message.includes('Start')) return <Play className="h-3.5 w-3.5 mr-1.5 text-muted-foreground"/>;
+        if (message.includes('Stop')) return <Square className="h-3.5 w-3.5 mr-1.5 text-muted-foreground"/>;
+        if (message.includes('Restart')) return <RotateCcw className="h-3.5 w-3.5 mr-1.5 text-muted-foreground"/>;
         return <Settings className="h-3.5 w-3.5 mr-1.5 text-muted-foreground" />;
       default: return <Info className="h-3.5 w-3.5 mr-1.5 text-muted-foreground" />;
     }
@@ -84,7 +83,7 @@ export function EventLog({ logs }: EventLogProps) {
     <ScrollArea className="h-60 w-full rounded-md border p-3 bg-muted/20">
       {logs.length === 0 && (
         <p className="text-sm text-muted-foreground text-center py-4 font-sans">
-          暂无应用操作记录。
+          No application operation records.
         </p>
       )}
       {logs.slice(0, MAX_LOG_ENTRIES).map((log, index) => {
@@ -112,7 +111,7 @@ export function EventLog({ logs }: EventLogProps) {
                 <span className="w-4 h-4 shrink-0"></span> // Placeholder for alignment
               )}
               <span className="font-mono text-xs text-muted-foreground whitespace-nowrap pt-0.5">
-                {new Date(log.timestamp).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })}
+                {new Date(log.timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })}
               </span>
               <Badge variant={getBadgeVariant(log.type)} className="py-0.5 px-1.5 shadow-sm whitespace-nowrap self-start text-xs font-sans items-center">
                 {getIconForType(log.type, log.message)}
@@ -124,7 +123,7 @@ export function EventLog({ logs }: EventLogProps) {
             </div>
             {isExpanded && hasDetails && (
               <div className="ml-10 mt-1 p-2 rounded-md bg-background border text-xs">
-                <h4 className="font-semibold mb-1 text-muted-foreground">详细信息:</h4>
+                <h4 className="font-semibold mb-1 text-muted-foreground">Details:</h4>
                 {typeof log.details === 'string' ? (
                   <pre className="whitespace-pre-wrap break-all font-mono">{stripAnsiCodes(log.details)}</pre>
                 ) : typeof log.details === 'object' ? (
@@ -132,7 +131,7 @@ export function EventLog({ logs }: EventLogProps) {
                 ) : typeof log.message === 'string' && log.message.length > LOG_LINE_TRUNCATE_LENGTH ? (
                   <pre className="whitespace-pre-wrap break-all font-mono">{stripAnsiCodes(log.message)}</pre>
                 ) : (
-                  <p className="text-muted-foreground font-mono">无更多详情。</p>
+                  <p className="text-muted-foreground font-mono">No further details.</p>
                 )}
               </div>
             )}

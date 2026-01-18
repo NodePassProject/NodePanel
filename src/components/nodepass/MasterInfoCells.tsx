@@ -1,4 +1,3 @@
-
 "use client";
 
 import React from 'react';
@@ -19,7 +18,7 @@ interface MasterInfoCellsProps {
 const mapLogLevel = (logLevel: string | undefined): string => {
   if (!logLevel) return 'N/A';
   const lowerLogLevel = logLevel.toLowerCase();
-  if (lowerLogLevel === 'master') return '主控默认';
+  if (lowerLogLevel === 'master') return 'Master Default';
   return lowerLogLevel.charAt(0).toUpperCase() + lowerLogLevel.slice(1);
 }
 
@@ -36,7 +35,7 @@ export function MasterInfoCells({ apiConfig }: MasterInfoCellsProps) {
     queryKey: ['masterInfo', apiConfig.id],
     queryFn: () => {
       if (!apiConfig.apiUrl || !apiConfig.token) {
-        throw new Error("主控配置不完整。");
+        throw new Error("Master configuration is incomplete.");
       }
       return nodePassApi.getMasterInfo(apiConfig.apiUrl, apiConfig.token);
     },
@@ -61,7 +60,7 @@ export function MasterInfoCells({ apiConfig }: MasterInfoCellsProps) {
       <TableCell className="text-xs text-destructive" colSpan={2} title={error?.message}>
         <div className="flex items-center">
           <AlertTriangle className="h-3.5 w-3.5 mr-1 inline-block" />
-          错误
+          Error
         </div>
       </TableCell>
       <TableCell className="text-xs text-destructive" colSpan={2}>
@@ -95,10 +94,10 @@ export function MasterInfoCells({ apiConfig }: MasterInfoCellsProps) {
       <TableCell className="text-xs font-mono truncate max-w-[150px]" title={systemInfoDisplay}>
         {systemInfoDisplay}
       </TableCell>
-      <TableCell className="text-xs font-sans" title={`主控当前日志级别: ${data.log}`}>
+      <TableCell className="text-xs font-sans" title={`Current master log level: ${data.log}`}>
         {mapLogLevel(data.log)}
       </TableCell>
-      <TableCell className="text-xs font-sans" title={`主控当前TLS模式: ${data.tls}`}>
+      <TableCell className="text-xs font-sans" title={`Current master TLS mode: ${data.tls}`}>
         {mapTlsMode(data.tls)}
       </TableCell>
     </>

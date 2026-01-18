@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { memo } from 'react';
@@ -38,14 +37,14 @@ export const nodeStyles = {
 export const MasterNode: React.FC<NodeProps<CustomNodeData>> = memo(({ data }) => {
   const isAdvancedContainerRole = !data.masterSubRole || data.masterSubRole === 'generic' || data.masterSubRole === 'primary' || data.masterSubRole === 'container';
 
-  const subRoleText = data.masterSubRole === 'client-role' ? '(客户隧道)'
-    : data.masterSubRole === 'server-role' ? '(服务主机)'
-    : data.masterSubRole === 'primary' ? '(主要主控)'
-    : data.masterSubRole === 'single-client-link' ? '(单客户端链路)'
-    : data.masterSubRole === 'intra-master-tunnel' ? '(内部隧道)'
-    : data.masterSubRole === 'external-client-link' ? '(外部客户端连接)'
-    : data.masterSubRole === 'server-service-link' ? '(服务端服务)'
-    : '(通用容器)';
+  const subRoleText = data.masterSubRole === 'client-role' ? '(Client Tunnel)'
+    : data.masterSubRole === 'server-role' ? '(Service Host)'
+    : data.masterSubRole === 'primary' ? '(Primary Master)'
+    : data.masterSubRole === 'single-client-link' ? '(Single Client Link)'
+    : data.masterSubRole === 'intra-master-tunnel' ? '(Internal Tunnel)'
+    : data.masterSubRole === 'external-client-link' ? '(External Client Connection)'
+    : data.masterSubRole === 'server-service-link' ? '(Server Service)'
+    : '(Generic Container)';
   
   return (
     <>
@@ -123,7 +122,7 @@ export const CardNode: React.FC<
                 size="icon"
                 className="h-6 w-6"
                 onClick={(e) => { e.stopPropagation(); onEditRequest(fullNodeProps); }}
-                title="编辑属性"
+                title="Edit Properties"
               >
                 <Pencil size={12} />
               </Button>
@@ -134,7 +133,7 @@ export const CardNode: React.FC<
                 size="icon"
                 className="h-6 w-6 text-destructive hover:text-destructive hover:bg-destructive/10"
                 onClick={(e) => { e.stopPropagation(); onDeleteRequest(fullNodeProps); }}
-                title="删除角色"
+                title="Delete Role"
               >
                 <Trash2 size={12} />
               </Button>
@@ -165,8 +164,8 @@ export const CardNode: React.FC<
 
         {isExpanded && (
           <div className="text-xs space-y-0.5 w-full pl-1 overflow-hidden text-ellipsis">
-            {data.tunnelAddress && <p className="truncate" title={`隧道: ${data.tunnelAddress}`}><strong>隧道:</strong> {data.tunnelAddress}</p>}
-            {data.targetAddress && <p className="truncate" title={`目标: ${data.targetAddress}`}><strong>目标:</strong> {data.targetAddress}</p>}
+            {data.tunnelAddress && <p className="truncate" title={`Tunnel: ${data.tunnelAddress}`}><strong>Tunnel:</strong> {data.tunnelAddress}</p>}
+            {data.targetAddress && <p className="truncate" title={`Target: ${data.targetAddress}`}><strong>Target:</strong> {data.targetAddress}</p>}
           </div>
         )}
         
@@ -211,4 +210,3 @@ export const nodeTypes = {
   cardNode: CardNode,
   masterNode: MasterNode,
 };
-

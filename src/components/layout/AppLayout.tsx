@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { type ReactNode, useState, useEffect } from 'react';
@@ -31,12 +30,12 @@ export function AppLayout({ children, onLog }: AppLayoutProps) {
     setActiveApiConfigId(savedConfig.id);
     setEditingApiConfig(null);
     setIsApiConfigDialogOpen(false);
-    const actionText = isNew ? '添加' : '更新';
+    const actionText = isNew ? 'added' : 'updated';
     toast({
-      title: `主控已${actionText}`,
-      description: `“${savedConfig.name}”已保存并激活。`,
+      title: `Controller has been ${actionText}`,
+      description: `“${savedConfig.name}” has been saved and activated.`,
     });
-    onLog?.(`主控 "${savedConfig.name}" 已${actionText}并激活。`, 'SUCCESS');
+    onLog?.(`Controller "${savedConfig.name}" has been ${actionText} and activated.`, 'SUCCESS');
   };
 
   const handleOpenApiConfigDialog = (configToEdit?: NamedApiConfig | null) => {
@@ -46,12 +45,12 @@ export function AppLayout({ children, onLog }: AppLayoutProps) {
 
   const handleClearActiveConfig = () => {
     if (activeApiConfig) {
-      onLog?.(`断开与主控 "${activeApiConfig.name}" 的连接。`, 'INFO');
+      onLog?.(`Disconnected from controller "${activeApiConfig.name}".`, 'INFO');
     }
     clearActiveApiConfig();
     toast({
-      title: '已断开连接',
-      description: '活动主控连接已断开。',
+      title: 'Disconnected',
+      description: 'Active controller connection has been disconnected.',
     });
   };
 
@@ -79,17 +78,17 @@ export function AppLayout({ children, onLog }: AppLayoutProps) {
           <span>NodePanel &copy; {new Date().getFullYear()}</span>
           <span className="mx-1.5">&bull;</span>
           <span>
-            由 <a
+            Powered by <a
                 href="https://github.com/yosebyte/nodepass"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="font-medium text-primary hover:text-primary/80 transition-colors"
               >
               NodePass
-            </a> 驱动
+            </a>
           </span>
           <span className="mx-1.5">&bull;</span>
-          <span>版本: 1.0.6</span>
+          <span>Version: 1.0.6</span>
         </div>
       </footer>
     </div>

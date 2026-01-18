@@ -1,4 +1,3 @@
-
 "use client";
 
 import React from 'react';
@@ -29,10 +28,10 @@ export function BulkDeleteInstancesDialog({
       <ConfirmationDialog
         open={open}
         onOpenChange={onOpenChange}
-        title="无选中实例"
-        description="没有选中任何实例进行删除。"
+        title="No Instances Selected"
+        description="No instances were selected for deletion."
         onConfirm={() => onOpenChange(false)} 
-        confirmText="关闭"
+        confirmText="Close"
         isLoading={false} 
       />
     );
@@ -40,7 +39,7 @@ export function BulkDeleteInstancesDialog({
 
   const mainDescription = (
     <>
-      确定删除以下 <span className="font-semibold">{selectedInstances.length}</span> 个选中的实例吗？此操作无法撤销。
+      Are you sure you want to delete the following <span className="font-semibold">{selectedInstances.length}</span> selected instances? This action cannot be undone.
     </>
   );
 
@@ -60,10 +59,10 @@ export function BulkDeleteInstancesDialog({
     <ConfirmationDialog
       open={open}
       onOpenChange={onOpenChange}
-      title="批量删除实例"
+      title="Bulk Delete Instances"
       description={mainDescription}
       onConfirm={onConfirmDelete}
-      confirmText={isLoading ? "删除中..." : `删除 ${selectedInstances.length} 个实例`}
+      confirmText={isLoading ? "Deleting..." : `Delete ${selectedInstances.length} Instances`}
       confirmButtonVariant="destructive"
       ConfirmButtonIcon={Trash2}
       isLoading={isLoading || selectedInstances.length === 0}
@@ -72,4 +71,3 @@ export function BulkDeleteInstancesDialog({
     </ConfirmationDialog>
   );
 }
-

@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useEffect } from 'react';
@@ -20,9 +19,9 @@ export default function HelpPage() {
     <AppLayout>
       <div className="space-y-8">
         <div>
-          <h1 className="text-3xl font-bold font-title mb-2">帮助与说明</h1>
+          <h1 className="text-3xl font-bold font-title mb-2">Help and Instructions</h1>
           <p className="text-lg text-muted-foreground font-sans">
-            欢迎使用 NodePanel ！本页面提供功能概览、操作指南及常见问题排查。
+            Welcome to NodePanel! This page provides an overview of features, a user guide, and common troubleshooting.
           </p>
         </div>
 
@@ -30,74 +29,74 @@ export default function HelpPage() {
           <CardHeader>
             <CardTitle className="font-title flex items-center">
               <Info size={22} className="mr-2 text-primary" />
-              关于 NodePanel
+              About NodePanel
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3 text-sm font-sans">
             <p>
-              NodePanel 是一个为 <a href="https://github.com/yosebyte/nodepass" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">NodePass</a> 后端服务设计的前端管理面板。它提供了一个用户友好的界面来集中管理您的 NodePass 主控连接、实例（服务端/客户端）、可视化连接拓扑以及监控流量。
+              NodePanel is a front-end management panel designed for the <a href="https://github.com/yosebyte/nodepass" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">NodePass</a> backend service. It provides a user-friendly interface to centrally manage your NodePass master connections, instances (server/client), visualize connection topology, and monitor traffic.
             </p>
           </CardContent>
         </Card>
 
         <Card className="shadow-lg card-hover-shadow">
           <CardHeader>
-            <CardTitle className="font-title">主要功能</CardTitle>
+            <CardTitle className="font-title">Main Features</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2 text-sm font-sans">
             <ul className="list-disc list-outside pl-5 space-y-1">
-              <li><strong>主控连接管理:</strong> 添加、编辑、删除和切换多个 NodePass 主控配置。</li>
-              <li><strong>实例管理:</strong> 创建、启动、停止、重启、修改和删除 NodePass 实例。</li>
-              <li><strong>连接拓扑可视化:</strong> 通过拖拽方式设计和展示实例间的连接关系，并一键提交创建。</li>
-              <li><strong>流量统计:</strong> 查看各实例的 TCP 和 UDP 流量数据。</li>
-              <li><strong>事件日志:</strong> 跟踪应用内的重要操作和状态变更。</li>
+              <li><strong>Master Connection Management:</strong> Add, edit, delete, and switch between multiple NodePass master configurations.</li>
+              <li><strong>Instance Management:</strong> Create, start, stop, restart, modify, and delete NodePass instances.</li>
+              <li><strong>Connection Topology Visualization:</strong> Design and display connection relationships between instances via drag-and-drop, and submit for creation with one click.</li>
+              <li><strong>Traffic Statistics:</strong> View TCP and UDP traffic data for each instance.</li>
+              <li><strong>Event Logs:</strong> Track important operations and status changes within the application.</li>
             </ul>
           </CardContent>
         </Card>
 
         <Card className="shadow-lg card-hover-shadow">
           <CardHeader>
-            <CardTitle className="font-title">基本操作流程</CardTitle>
+            <CardTitle className="font-title">Basic Operation Procedures</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3 text-sm font-sans">
             <ol className="list-decimal list-outside pl-5 space-y-2">
               <li>
-                <strong>添加主控连接:</strong>
+                <strong>Add Master Connection:</strong>
                 <ul className="list-disc list-outside pl-6 mt-1">
-                  <li>点击页面右上角的 <span className="font-semibold">设置图标</span>。</li>
-                  <li>选择 “添加新主控” 或 “管理所有主控” 中的添加选项。</li>
-                  <li>输入主控的 <span className="font-semibold">API 地址</span> (例如 `http://localhost:3000`) 和 <span className="font-semibold">令牌 (API Key)</span>。</li>
-                  <li>(可选) 配置 API 前缀路径、主控默认日志级别和 TLS 模式作为参考。</li>
-                  <li>保存配置。</li>
+                  <li>Click the <span className="font-semibold">Settings Icon</span> in the upper right corner of the page.</li>
+                  <li>Select the add option under “Add New Master” or “Manage All Masters”.</li>
+                  <li>Enter the master’s <span className="font-semibold">API Address</span> (e.g., `http://localhost:3000`) and <span className="font-semibold">Token (API Key)</span>.</li>
+                  <li>(Optional) Configure the API prefix path, master default log level, and TLS mode for reference.</li>
+                  <li>Save the configuration.</li>
                 </ul>
               </li>
               <li>
-                <strong>选择活动主控:</strong>
+                <strong>Select Active Master:</strong>
                 <ul className="list-disc list-outside pl-6 mt-1">
-                  <li>添加至少一个主控后，通过设置菜单的 “切换活动主控” 选项选择一个作为当前操作的主控。</li>
-                  <li>或者，在 “管理所有主控” 页面点击主控条目右侧的 “设为活动” 按钮。</li>
+                  <li>After adding at least one master, choose one as the current master for operations through the “Switch Active Master” option in the settings menu.</li>
+                  <li>Or click the “Set as Active” button on the right side of the master entry on the “Manage All Masters” page.</li>
                 </ul>
               </li>
               <li>
-                <strong>管理实例:</strong>
+                <strong>Manage Instances:</strong>
                 <ul className="list-disc list-outside pl-6 mt-1">
-                  <li>在 <span className="font-semibold">主页</span> (概览页)，您可以看到当前活动主控下的实例列表。</li>
-                  <li>您可以创建新实例、启动/停止/重启现有实例、查看实例详情和日志、修改实例配置或删除实例。</li>
+                  <li>On the <span className="font-semibold">Home</span> (Overview) page, you can see the list of instances under the current active master.</li>
+                  <li>You can create new instances, start/stop/restart existing instances, view instance details and logs, modify instance configurations, or delete instances.</li>
                 </ul>
               </li>
               <li>
-                <strong>(可选) 使用拓扑图:</strong>
+                <strong>(Optional) Use Topology Map:</strong>
                 <ul className="list-disc list-outside pl-6 mt-1">
-                  <li>导航至 <span className="font-semibold">连接拓扑图</span> 页面 (通过设置菜单)。</li>
-                  <li>从左侧面板拖拽主控和组件 (服务端/客户端/落地) 到画布。</li>
-                  <li>连接节点以定义链路关系。节点属性会自动更新或可以手动编辑。</li>
-                  <li>完成后，点击 “提交拓扑” 以在相应主控上批量创建实例。</li>
+                  <li>Navigate to the <span className="font-semibold">Connection Topology Map</span> page (via the settings menu).</li>
+                  <li>Drag masters and components (server/client/landing) from the left panel onto the canvas.</li>
+                  <li>Connect nodes to define link relationships. Node properties will update automatically or can be edited manually.</li>
+                  <li>After completion, click “Submit Topology” to batch create instances on the respective masters.</li>
                 </ul>
               </li>
               <li>
-                <strong>(可选) 查看流量统计:</strong>
+                <strong>(Optional) View Traffic Statistics:</strong>
                 <ul className="list-disc list-outside pl-6 mt-1">
-                  <li>导航至 <span className="font-semibold">流量统计</span> 页面 (通过设置菜单) 查看所有已配置主控下各实例的流量信息。</li>
+                  <li>Navigate to the <span className="font-semibold">Traffic Statistics</span> page (via the settings menu) to view traffic information for all instances under all configured masters.</li>
                 </ul>
               </li>
             </ol>
@@ -108,54 +107,54 @@ export default function HelpPage() {
           <CardHeader>
             <CardTitle className="font-title flex items-center">
               <AlertCircle size={22} className="mr-2 text-destructive" />
-              故障排除 (Chrome 浏览器)
+              Troubleshooting (Chrome Browser)
             </CardTitle>
             <CardDescription className="font-sans">
-              如果您在使用 Chrome 浏览器连接 NodePass 主控时遇到问题，请参考以下说明。
+              If you encounter issues connecting to the NodePass master using Chrome browser, please refer to the following instructions.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6 text-sm font-sans">
             <Alert variant="default" className="bg-muted/30">
               <Info className="h-4 w-4 text-blue-600" />
-              <AlertTitle className="font-title text-base text-blue-700">HTTP 主控连接问题 (混合内容)</AlertTitle>
+              <AlertTitle className="font-title text-base text-blue-700">HTTP Master Connection Issues (Mixed Content)</AlertTitle>
               <ShadAlertDescription className="mt-1 space-y-2">
                 <p>
-                  如果您的 NodePass 主控 API 通过 <strong>HTTP (非 HTTPS)</strong> 提供服务，而 NodePanel 通过 HTTPS 访问，浏览器可能阻止连接。
+                  If your NodePass master API service is provided over <strong>HTTP (not HTTPS)</strong>, while NodePanel is accessed over HTTPS, the browser may block the connection.
                 </p>
-                <p className="font-semibold">解决方案:</p>
+                <p className="font-semibold">Solution:</p>
                 <ol className="list-decimal list-outside pl-5 space-y-1">
                   <li>
-                    在 Chrome 地址栏输入: <code className="bg-card p-1 rounded text-xs select-all">chrome://settings/content/siteDetails?site={appDomain || 'YOUR_APP_DOMAIN'}</code>
-                    {appDomain && <span className="block text-xs text-muted-foreground">(当前应用域名已自动填充)</span>}
-                    {!appDomain && <span className="block text-xs text-muted-foreground">(请将 YOUR_APP_DOMAIN 替换为当前 NodePanel 应用的域名)</span>}
+                    Enter in the Chrome address bar: <code className="bg-card p-1 rounded text-xs select-all">chrome://settings/content/siteDetails?site={appDomain || 'YOUR_APP_DOMAIN'}</code>
+                    {appDomain && <span className="block text-xs text-muted-foreground">(The current app domain has been auto-filled)</span>}
+                    {!appDomain && <span className="block text-xs text-muted-foreground">(Please replace YOUR_APP_DOMAIN with your current NodePanel app domain)</span>}
                   </li>
-                  <li>找到 “<strong>不安全内容</strong>”(Insecure content) 设置。</li>
-                  <li>更改为 “<strong>允许</strong>”(Allow)。</li>
-                  <li>刷新本 NodePanel 页面。</li>
+                  <li>Find the “<strong>Insecure Content</strong>” setting.</li>
+                  <li>Change it to “<strong>Allow</strong>”.</li>
+                  <li>Refresh this NodePanel page.</li>
                 </ol>
               </ShadAlertDescription>
             </Alert>
 
             <Alert variant="default" className="bg-muted/30">
               <Info className="h-4 w-4 text-blue-600" />
-              <AlertTitle className="font-title text-base text-blue-700">HTTPS (自签名证书) 主控连接问题</AlertTitle>
+              <AlertTitle className="font-title text-base text-blue-700">HTTPS (Self-signed Certificate) Master Connection Issues</AlertTitle>
               <ShadAlertDescription className="mt-1 space-y-2">
                 <p>
-                  如果您的 NodePass 主控 API 通过 <strong>HTTPS</strong> 提供服务但使用<strong>自签名证书</strong>，浏览器会阻止连接。
+                  If your NodePass master API service is provided over <strong>HTTPS</strong> but uses a <strong>self-signed certificate</strong>, the browser will block the connection.
                 </p>
-                <p className="font-semibold">解决方案:</p>
+                <p className="font-semibold">Solution:</p>
                 <ol className="list-decimal list-outside pl-5 space-y-1">
                   <li>
-                    在新的浏览器标签页中，<strong>直接访问您的 NodePass 主控的 API URL</strong>。
+                    In a new browser tab, <strong>directly access your NodePass master API URL</strong>.
                     <span className="block text-xs text-muted-foreground">
-                      (例如: `https://your-nodepass-api.example.com:3000`)
+                      (e.g., `https://your-nodepass-api.example.com:3000`)
                     </span>
                   </li>
-                  <li>您会看到安全警告页面。点击 “<strong>高级</strong>”(Advanced)。</li>
+                  <li>You will see a security warning page. Click “<strong>Advanced</strong>”.</li>
                   <li>
-                    点击 “<strong>继续前往 {<em>主控API域名</em>} (不安全)</strong>” (Proceed to {<em>api_domain</em>} (unsafe))。
+                    Click “<strong>Proceed to {<em>Master API Domain</em>} (unsafe)</strong>”.
                   </li>
-                  <li>接受证书后，返回本 NodePanel 页面并刷新。</li>
+                  <li>After accepting the certificate, return to this NodePanel page and refresh.</li>
                 </ol>
               </ShadAlertDescription>
             </Alert>
@@ -164,18 +163,18 @@ export default function HelpPage() {
 
          <Card className="shadow-lg card-hover-shadow">
           <CardHeader>
-            <CardTitle className="font-title">联系与支持</CardTitle>
+            <CardTitle className="font-title">Contact and Support</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2 text-sm font-sans">
             <p>
-              如果您遇到其他问题或有功能建议，欢迎通过以下方式联系或报告:
+              If you encounter other problems or have feature suggestions, please feel free to contact or report via the following methods:
             </p>
             <ul className="list-disc list-outside pl-5">
               <li>
-                NodePass (后端) 相关问题: <a href="https://github.com/yosebyte/nodepass/issues" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">NodePass GitHub Issues <ExternalLink size={14} className="inline-block ml-0.5" /></a>
+                NodePass (backend) related issues: <a href="https://github.com/yosebyte/nodepass/issues" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">NodePass GitHub Issues <ExternalLink size={14} className="inline-block ml-0.5" /></a>
               </li>
               <li>
-                NodePanel (本前端) 相关问题: <a href="https://github.com/MK85Pilot/nodepass-panel/issues" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">NodePass Panel GitHub Issues <ExternalLink size={14} className="inline-block ml-0.5" /></a>
+                NodePanel (this frontend) related issues: <a href="https://github.com/MK85Pilot/nodepass-panel/issues" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">NodePass Panel GitHub Issues <ExternalLink size={14} className="inline-block ml-0.5" /></a>
               </li>
             </ul>
           </CardContent>

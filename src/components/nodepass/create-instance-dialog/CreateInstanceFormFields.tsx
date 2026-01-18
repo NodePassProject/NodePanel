@@ -1,4 +1,3 @@
-
 "use client";
 
 import React from 'react';
@@ -14,7 +13,7 @@ import { MASTER_TLS_MODE_DISPLAY_MAP } from './constants';
 
 interface CreateInstanceFormFieldsProps {
   form: UseFormReturn<CreateInstanceFormValues>;
-  instanceType: "客户端" | "服务端";
+  instanceType: "Client" | "Server";
   tlsMode?: string;
   isSingleEndedForward: boolean;
   activeApiConfig: NamedApiConfig | null;
@@ -39,11 +38,11 @@ export function CreateInstanceFormFields({
 
   const masterLogLevelDisplay = activeApiConfig?.masterDefaultLogLevel && activeApiConfig.masterDefaultLogLevel !== 'master'
     ? activeApiConfig.masterDefaultLogLevel.charAt(0).toUpperCase() + activeApiConfig.masterDefaultLogLevel.slice(1)
-    : '主控配置';
+    : 'Master Config';
 
   const effectiveTlsModeDisplay = activeApiConfig?.masterDefaultTlsMode && activeApiConfig.masterDefaultTlsMode !== 'master'
-    ? MASTER_TLS_MODE_DISPLAY_MAP[activeApiConfig.masterDefaultTlsMode as keyof typeof MASTER_TLS_MODE_DISPLAY_MAP] || '主控配置'
-    : '主控配置';
+    ? MASTER_TLS_MODE_DISPLAY_MAP[activeApiConfig.masterDefaultTlsMode as keyof typeof MASTER_TLS_MODE_DISPLAY_MAP] || 'Master Config'
+    : 'Master Config';
 
   return (
     <Form {...form}>
@@ -53,16 +52,16 @@ export function CreateInstanceFormFields({
           name="instanceType"
           render={({ field }) => (
             <FormItem className="space-y-1">
-              <FormLabel className="font-sans text-xs">实例类型</FormLabel>
+              <FormLabel className="font-sans text-xs">Instance Type</FormLabel>
               <Select onValueChange={field.onChange} value={field.value}>
                 <FormControl>
                   <SelectTrigger className="text-xs font-sans h-9">
-                    <SelectValue placeholder="选择实例类型" />
+                    <SelectValue placeholder="Select Instance Type" />
                   </SelectTrigger>
                 </FormControl>
                 <SelectContent>
-                  <SelectItem value="客户端" className="font-sans text-xs">客户端</SelectItem>
-                  <SelectItem value="服务端" className="font-sans text-xs">服务端</SelectItem>
+                  <SelectItem value="Client" className="font-sans text-xs">Client</SelectItem>
+                  <SelectItem value="Server" className="font-sans text-xs">Server</SelectItem>
                 </SelectContent>
               </Select>
               <FormMessage className="text-xs" />
@@ -77,12 +76,12 @@ export function CreateInstanceFormFields({
             <FormItem className="space-y-1">
               <FormLabel className="font-sans text-xs flex items-center">
                 <Tag size={14} className="mr-1 text-muted-foreground" />
-                实例别名 (可选)
+                Instance Alias (Optional)
               </FormLabel>
               <FormControl>
                 <Input
                   className="text-xs font-sans h-9"
-                  placeholder="例: 我的测试服务"
+                  placeholder="e.g.: My Test Service"
                   {...field}
                   value={field.value || ""}
                 />
@@ -92,7 +91,7 @@ export function CreateInstanceFormFields({
           )}
         />
 
-        {!(instanceType === '客户端' && isSingleEndedForward) && (
+        {!(instanceType === 'Client' && isSingleEndedForward) && (
             <FormField
             control={form.control}
             name="tunnelKey"
@@ -100,12 +99,12 @@ export function CreateInstanceFormFields({
                 <FormItem className="space-y-1">
                 <FormLabel className="font-sans text-xs flex items-center">
                     <KeyRound size={14} className="mr-1 text-muted-foreground" />
-                    隧道密钥 (可选)
+                    Tunnel Key (Optional)
                 </FormLabel>
                 <FormControl>
                     <Input
                     className="text-xs font-sans h-9"
-                    placeholder="留空则使用端口派生密钥"
+                    placeholder="Leave empty to use port-derived key"
                     {...field}
                     value={field.value || ""}
                     />
@@ -117,7 +116,7 @@ export function CreateInstanceFormFields({
         )}
 
 
-        {instanceType === '客户端' && (
+        {instanceType === 'Client' && (
           <FormField
             control={form.control}
             name="isSingleEndedForward"
@@ -134,7 +133,7 @@ export function CreateInstanceFormFields({
                 <div className="space-y-0.5 leading-none">
                   <FormLabel htmlFor="isSingleEndedForwardCheckbox" className="font-sans cursor-pointer text-xs flex items-center">
                     <Zap size={13} className="mr-1 text-yellow-500" />
-                    单端转发模式
+                    Single-ended Forward Mode
                   </FormLabel>
                 </div>
               </FormItem>
@@ -149,25 +148,25 @@ export function CreateInstanceFormFields({
             <FormItem className="space-y-1">
               <FormLabel className="font-sans text-xs flex items-center">
                  <Settings2 size={14} className="mr-1 text-muted-foreground" />
-                {instanceType === '服务端' ? '隧道地址' :
-                 (isSingleEndedForward ? '监听地址' :
-                   '隧道地址'
+                {instanceType === 'Server' ? 'Tunnel Address' :
+                 (isSingleEndedForward ? 'Listening Address' :
+                   'Tunnel Address'
                  )}
               </FormLabel>
               <FormControl>
                 <Input
                   className="text-xs font-mono h-9"
                   placeholder={
-                    instanceType === "服务端"
-                      ? "例: 0.0.0.0:10101"
+                    instanceType === "Server"
+                      ? "e.g.: 0.0.0.0:10101"
                       : (isSingleEndedForward
-                          ? "例: 127.0.0.1:8080"
-                          : "例: 10.0.0.2:10101")
+                          ? "e.g.: 127.0.0.1:8080"
+                          : "e.g.: 10.0.0.2:10101")
                   }
                   {...field}
                 />
               </FormControl>
-              {externalApiSuggestion && instanceType === '客户端' && !isSingleEndedForward && (
+              {externalApiSuggestion && instanceType === 'Client' && !isSingleEndedForward && (
                 <FormDescription className="text-xs text-amber-600 dark:text-amber-400 mt-0.5 font-sans">
                   <Info size={12} className="inline-block mr-1 align-text-bottom" />
                   {externalApiSuggestion}
@@ -185,15 +184,15 @@ export function CreateInstanceFormFields({
             <FormItem className="space-y-1">
               <FormLabel className="font-sans text-xs flex items-center">
                 <Share2 size={14} className="mr-1 text-muted-foreground" />
-                {instanceType === '服务端' ? '目标地址' :
-                 (isSingleEndedForward ? '目标地址' : '目标地址')}
+                {instanceType === 'Server' ? 'Target Address' :
+                 (isSingleEndedForward ? 'Target Address' : 'Target Address')}
               </FormLabel>
               <FormControl>
                 <Input
                   className="text-xs font-mono h-9"
                   placeholder={
-                      instanceType === '服务端' ? "例: 10.0.0.5:3000" :
-                      (isSingleEndedForward ? "例: remote.service.com:3000" : "例: 8000 (默认为服务端隧道端口+1)")
+                      instanceType === 'Server' ? "e.g.: 10.0.0.5:3000" :
+                      (isSingleEndedForward ? "e.g.: remote.service.com:3000" : "e.g.: 8000 (Default is server tunnel port +1)")
                   }
                   {...field}
                 />
@@ -203,7 +202,7 @@ export function CreateInstanceFormFields({
           )}
         />
 
-        {instanceType === '客户端' && (
+        {instanceType === 'Client' && (
             <div className="grid grid-cols-2 gap-3">
                 <FormField
                 control={form.control}
@@ -212,13 +211,13 @@ export function CreateInstanceFormFields({
                     <FormItem className="space-y-1">
                     <FormLabel className="font-sans text-xs flex items-center">
                         <Minimize size={14} className="mr-1 text-muted-foreground" />
-                        最小连接池 (可选)
+                        Minimum Connection Pool (Optional)
                     </FormLabel>
                     <FormControl>
                         <Input
                         type="number"
                         className="text-xs font-mono h-9"
-                        placeholder="默认: 64"
+                        placeholder="Default: 64"
                         {...field}
                         onChange={event => field.onChange(event.target.value === '' ? undefined : +event.target.value)}
                         value={field.value ?? ""}
@@ -235,13 +234,13 @@ export function CreateInstanceFormFields({
                     <FormItem className="space-y-1">
                     <FormLabel className="font-sans text-xs flex items-center">
                         <Expand size={14} className="mr-1 text-muted-foreground" />
-                        最大连接池 (可选)
+                        Maximum Connection Pool (Optional)
                     </FormLabel>
                     <FormControl>
                         <Input
                         type="number"
                         className="text-xs font-mono h-9"
-                        placeholder="默认: 8192"
+                        placeholder="Default: 8192"
                         {...field}
                         onChange={event => field.onChange(event.target.value === '' ? undefined : +event.target.value)}
                         value={field.value ?? ""}
@@ -260,15 +259,15 @@ export function CreateInstanceFormFields({
           name="logLevel"
           render={({ field }) => (
             <FormItem className="space-y-1">
-              <FormLabel className="font-sans text-xs">日志级别</FormLabel>
+              <FormLabel className="font-sans text-xs">Log Level</FormLabel>
               <Select onValueChange={field.onChange} value={field.value}>
                 <FormControl>
                   <SelectTrigger className="text-xs font-sans h-9">
-                    <SelectValue placeholder="选择日志级别" />
+                    <SelectValue placeholder="Select Log Level" />
                   </SelectTrigger>
                 </FormControl>
                 <SelectContent>
-                  <SelectItem value="master" className="font-sans text-xs">默认 (主控配置)</SelectItem>
+                  <SelectItem value="master" className="font-sans text-xs">Default (Master Config)</SelectItem>
                   <SelectItem value="debug" className="font-sans text-xs">Debug</SelectItem>
                   <SelectItem value="info" className="font-sans text-xs">Info</SelectItem>
                   <SelectItem value="warn" className="font-sans text-xs">Warn</SelectItem>
@@ -280,7 +279,7 @@ export function CreateInstanceFormFields({
           )}
         />
 
-        {(instanceType === '服务端' || (instanceType === '客户端' && !isSingleEndedForward)) && (
+        {(instanceType === 'Server' || (instanceType === 'Client' && !isSingleEndedForward)) && (
           <>
             <FormField
               control={form.control}
@@ -288,22 +287,22 @@ export function CreateInstanceFormFields({
               render={({ field }) => (
                 <FormItem className="space-y-1">
                   <FormLabel className="font-sans text-xs">
-                    {instanceType === '服务端' ? "TLS 模式"
-                      : "TLS 模式"}
+                    {instanceType === 'Server' ? "TLS Mode"
+                      : "TLS Mode"}
                   </FormLabel>
                   <Select onValueChange={field.onChange} value={field.value || "master"}>
                     <FormControl>
                       <SelectTrigger className="text-xs font-sans h-9">
-                        <SelectValue placeholder="选择 TLS 模式" />
+                        <SelectValue placeholder="Select TLS Mode" />
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
                       <SelectItem value="master" className="font-sans text-xs">
-                        默认 ({effectiveTlsModeDisplay})
+                        Default ({effectiveTlsModeDisplay})
                       </SelectItem>
-                      <SelectItem value="0" className="font-sans text-xs">0: 无TLS (明文)</SelectItem>
-                      <SelectItem value="1" className="font-sans text-xs">1: 自签名</SelectItem>
-                      <SelectItem value="2" className="font-sans text-xs">2: 自定义</SelectItem>
+                      <SelectItem value="0" className="font-sans text-xs">0: No TLS (Plaintext)</SelectItem>
+                      <SelectItem value="1" className="font-sans text-xs">1: Self-signed</SelectItem>
+                      <SelectItem value="2" className="font-sans text-xs">2: Custom</SelectItem>
                     </SelectContent>
                   </Select>
                   <FormMessage className="text-xs" />
@@ -317,11 +316,11 @@ export function CreateInstanceFormFields({
                   name="certPath"
                   render={({ field }) => (
                     <FormItem className="space-y-1">
-                      <FormLabel className="font-sans text-xs">证书路径 (TLS 2)</FormLabel>
+                      <FormLabel className="font-sans text-xs">Certificate Path (TLS 2)</FormLabel>
                       <FormControl>
                         <Input
                           className="text-xs font-mono h-9"
-                          placeholder="例: /path/to/cert.pem"
+                          placeholder="e.g.: /path/to/cert.pem"
                           {...field}
                           value={field.value || ""}
                         />
@@ -335,11 +334,11 @@ export function CreateInstanceFormFields({
                   name="keyPath"
                   render={({ field }) => (
                     <FormItem className="space-y-1">
-                      <FormLabel className="font-sans text-xs">密钥路径 (TLS 2)</FormLabel>
+                      <FormLabel className="font-sans text-xs">Key Path (TLS 2)</FormLabel>
                       <FormControl>
                         <Input
                           className="text-xs font-mono h-9"
-                          placeholder="例: /path/to/key.pem"
+                          placeholder="e.g.: /path/to/key.pem"
                           {...field}
                           value={field.value || ""}
                         />
@@ -356,4 +355,3 @@ export function CreateInstanceFormFields({
     </Form>
   );
 }
-

@@ -1,4 +1,3 @@
-
 "use client";
 
 import React from 'react';
@@ -14,7 +13,7 @@ export interface InstanceUrlConfigWithName {
   masterId: string;
   masterName: string;
   url: string;
-  instanceType: "服务端" | "客户端";
+  instanceType: "Server" | "Client";
 }
 
 interface SubmitTopologyConfirmationDialogProps {
@@ -48,17 +47,17 @@ export function SubmitTopologyConfirmationDialog({
         <DialogHeader>
           <DialogTitle className="font-title flex items-center">
             <Send className="mr-2 h-5 w-5 text-primary" />
-            确认提交拓扑
+            Confirm Topology Submission
           </DialogTitle>
           <DialogDescription className="font-sans">
-            将创建以下 {instancesToCreate.length} 个实例。请检查配置是否正确。
+            The following {instancesToCreate.length} instances will be created. Please verify the configuration is correct.
           </DialogDescription>
         </DialogHeader>
 
         <ScrollArea className="flex-grow my-2 rounded-md border p-3 bg-muted/20">
           {Object.entries(groupedInstances).map(([masterName, masterInstances]) => (
             <div key={masterName} className="mb-3 last:mb-0">
-              <h4 className="text-sm font-semibold mb-1 font-sans text-primary">{masterName} ({masterInstances.length} 个实例)</h4>
+              <h4 className="text-sm font-semibold mb-1 font-sans text-primary">{masterName} ({masterInstances.length} instances)</h4>
               <ul className="space-y-1 text-xs">
                 {masterInstances.map(instance => (
                   <li key={instance.nodeId} className="font-mono p-1.5 bg-background rounded shadow-sm border border-border/50">
@@ -75,18 +74,18 @@ export function SubmitTopologyConfirmationDialog({
 
         <DialogFooter className="font-sans pt-2">
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>
-            取消
+            Cancel
           </Button>
           <Button type="button" onClick={onConfirm} disabled={isSubmitting || instancesToCreate.length === 0}>
             {isSubmitting ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                提交中...
+                Submitting...
               </>
             ) : (
               <>
               <Send className="mr-2 h-4 w-4" />
-              确认创建 {instancesToCreate.length} 个实例
+              Confirm creation of {instancesToCreate.length} instances
               </>
             )}
           </Button>

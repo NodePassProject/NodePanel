@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useEffect, useMemo } from 'react';
@@ -28,10 +27,10 @@ interface EditTopologyNodeDialogProps {
 }
 
 const hostPortRegex = /^(?:\[[0-9a-fA-F:]+\]|[0-9a-zA-Z.-]+):[0-9]+$/;
-const hostPortErrorMsg = "地址格式无效 (例: host:port 或 [ipv6]:port)。";
+const hostPortErrorMsg = "Invalid address format (e.g., host:port or [ipv6]:port).";
 
 const baseSchema = z.object({
-  label: z.string().min(1, "标签不能为空。"),
+  label: z.string().min(1, "Label cannot be empty."),
 });
 
 const masterSchema = baseSchema.extend({
@@ -40,13 +39,13 @@ const masterSchema = baseSchema.extend({
   logLevelM: z.enum(["master", "debug", "info", "warn", "error", "event"]),
   tlsModeM: z.enum(["master", "0", "1", "2"]),
   remoteMasterIdForTunnel: z.optional(z.string()),
-  remoteServerListenAddress: z.optional(z.string().regex(hostPortRegex, "远程服务端(s)监听地址格式无效 (例: [::]:10101)。")),
-  remoteServerForwardAddress: z.optional(z.string().regex(hostPortRegex, "远程服务端(s)转发地址格式无效 (例: 192.168.1.10:80)。")),
+  remoteServerListenAddress: z.optional(z.string().regex(hostPortRegex, "Invalid remote server(s) listen address format (e.g., [::]:10101).")),
+  remoteServerForwardAddress: z.optional(z.string().regex(hostPortRegex, "Invalid remote server(s) forward address format (e.g., 192.168.1.10:80).")),
 });
 
 const serverSchema = baseSchema.extend({
-  tunnelAddressS: z.string().min(1, "隧道地址不能为空。").regex(hostPortRegex, hostPortErrorMsg),
-  targetAddressS: z.string().min(1, "目标地址不能为空。").regex(hostPortRegex, hostPortErrorMsg),
+  tunnelAddressS: z.string().min(1, "Tunnel address cannot be empty.").regex(hostPortRegex, hostPortErrorMsg),
+  targetAddressS: z.string().min(1, "Target address cannot be empty.").regex(hostPortRegex, hostPortErrorMsg),
   logLevelS: z.enum(["master", "debug", "info", "warn", "error", "event"]),
   tlsModeS: z.enum(["master", "0", "1", "2"]),
   certPathS: z.optional(z.string()),
@@ -55,7 +54,7 @@ const serverSchema = baseSchema.extend({
 });
 
 const clientSchema = z.object({
-  label: z.string().min(1, "标签不能为空。"),
+  label: z.string().min(1, "Label cannot be empty."),
   isSingleEndedForwardC: z.boolean().default(false),
   tunnelAddressC_Normal: z.optional(z.string()),
   localListenAddressC_Normal: z.optional(z.string()),
@@ -63,30 +62,30 @@ const clientSchema = z.object({
   remoteTargetAddressC_Single: z.optional(z.string()),
   logLevelC: z.enum(["master", "debug", "info", "warn", "error", "event"]),
   tunnelKeyC: z.string().optional(),
-  minPoolSizeC: z.coerce.number().int("最小连接池必须是整数。").positive("最小连接池必须是正数。").optional().or(z.literal("").transform(() => undefined)),
-  maxPoolSizeC: z.coerce.number().int("最大连接池必须是整数。").positive("最大连接池必须是正数。").optional().or(z.literal("").transform(() => undefined)),
+  minPoolSizeC: z.coerce.number().int("Minimum connection pool must be an integer.").positive("Minimum connection pool must be positive.").optional().or(z.literal("").transform(() => undefined)),
+  maxPoolSizeC: z.coerce.number().int("Maximum connection pool must be an integer.").positive("Maximum connection pool must be positive.").optional().or(z.literal("").transform(() => undefined)),
 }).superRefine((data, ctx) => {
     const effectiveIsSingleEnded = data.isSingleEndedForwardC;
 
     if (effectiveIsSingleEnded) {
         if (!data.localListenAddressC_Single || !hostPortRegex.test(data.localListenAddressC_Single)) {
-          ctx.addIssue({ code: z.ZodIssueCode.custom, message: `本地监听地址无效 (${hostPortErrorMsg})。`, path: ["localListenAddressC_Single"] });
+          ctx.addIssue({ code: z.ZodIssueCode.custom, message: `Invalid local listen address (${hostPortErrorMsg}).`, path: ["localListenAddressC_Single"] });
         }
         if (!data.remoteTargetAddressC_Single || !hostPortRegex.test(data.remoteTargetAddressC_Single)) {
-          ctx.addIssue({ code: z.ZodIssueCode.custom, message: `目标服务地址无效 (${hostPortErrorMsg})。`, path: ["remoteTargetAddressC_Single"] });
+          ctx.addIssue({ code: z.ZodIssueCode.custom, message: `Invalid target service address (${hostPortErrorMsg}).`, path: ["remoteTargetAddressC_Single"] });
         }
     } else {
         if (!data.tunnelAddressC_Normal || !hostPortRegex.test(data.tunnelAddressC_Normal)) {
-          ctx.addIssue({ code: z.ZodIssueCode.custom, message: `隧道地址无效 (${hostPortErrorMsg})。`, path: ["tunnelAddressC_Normal"] });
+          ctx.addIssue({ code: z.ZodIssueCode.custom, message: `Invalid tunnel address (${hostPortErrorMsg}).`, path: ["tunnelAddressC_Normal"] });
         }
         if (data.localListenAddressC_Normal && data.localListenAddressC_Normal.trim() !== "" && !hostPortRegex.test(data.localListenAddressC_Normal)) {
-          ctx.addIssue({ code: z.ZodIssueCode.custom, message: `本地监听地址无效 (${hostPortErrorMsg})。`, path: ["localListenAddressC_Normal"] });
+          ctx.addIssue({ code: z.ZodIssueCode.custom, message: `Invalid local listen address (${hostPortErrorMsg}).`, path: ["localListenAddressC_Normal"] });
         }
     }
     if (data.minPoolSizeC !== undefined && data.maxPoolSizeC !== undefined && data.minPoolSizeC >= data.maxPoolSizeC) {
         ctx.addIssue({
             code: z.ZodIssueCode.custom,
-            message: "最小连接池必须小于最大连接池。",
+            message: "Minimum connection pool must be less than maximum connection pool.",
             path: ["minPoolSizeC"],
         });
     }
@@ -249,11 +248,11 @@ export function EditTopologyNodeDialog({
   };
 
   if (!node) return null;
-  const dialogTitle = role === 'M' ? "编辑 主控容器"
-    : role === 'S' ? "编辑 服务端"
-    : role === 'C' ? "编辑 客户端"
-    : role === 'T' ? "编辑 目标服务"
-    : "编辑 用户";
+  const dialogTitle = role === 'M' ? "Edit Master Container"
+    : role === 'S' ? "Edit Server"
+    : role === 'C' ? "Edit Client"
+    : role === 'T' ? "Edit Target Service"
+    : "Edit User";
   const watchedMasterSubRole = role === 'M' ? form.watch('masterSubRoleM') : undefined;
   const renderClientAsSingleEnded = canClientBeSingleEnded ? form.watch('isSingleEndedForwardC') : false;
   const watchedServerTlsMode = role === 'S' ? form.watch('tlsModeS') : undefined;
@@ -266,7 +265,7 @@ export function EditTopologyNodeDialog({
         <DialogHeader>
           <DialogTitle className="font-title">{dialogTitle}</DialogTitle>
           <DialogDescription className="font-sans">
-            修改节点 "{node.data.label}" 的配置。
+            Modify configuration for node "{node.data.label}".
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
@@ -276,7 +275,7 @@ export function EditTopologyNodeDialog({
               name="label"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel className="font-sans">标签</FormLabel>
+                  <FormLabel className="font-sans">Label</FormLabel>
                   <FormControl><Input {...field} className="font-sans" /></FormControl>
                   <FormMessage />
                 </FormItem>
@@ -286,68 +285,68 @@ export function EditTopologyNodeDialog({
             {role === 'M' && (
               <>
                 <FormField control={form.control} name="masterSubRoleM" render={({ field }) => (
-                  <FormItem><FormLabel className="font-sans">主控画布角色</FormLabel><Select onValueChange={field.onChange} value={field.value as string}><FormControl><SelectTrigger className="font-sans"><SelectValue /></SelectTrigger></FormControl><SelectContent>
-                    <SelectItem value="container">容器 (Advanced Topology Default)</SelectItem>
-                    <SelectItem value="generic">通用 (Legacy/Basic)</SelectItem>
-                    <SelectItem value="server-role">服务主机 (Basic Topology)</SelectItem>
-                    <SelectItem value="client-role">客户主机 (Basic Topology - 定义隧道)</SelectItem>
-                    <SelectItem value="primary">主要 (Basic Topology)</SelectItem>
+                  <FormItem><FormLabel className="font-sans">Master Canvas Role</FormLabel><Select onValueChange={field.onChange} value={field.value as string}><FormControl><SelectTrigger className="font-sans"><SelectValue /></SelectTrigger></FormControl><SelectContent>
+                    <SelectItem value="container">Container (Advanced Topology Default)</SelectItem>
+                    <SelectItem value="generic">Generic (Legacy/Basic)</SelectItem>
+                    <SelectItem value="server-role">Server Host (Basic Topology)</SelectItem>
+                    <SelectItem value="client-role">Client Host (Basic Topology - Defines Tunnel)</SelectItem>
+                    <SelectItem value="primary">Primary (Basic Topology)</SelectItem>
                   </SelectContent></Select>
-                  <FormDescription className="font-sans text-xs">定义此主控在画布上的行为和连接语义。</FormDescription>
+                  <FormDescription className="font-sans text-xs">Defines this master's behavior and connection semantics on the canvas.</FormDescription>
                   <FormMessage /></FormItem>)}
                 />
                 {watchedMasterSubRole === 'client-role' && (
                   <>
                     <FormField control={form.control} name="targetAddressM" render={({ field }) => (
-                      <FormItem><FormLabel className="font-sans">客户端本地服务地址</FormLabel><FormControl><Input {...field} placeholder="例: 127.0.0.1:8080" className="font-mono" /></FormControl>
-                      <FormDescription className="font-sans text-xs">此客户主机上，客户端(c)实例监听并转发到隧道的地址。</FormDescription><FormMessage /></FormItem>)}
+                      <FormItem><FormLabel className="font-sans">Client Local Service Address</FormLabel><FormControl><Input {...field} placeholder="e.g., 127.0.0.1:8080" className="font-mono" /></FormControl>
+                      <FormDescription className="font-sans text-xs">On this client host, the client(c) instance listens and forwards to the tunnel address.</FormDescription><FormMessage /></FormItem>)}
                     />
                     <FormField control={form.control} name="remoteMasterIdForTunnel" render={({ field }) => (
-                      <FormItem><FormLabel className="font-sans">远程服务端(s)主控</FormLabel><Select onValueChange={field.onChange} value={field.value as string | undefined} disabled={otherApiConfigs.length === 0}><FormControl><SelectTrigger className="font-sans"><SelectValue placeholder={otherApiConfigs.length === 0 ? "无其他主控可选" : "选择服务端(s)所在主控"} /></SelectTrigger></FormControl><SelectContent>
+                      <FormItem><FormLabel className="font-sans">Remote Server(s) Master</FormLabel><Select onValueChange={field.onChange} value={field.value as string | undefined} disabled={otherApiConfigs.length === 0}><FormControl><SelectTrigger className="font-sans"><SelectValue placeholder={otherApiConfigs.length === 0 ? "No other masters available" : "Select master hosting server(s)"} /></SelectTrigger></FormControl><SelectContent>
                         {otherApiConfigs.map(config => (<SelectItem key={config.id} value={config.id}>{config.name}</SelectItem>))}
                       </SelectContent></Select>
-                      <FormDescription className="font-sans text-xs">隧道的服务端(s)部分将创建在此主控上。</FormDescription><FormMessage /></FormItem>)}
+                      <FormDescription className="font-sans text-xs">The server(s) part of the tunnel will be created on this master.</FormDescription><FormMessage /></FormItem>)}
                     />
                     <FormField control={form.control} name="remoteServerListenAddress" render={({ field }) => (
-                      <FormItem><FormLabel className="font-sans">远程服务端(s)监听地址</FormLabel><FormControl><Input {...field} placeholder="例: [::]:10101" className="font-mono" /></FormControl>
-                      <FormDescription className="font-sans text-xs">远程服务端(s)将在此地址监听。</FormDescription><FormMessage /></FormItem>)}
+                      <FormItem><FormLabel className="font-sans">Remote Server(s) Listen Address</FormLabel><FormControl><Input {...field} placeholder="e.g., [::]:10101" className="font-mono" /></FormControl>
+                      <FormDescription className="font-sans text-xs">Remote server(s) will listen on this address.</FormDescription><FormMessage /></FormItem>)}
                     />
                     <FormField control={form.control} name="remoteServerForwardAddress" render={({ field }) => (
-                      <FormItem><FormLabel className="font-sans">远程服务端(s)转发地址</FormLabel><FormControl><Input {...field} placeholder="例: 192.168.1.10:80" className="font-mono" /></FormControl>
-                      <FormDescription className="font-sans text-xs">远程服务端(s)将流量转发到此业务地址。</FormDescription><FormMessage /></FormItem>)}
+                      <FormItem><FormLabel className="font-sans">Remote Server(s) Forward Address</FormLabel><FormControl><Input {...field} placeholder="e.g., 192.168.1.10:80" className="font-mono" /></FormControl>
+                      <FormDescription className="font-sans text-xs">Remote server(s) will forward traffic to this business address.</FormDescription><FormMessage /></FormItem>)}
                     />
                   </>
                 )}
                  <FormField control={form.control} name="logLevelM" render={({ field }) => (
-                  <FormItem><FormLabel className="font-sans">日志级别</FormLabel><Select onValueChange={field.onChange} value={field.value as string}><FormControl><SelectTrigger className="font-sans"><SelectValue /></SelectTrigger></FormControl><SelectContent><SelectItem value="master">主控默认</SelectItem><SelectItem value="debug">Debug</SelectItem><SelectItem value="info">Info</SelectItem><SelectItem value="warn">Warn</SelectItem><SelectItem value="error">Error</SelectItem><SelectItem value="event">Event</SelectItem></SelectContent></Select>
-                   <FormDescription className="font-sans text-xs">此主控内S/C节点的默认日志级别。</FormDescription>
+                  <FormItem><FormLabel className="font-sans">Log Level</FormLabel><Select onValueChange={field.onChange} value={field.value as string}><FormControl><SelectTrigger className="font-sans"><SelectValue /></SelectTrigger></FormControl><SelectContent><SelectItem value="master">Master Default</SelectItem><SelectItem value="debug">Debug</SelectItem><SelectItem value="info">Info</SelectItem><SelectItem value="warn">Warn</SelectItem><SelectItem value="error">Error</SelectItem><SelectItem value="event">Event</SelectItem></SelectContent></Select>
+                   <FormDescription className="font-sans text-xs">Default log level for S/C nodes within this master.</FormDescription>
                   <FormMessage /></FormItem>)} />
                 <FormField control={form.control} name="tlsModeM" render={({ field }) => (
-                  <FormItem><FormLabel className="font-sans">TLS模式</FormLabel><Select onValueChange={field.onChange} value={field.value as string}><FormControl><SelectTrigger className="font-sans"><SelectValue /></SelectTrigger></FormControl><SelectContent>{Object.entries(MASTER_TLS_MODE_DISPLAY_MAP).map(([val, lab]) => (<SelectItem key={val} value={val}>{lab}</SelectItem>))}</SelectContent></Select>
-                  <FormDescription className="font-sans text-xs">此主控内S/C节点的默认TLS模式。</FormDescription>
+                  <FormItem><FormLabel className="font-sans">TLS Mode</FormLabel><Select onValueChange={field.onChange} value={field.value as string}><FormControl><SelectTrigger className="font-sans"><SelectValue /></SelectTrigger></FormControl><SelectContent>{Object.entries(MASTER_TLS_MODE_DISPLAY_MAP).map(([val, lab]) => (<SelectItem key={val} value={val}>{lab}</SelectItem>))}</SelectContent></Select>
+                  <FormDescription className="font-sans text-xs">Default TLS mode for S/C nodes within this master.</FormDescription>
                   <FormMessage /></FormItem>)} />
               </>
             )}
 
             {(role === 'S' || role === 'C') && (
                <FormField control={form.control} name={role === 'S' ? 'tunnelKeyS' : 'tunnelKeyC'} render={({ field }) => (
-                <FormItem><FormLabel className="font-sans">隧道密钥 (可选)</FormLabel><FormControl><Input {...field} placeholder="默认: 端口派生密钥" className="font-mono" /></FormControl>
-                <FormDescription className="font-sans text-xs">留空则使用端口派生的密钥。</FormDescription><FormMessage /></FormItem>)} />
+                <FormItem><FormLabel className="font-sans">Tunnel Key (Optional)</FormLabel><FormControl><Input {...field} placeholder="Default: Port-derived key" className="font-mono" /></FormControl>
+                <FormDescription className="font-sans text-xs">Leave empty to use port-derived key.</FormDescription><FormMessage /></FormItem>)} />
             )}
 
             {role === 'S' && (
               <>
                 <FormField control={form.control} name="tunnelAddressS" render={({ field }) => (
-                  <FormItem><FormLabel className="font-sans">隧道地址</FormLabel><FormControl><Input {...field} placeholder="例: [::]:10101 或 0.0.0.0:10101" className="font-mono" /></FormControl><FormMessage /></FormItem>)} />
+                  <FormItem><FormLabel className="font-sans">Tunnel Address</FormLabel><FormControl><Input {...field} placeholder="e.g., [::]:10101 or 0.0.0.0:10101" className="font-mono" /></FormControl><FormMessage /></FormItem>)} />
                 <FormField control={form.control} name="targetAddressS" render={({ field }) => (
-                  <FormItem><FormLabel className="font-sans">目标地址</FormLabel><FormControl><Input {...field} placeholder="例: 192.168.1.10:80" className="font-mono" /></FormControl><FormMessage /></FormItem>)} />
+                  <FormItem><FormLabel className="font-sans">Target Address</FormLabel><FormControl><Input {...field} placeholder="e.g., 192.168.1.10:80" className="font-mono" /></FormControl><FormMessage /></FormItem>)} />
                 <FormField control={form.control} name="logLevelS" render={({ field }) => (
-                  <FormItem><FormLabel className="font-sans">日志级别</FormLabel><Select onValueChange={field.onChange} value={field.value as string}><FormControl><SelectTrigger className="font-sans"><SelectValue /></SelectTrigger></FormControl><SelectContent><SelectItem value="master">主控默认</SelectItem><SelectItem value="debug">Debug</SelectItem><SelectItem value="info">Info</SelectItem><SelectItem value="warn">Warn</SelectItem><SelectItem value="error">Error</SelectItem><SelectItem value="event">Event</SelectItem></SelectContent></Select><FormMessage /></FormItem>)} />
+                  <FormItem><FormLabel className="font-sans">Log Level</FormLabel><Select onValueChange={field.onChange} value={field.value as string}><FormControl><SelectTrigger className="font-sans"><SelectValue /></SelectTrigger></FormControl><SelectContent><SelectItem value="master">Master Default</SelectItem><SelectItem value="debug">Debug</SelectItem><SelectItem value="info">Info</SelectItem><SelectItem value="warn">Warn</SelectItem><SelectItem value="error">Error</SelectItem><SelectItem value="event">Event</SelectItem></SelectContent></Select><FormMessage /></FormItem>)} />
                 <FormField control={form.control} name="tlsModeS" render={({ field }) => (
-                  <FormItem><FormLabel className="font-sans">TLS模式</FormLabel><Select onValueChange={field.onChange} value={field.value as string}><FormControl><SelectTrigger className="font-sans"><SelectValue /></SelectTrigger></FormControl><SelectContent>{Object.entries(MASTER_TLS_MODE_DISPLAY_MAP).map(([val, lab]) => (<SelectItem key={val} value={val}>{lab}</SelectItem>))}</SelectContent></Select><FormMessage /></FormItem>)} />
+                  <FormItem><FormLabel className="font-sans">TLS Mode</FormLabel><Select onValueChange={field.onChange} value={field.value as string}><FormControl><SelectTrigger className="font-sans"><SelectValue /></SelectTrigger></FormControl><SelectContent>{Object.entries(MASTER_TLS_MODE_DISPLAY_MAP).map(([val, lab]) => (<SelectItem key={val} value={val}>{lab}</SelectItem>))}</SelectContent></Select><FormMessage /></FormItem>)} />
                 {watchedServerTlsMode === '2' && (<>
-                  <FormField control={form.control} name="certPathS" render={({ field }) => (<FormItem><FormLabel className="font-sans">证书路径</FormLabel><FormControl><Input {...field} placeholder="/path/to/cert.pem" className="font-mono" /></FormControl><FormMessage /></FormItem>)} />
-                  <FormField control={form.control} name="keyPathS" render={({ field }) => (<FormItem><FormLabel className="font-sans">密钥路径</FormLabel><FormControl><Input {...field} placeholder="/path/to/key.pem" className="font-mono" /></FormControl><FormMessage /></FormItem>)} />
+                  <FormField control={form.control} name="certPathS" render={({ field }) => (<FormItem><FormLabel className="font-sans">Certificate Path</FormLabel><FormControl><Input {...field} placeholder="/path/to/cert.pem" className="font-mono" /></FormControl><FormMessage /></FormItem>)} />
+                  <FormField control={form.control} name="keyPathS" render={({ field }) => (<FormItem><FormLabel className="font-sans">Key Path</FormLabel><FormControl><Input {...field} placeholder="/path/to/key.pem" className="font-mono" /></FormControl><FormMessage /></FormItem>)} />
                 </>)}
               </>
             )}
@@ -362,66 +361,66 @@ export function EditTopologyNodeDialog({
                       <FormItem className="flex flex-row items-center space-x-2 space-y-0 rounded-md border p-2 shadow-sm">
                         <FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} id="isSingleEndedForwardCheckbox" /></FormControl>
                         <div className="space-y-0.5 leading-none">
-                          <FormLabel htmlFor="isSingleEndedForwardCheckbox" className="font-sans cursor-pointer text-sm">单端转发模式</FormLabel>
+                          <FormLabel htmlFor="isSingleEndedForwardCheckbox" className="font-sans cursor-pointer text-sm">Single-ended Forwarding Mode</FormLabel>
                         </div>
                       </FormItem>
                     )}
                   />
                 ) : (
                   <div className="p-2 text-xs text-muted-foreground border rounded-md bg-muted/50 font-sans">
-                    {hasServerNodesInParentContainer && !isInterMasterClientLink && "此客户端(c)的父主控容器内已有服务端(s)节点，不能设为单端转发模式。"}
-                    {isInterMasterClientLink && "此客户端(c)已连接到另一主控的服务端(s)，为隧道模式，不能设为单端转发。"}
+                    {hasServerNodesInParentContainer && !isInterMasterClientLink && "This client's (c) parent master container already has server(s) (s) nodes, so single-ended forwarding mode cannot be enabled."}
+                    {isInterMasterClientLink && "This client (c) is connected to another master’s server(s) (s), functioning as a tunnel mode, so single-ended forwarding cannot be enabled."}
                   </div>
                 )}
                 {renderClientAsSingleEnded ? (
                   <>
                     <FormField control={form.control} name="localListenAddressC_Single" render={({ field }) => (
-                      <FormItem><FormLabel className="font-sans">监听地址</FormLabel><FormControl><Input {...field} placeholder="例: [::]:10101 或 127.0.0.1:10101" className="font-mono" /></FormControl><FormMessage /></FormItem>)} />
+                      <FormItem><FormLabel className="font-sans">Listen Address</FormLabel><FormControl><Input {...field} placeholder="e.g., [::]:10101 or 127.0.0.1:10101" className="font-mono" /></FormControl><FormMessage /></FormItem>)} />
                     <FormField control={form.control} name="remoteTargetAddressC_Single" render={({ field }) => (
-                      <FormItem><FormLabel className="font-sans">目标地址</FormLabel><FormControl><Input {...field} placeholder="例: remote.host:8000" className="font-mono" /></FormControl><FormMessage /></FormItem>)} />
+                      <FormItem><FormLabel className="font-sans">Target Address</FormLabel><FormControl><Input {...field} placeholder="e.g., remote.host:8000" className="font-mono" /></FormControl><FormMessage /></FormItem>)} />
                   </>
                 ) : (
                   <>
                     <FormField control={form.control} name="tunnelAddressC_Normal" render={({ field }) => (
                       <FormItem>
-                        <FormLabel className="font-sans">隧道地址</FormLabel>
+                        <FormLabel className="font-sans">Tunnel Address</FormLabel>
                         <FormControl>
                           <Input
                             {...field}
-                            placeholder="例: server.example.com:10101"
+                            placeholder="e.g., server.example.com:10101"
                             className="font-mono"
                             disabled={isInterMasterClientLink && !!interMasterLinkSourceInfo?.serverTunnelAddress}
                           />
                         </FormControl>
                         {isInterMasterClientLink && !!interMasterLinkSourceInfo?.serverTunnelAddress && (
                           <FormDescription className="font-sans text-xs">
-                            此地址由跨主控连接自动确定。
+                            This address is automatically determined by cross-master connection.
                           </FormDescription>
                         )}
                         <FormMessage />
                       </FormItem>
                     )} />
                     <FormField control={form.control} name="localListenAddressC_Normal" render={({ field }) => (
-                      <FormItem><FormLabel className="font-sans">本地监听地址</FormLabel><FormControl><Input {...field} placeholder="例: [::]:8080 或 127.0.0.1:8080" className="font-mono" /></FormControl><FormMessage /></FormItem>)} />
+                      <FormItem><FormLabel className="font-sans">Local Listen Address</FormLabel><FormControl><Input {...field} placeholder="e.g., [::]:8080 or 127.0.0.1:8080" className="font-mono" /></FormControl><FormMessage /></FormItem>)} />
                   </>
                 )}
                 <FormField control={form.control} name="logLevelC" render={({ field }) => (
-                  <FormItem><FormLabel className="font-sans">日志级别</FormLabel><Select onValueChange={field.onChange} value={field.value as string}><FormControl><SelectTrigger className="font-sans"><SelectValue /></SelectTrigger></FormControl><SelectContent><SelectItem value="master">主控默认</SelectItem><SelectItem value="debug">Debug</SelectItem><SelectItem value="info">Info</SelectItem><SelectItem value="warn">Warn</SelectItem><SelectItem value="error">Error</SelectItem><SelectItem value="event">Event</SelectItem></SelectContent></Select><FormMessage /></FormItem>)} />
+                  <FormItem><FormLabel className="font-sans">Log Level</FormLabel><Select onValueChange={field.onChange} value={field.value as string}><FormControl><SelectTrigger className="font-sans"><SelectValue /></SelectTrigger></FormControl><SelectContent><SelectItem value="master">Master Default</SelectItem><SelectItem value="debug">Debug</SelectItem><SelectItem value="info">Info</SelectItem><SelectItem value="warn">Warn</SelectItem><SelectItem value="error">Error</SelectItem><SelectItem value="event">Event</SelectItem></SelectContent></Select><FormMessage /></FormItem>)} />
                 {!renderClientAsSingleEnded && (
                    <FormField control={form.control} name="tlsModeC" render={({ field }) => (
-                      <FormItem><FormLabel className="font-sans">TLS模式 (连接至服务端)</FormLabel><Select onValueChange={field.onChange} value={(field.value as string) || 'master'}><FormControl><SelectTrigger className="font-sans"><SelectValue /></SelectTrigger></FormControl><SelectContent>{Object.entries(MASTER_TLS_MODE_DISPLAY_MAP).map(([val, lab]) => (<SelectItem key={val} value={val}>{lab}</SelectItem>))}</SelectContent></Select><FormMessage /></FormItem>)} />
+                      <FormItem><FormLabel className="font-sans">TLS Mode (When Connecting to Server)</FormLabel><Select onValueChange={field.onChange} value={(field.value as string) || 'master'}><FormControl><SelectTrigger className="font-sans"><SelectValue /></SelectTrigger></FormControl><SelectContent>{Object.entries(MASTER_TLS_MODE_DISPLAY_MAP).map(([val, lab]) => (<SelectItem key={val} value={val}>{lab}</SelectItem>))}</SelectContent></Select><FormMessage /></FormItem>)} />
                 )}
                 {watchedClientTlsMode === '2' && !renderClientAsSingleEnded && (
                   <>
-                    <FormField control={form.control} name="certPathC" render={({ field }) => (<FormItem><FormLabel className="font-sans">证书路径 (TLS 2)</FormLabel><FormControl><Input {...field} placeholder="/path/to/client-cert.pem" className="font-mono" /></FormControl><FormMessage /></FormItem>)} />
-                    <FormField control={form.control} name="keyPathC" render={({ field }) => (<FormItem><FormLabel className="font-sans">密钥路径 (TLS 2)</FormLabel><FormControl><Input {...field} placeholder="/path/to/client-key.pem" className="font-mono" /></FormControl><FormMessage /></FormItem>)} />
+                    <FormField control={form.control} name="certPathC" render={({ field }) => (<FormItem><FormLabel className="font-sans">Certificate Path (TLS 2)</FormLabel><FormControl><Input {...field} placeholder="/path/to/client-cert.pem" className="font-mono" /></FormControl><FormMessage /></FormItem>)} />
+                    <FormField control={form.control} name="keyPathC" render={({ field }) => (<FormItem><FormLabel className="font-sans">Key Path (TLS 2)</FormLabel><FormControl><Input {...field} placeholder="/path/to/client-key.pem" className="font-mono" /></FormControl><FormMessage /></FormItem>)} />
                   </>
                 )}
                  <div className="grid grid-cols-2 gap-4">
                     <FormField control={form.control} name="minPoolSizeC" render={({ field }) => (
-                        <FormItem><FormLabel className="font-sans">最小连接池</FormLabel><FormControl><Input type="number" {...field} onChange={e => field.onChange(e.target.value === '' ? undefined : Number(e.target.value))} value={field.value ?? ""} placeholder="例: 64" className="font-mono" /></FormControl><FormMessage /></FormItem>)} />
+                        <FormItem><FormLabel className="font-sans">Minimum Connection Pool</FormLabel><FormControl><Input type="number" {...field} onChange={e => field.onChange(e.target.value === '' ? undefined : Number(e.target.value))} value={field.value ?? ""} placeholder="e.g., 64" className="font-mono" /></FormControl><FormMessage /></FormItem>)} />
                     <FormField control={form.control} name="maxPoolSizeC" render={({ field }) => (
-                        <FormItem><FormLabel className="font-sans">最大连接池</FormLabel><FormControl><Input type="number" {...field} onChange={e => field.onChange(e.target.value === '' ? undefined : Number(e.target.value))} value={field.value ?? ""} placeholder="例: 8192" className="font-mono" /></FormControl><FormMessage /></FormItem>)} />
+                        <FormItem><FormLabel className="font-sans">Maximum Connection Pool</FormLabel><FormControl><Input type="number" {...field} onChange={e => field.onChange(e.target.value === '' ? undefined : Number(e.target.value))} value={field.value ?? ""} placeholder="e.g., 8192" className="font-mono" /></FormControl><FormMessage /></FormItem>)} />
                 </div>
               </>
             )}
@@ -432,8 +431,8 @@ export function EditTopologyNodeDialog({
                 name="targetAddressTU"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel className="font-sans">目标地址</FormLabel>
-                    <FormControl><Input {...field} placeholder="例: 192.168.1.10:80" className="font-mono" /></FormControl>
+                    <FormLabel className="font-sans">Target Address</FormLabel>
+                    <FormControl><Input {...field} placeholder="e.g., 192.168.1.10:80" className="font-mono" /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -441,12 +440,12 @@ export function EditTopologyNodeDialog({
             )}
              {role === 'U' && (
                 <FormDescription className="font-sans text-xs">
-                  用户节点目前仅支持标签修改。
+                  User nodes currently only support label modification.
                 </FormDescription>
             )}
             <DialogFooter className="pt-4">
-              <DialogClose asChild><Button type="button" variant="outline">取消</Button></DialogClose>
-              <Button type="submit">保存</Button>
+              <DialogClose asChild><Button type="button" variant="outline">Cancel</Button></DialogClose>
+              <Button type="submit">Save</Button>
             </DialogFooter>
           </form>
         </Form>

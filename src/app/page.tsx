@@ -45,13 +45,13 @@ export default function HomePage() {
   useEffect(() => {
     if (activeApiConfig && prevApiIdRef.current !== activeApiConfig.id) {
       if (prevApiIdRef.current !== null) { 
-        addPageLog('活动主控已切换至: "' + activeApiConfig.name + '"', 'INFO', { previousApiId: prevApiIdRef.current, newApiId: activeApiConfig.id });
+        addPageLog('Active master control switched to: "' + activeApiConfig.name + '"', 'INFO', { previousApiId: prevApiIdRef.current, newApiId: activeApiConfig.id });
       } else {
-        addPageLog('活动主控已设置为: "' + activeApiConfig.name + '"', 'INFO', { newApiId: activeApiConfig.id });
+        addPageLog('Active master control set to: "' + activeApiConfig.name + '"', 'INFO', { newApiId: activeApiConfig.id });
       }
       prevApiIdRef.current = activeApiConfig.id;
     } else if (!activeApiConfig && prevApiIdRef.current !== null) {
-        addPageLog('活动主控已断开连接。', 'INFO', { previousApiId: prevApiIdRef.current });
+        addPageLog('Active master control disconnected.', 'INFO', { previousApiId: prevApiIdRef.current });
         prevApiIdRef.current = null;
     }
   }, [activeApiConfig]);
@@ -63,10 +63,10 @@ export default function HomePage() {
     setEditingApiConfigForSetup(null);
     setIsApiConfigDialogOpenForSetup(false);
     toast({
-      title: '主控已添加',
-      description: `“${configToSave.name}”已保存并激活。`,
+      title: 'Master Control Added',
+      description: `“${configToSave.name}” has been saved and activated.`,
     });
-    addPageLog(`主控 "${savedConfig.name}" 已添加并激活。`, 'SUCCESS', { configId: savedConfig.id, name: savedConfig.name });
+    addPageLog(`Master control "${savedConfig.name}" added and activated.`, 'SUCCESS', { configId: savedConfig.id, name: savedConfig.name });
   };
 
   const handleOpenApiConfigDialogForSetup = () => {
@@ -82,10 +82,10 @@ export default function HomePage() {
     reader.onload = (e) => {
       try {
         const content = e.target?.result;
-        if (typeof content !== 'string') throw new Error("无法读取文件内容。");
+        if (typeof content !== 'string') throw new Error("Failed to read file content.");
         
         const importedConfigsUntyped = JSON.parse(content) as any[]; 
-        if (!Array.isArray(importedConfigsUntyped)) throw new Error("导入文件格式无效，应为JSON数组。");
+        if (!Array.isArray(importedConfigsUntyped)) throw new Error("Invalid import file format, expected JSON array.");
 
         let importedCount = 0;
         let skippedCount = 0;
@@ -122,46 +122,46 @@ export default function HomePage() {
               importedCount++;
             }
           } else {
-            console.warn("跳过无效的导入配置项:", importedConfig);
+            console.warn("Skipping invalid import config item:", importedConfig);
             invalidCount++;
           }
         });
         
-        let importSummary = `成功导入 ${importedCount} 条配置。`;
-        if (skippedCount > 0) importSummary += ` 跳过 ${skippedCount} 条重复ID配置。`;
-        if (invalidCount > 0) importSummary += ` ${invalidCount} 条配置格式无效被忽略。`;
+        let importSummary = `Successfully imported ${importedCount} configurations.`;
+        if (skippedCount > 0) importSummary += ` Skipped ${skippedCount} duplicate ID configurations.`;
+        if (invalidCount > 0) importSummary += ` ${invalidCount} configurations with invalid format ignored.`;
         
         toast({
-          title: '导入完成',
+          title: 'Import Completed',
           description: importSummary,
         });
-        addPageLog(`主控配置导入完成: ${importSummary}`, 'INFO');
+        addPageLog(`Master control configurations import completed: ${importSummary}`, 'INFO');
 
         if (firstNewlyImportedConfig && !currentActiveConfigBeforeImport) {
             setActiveApiConfigId(firstNewlyImportedConfig.id);
              toast({
-                title: '主控已激活',
-                description: `“${firstNewlyImportedConfig.name}”已自动激活。`,
+                title: 'Master Control Activated',
+                description: `“${firstNewlyImportedConfig.name}” has been automatically activated.`,
             });
-            addPageLog(`主控 "${firstNewlyImportedConfig.name}" 已自动激活。`, 'INFO');
+            addPageLog(`Master control "${firstNewlyImportedConfig.name}" has been automatically activated.`, 'INFO');
         }
 
       } catch (error: any) {
         toast({
-          title: '导入失败',
-          description: error.message || '解析文件失败或文件格式不正确。',
+          title: 'Import Failed',
+          description: error.message || 'Failed to parse file or incorrect file format.',
           variant: 'destructive',
         });
-        addPageLog(`主控配置导入失败: ${error.message || '未知错误'}`, 'ERROR');
+        addPageLog(`Master control configurations import failed: ${error.message || 'Unknown error'}`, 'ERROR');
       }
     };
     reader.onerror = () => {
        toast({
-        title: '导入失败',
-        description: '读取文件时发生错误。',
+        title: 'Import Failed',
+        description: 'Error occurred while reading the file.',
         variant: 'destructive',
       });
-      addPageLog('主控配置导入失败: 读取文件错误。', 'ERROR');
+      addPageLog('Master control configurations import failed: file read error.', 'ERROR');
     }
     reader.readAsText(file);
     if (event.target) {
@@ -181,7 +181,7 @@ export default function HomePage() {
       <AppLayout onLog={addPageLog}>
         <div className="flex-grow container mx-auto px-4 py-8 flex items-center justify-center h-[calc(100vh-var(--header-height)-var(--footer-height)-4rem)]">
           <Loader2 className="h-12 w-12 animate-spin text-primary" />
-          <p className="ml-4 text-lg font-sans">加载主控配置...</p>
+          <p className="ml-4 text-lg font-sans">Loading master control configurations...</p>
         </div>
       </AppLayout>
     );
@@ -206,22 +206,22 @@ export default function HomePage() {
         ) : (
            <div className="flex flex-col items-center justify-center text-center flex-grow">
             <h2 className="text-2xl font-semibold mb-4 font-title">
-              {apiConfigsList.length > 0 ? '未选择主控' : '需要主控连接'}
+              {apiConfigsList.length > 0 ? 'No Master Control Selected' : 'Master Control Connection Required'}
             </h2>
             <p className="text-muted-foreground mb-6 font-sans">
               {apiConfigsList.length > 0
-                ? '请从头部菜单选择或添加一个主控连接。'
-                : '请先通过头部菜单添加主控连接或导入配置以开始使用。'}
+                ? 'Please select or add a master control connection from the header menu.'
+                : 'Please add a master control connection or import configurations from the header menu to get started.'}
             </p>
             {apiConfigsList.length === 0 && (
               <div className="flex flex-row gap-4">
                 <Button onClick={handleOpenApiConfigDialogForSetup} size="lg" className="font-sans">
                   <PlusCircle className="mr-2 h-5 w-5" />
-                  添加主控
+                  Add Master Control
                 </Button>
                 <Button onClick={() => fileInputRef.current?.click()} size="lg" variant="outline" className="font-sans">
                   <Upload className="mr-2 h-5 w-5" />
-                  导入配置
+                  Import Configurations
                 </Button>
                 <input
                   type="file"
@@ -234,7 +234,7 @@ export default function HomePage() {
             )}
              {apiConfigsList.length > 0 && !activeApiConfig && (
               <p className="text-sm text-muted-foreground mt-4 font-sans">
-                点击右上角设置图标管理或选择主控连接。
+                Click the settings icon in the top right corner to manage or select a master control connection.
               </p>
             )}
           </div>
@@ -243,9 +243,9 @@ export default function HomePage() {
       <div className="mt-8">
         <Card className="shadow-lg">
           <CardHeader>
-            <CardTitle className="font-title">应用事件日志</CardTitle>
+            <CardTitle className="font-title">Application Event Log</CardTitle>
             <CardDescription className="font-sans mt-1">
-              记录应用内的关键操作和状态变更。
+              Records key operations and state changes within the application.
             </CardDescription>
           </CardHeader>
           <CardContent>

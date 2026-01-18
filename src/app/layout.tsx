@@ -1,4 +1,3 @@
-
 import type { Metadata } from 'next';
 import { Montserrat, Roboto, JetBrains_Mono } from 'next/font/google';
 import './globals.css';
@@ -27,7 +26,7 @@ const jetbrainsMono = JetBrains_Mono({
 
 export const metadata: Metadata = {
   title: 'NodePanel',
-  description: 'NodePass 实例管理。',
+  description: 'NodePass Instance Management.',
   // icons: [{ rel: 'icon', url: '/logo.svg', type: 'image/svg+xml' }], // Using direct link in head for now
 };
 

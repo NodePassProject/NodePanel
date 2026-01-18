@@ -1,4 +1,3 @@
-
 "use client";
 
 import React from 'react';
@@ -20,9 +19,9 @@ export default function ConnectionsPage() {
 function PageHeader() {
   return (
     <div>
-      <h1 className="text-2xl font-bold font-title">主控连接管理</h1>
+      <h1 className="text-2xl font-bold font-title">Main Control Connection Management</h1>
       <p className="text-muted-foreground font-sans">
-        添加、编辑或删除您的 NodePass 主控连接配置。
+        Add, edit, or delete your NodePass main control connection configurations.
       </p>
     </div>
   );

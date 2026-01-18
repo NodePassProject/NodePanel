@@ -1,4 +1,3 @@
-
 "use client";
 
 import React from 'react';
@@ -25,9 +24,9 @@ export function DeleteInstanceDialog({
 
   const description = (
     <>
-      确定删除实例 <span className="font-semibold">{instance.id}</span>？此操作无法撤销。
+      Are you sure you want to delete instance <span className="font-semibold">{instance.id}</span>? This action cannot be undone.
       <br />
-      URL: <span className="font-semibold break-all">{instance.url}</span>。
+      URL: <span className="font-semibold break-all">{instance.url}</span>.
     </>
   );
 
@@ -35,14 +34,13 @@ export function DeleteInstanceDialog({
     <ConfirmationDialog
       open={open}
       onOpenChange={onOpenChange}
-      title="删除实例"
+      title="Delete Instance"
       description={description}
       onConfirm={() => onConfirmDelete(instance.id)}
-      confirmText="删除"
+      confirmText="Delete"
       confirmButtonVariant="destructive"
       ConfirmButtonIcon={Trash2}
       isLoading={isLoading}
     />
   );
 }
-

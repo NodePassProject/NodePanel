@@ -14,21 +14,21 @@ interface InstanceStatusBadgeProps {
 export function InstanceStatusBadge({ status, compact = false }: InstanceStatusBadgeProps) {
   if (compact) {
     let color = 'bg-yellow-400 dark:bg-yellow-500'; // Default for unknown
-    let tooltipText = '未知';
+    let tooltipText = 'Unknown';
     const triangleSize = "24px"; // Size of the SVG container, triangle will fill this
 
     switch (status) {
       case 'running':
         color = 'fill-green-500 dark:fill-green-600';
-        tooltipText = '运行中';
+        tooltipText = 'Running';
         break;
       case 'stopped':
         color = 'fill-gray-500 dark:fill-gray-600';
-        tooltipText = '已停止';
+        tooltipText = 'Stopped';
         break;
       case 'error':
         color = 'fill-destructive';
-        tooltipText = '错误';
+        tooltipText = 'Error';
         break;
     }
     return (
@@ -56,30 +56,29 @@ export function InstanceStatusBadge({ status, compact = false }: InstanceStatusB
       return (
         <Badge variant="default" className="bg-green-500 hover:bg-green-600 text-white whitespace-nowrap">
           <CheckCircle className="mr-1 h-3.5 w-3.5" />
-          运行中
+          Running
         </Badge>
       );
     case 'stopped':
       return (
         <Badge variant="secondary" className="bg-gray-500 hover:bg-gray-600 text-white whitespace-nowrap">
           <XCircle className="mr-1 h-3.5 w-3.5" />
-          已停止
+          Stopped
         </Badge>
       );
     case 'error':
       return (
         <Badge variant="destructive" className="whitespace-nowrap">
           <AlertTriangle className="mr-1 h-3.5 w-3.5" />
-          错误
+          Error
         </Badge>
       );
     default:
       return (
         <Badge variant="outline" className="whitespace-nowrap">
           <HelpCircle className="mr-1 h-3.5 w-3.5" />
-          未知
+          Unknown
         </Badge>
       );
   }
 }
-

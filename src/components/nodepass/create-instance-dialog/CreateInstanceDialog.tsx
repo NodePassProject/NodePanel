@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useEffect, useState } from 'react';
@@ -49,7 +48,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
   const form = useForm<CreateInstanceFormValues>({
     resolver: zodResolver(createInstanceFormSchema),
     defaultValues: {
-      instanceType: '客户端',
+      instanceType: 'Client',
       alias: '',
       tunnelKey: '',
       isSingleEndedForward: false,
@@ -72,7 +71,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
   useEffect(() => {
     if (open) {
       form.reset({
-        instanceType: '客户端',
+        instanceType: 'Client',
         alias: '',
         tunnelKey: '',
         isSingleEndedForward: false,
@@ -90,7 +89,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
   }, [open, form]);
 
  useEffect(() => {
-    if (instanceType === "客户端") {
+    if (instanceType === "Client") {
         if (isSingleEndedForwardWatched) {
             if (form.getValues("tlsMode") !== '0') form.setValue("tlsMode", "0", { shouldDirty: true });
             if (form.getValues("certPath") !== '') form.setValue("certPath", '', { shouldDirty: true });
@@ -101,7 +100,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
                 if (form.getValues("keyPath") !== '') form.setValue("keyPath", '');
             }
         }
-    } else if (instanceType === "服务端") {
+    } else if (instanceType === "Server") {
         if (isSingleEndedForwardWatched) {
             form.setValue("isSingleEndedForward", false, {shouldDirty: true});
         }
@@ -117,7 +116,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
 
 
   useEffect(() => {
-    if (instanceType === '客户端' && tunnelAddressValue && !isSingleEndedForwardWatched) {
+    if (instanceType === 'Client' && tunnelAddressValue && !isSingleEndedForwardWatched) {
       const clientTunnelHost = extractHostname(tunnelAddressValue);
       if (!clientTunnelHost) {
         setExternalApiSuggestion(null);
@@ -136,7 +135,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
       });
 
       if (!isKnownHost) {
-        setExternalApiSuggestion('提示: 连接到外部主控 (' + clientTunnelHost + ')。可考虑将其添加为主控连接。');
+        setExternalApiSuggestion('Hint: Connecting to external master control (' + clientTunnelHost + '). Consider adding it as a master connection.');
       } else {
         setExternalApiSuggestion(null);
       }
@@ -159,10 +158,10 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
       const masterNameForToast = variables.useApiRoot === apiRoot ? apiName : apiConfigsList.find(c => getApiRootUrl(c.id) === variables.useApiRoot)?.name || 'a master';
 
       toast({
-        title: '实例创建于 ' + masterNameForToast,
-        description: '实例 (URL: ' + shortUrl + ') -> ID: ' + createdInstance.id.substring(0,8) + '...',
+        title: 'Instance created at ' + masterNameForToast,
+        description: 'Instance (URL: ' + shortUrl + ') -> ID: ' + createdInstance.id.substring(0,8) + '...',
       });
-      onLog?.('实例创建成功于 ' + masterNameForToast + ': ' + (createdInstance.type === 'server' ? '服务端' : '客户端') + ' - ' + createdInstance.id.substring(0,8) + '... (URL: ' + shortUrl + ')', 'SUCCESS');
+      onLog?.('Instance successfully created at ' + masterNameForToast + ': ' + (createdInstance.type === 'server' ? 'Server' : 'Client') + ' - ' + createdInstance.id.substring(0,8) + '... (URL: ' + shortUrl + ')', 'SUCCESS');
 
       queryClient.invalidateQueries({ queryKey: ['instances', variables.useApiRoot === apiRoot ? apiId : apiConfigsList.find(c => getApiRootUrl(c.id) === variables.useApiRoot)?.id] });
       queryClient.invalidateQueries({ queryKey: ['allInstancesForTraffic']});
@@ -171,18 +170,18 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
       const shortUrl = variables.data.url.length > 40 ? variables.data.url.substring(0,37) + "..." : variables.data.url;
       const masterNameForToast = variables.useApiRoot === apiRoot ? apiName : apiConfigsList.find(c => getApiRootUrl(c.id) === variables.useApiRoot)?.name || 'a master';
       toast({
-        title: '创建实例失败于 ' + masterNameForToast,
-        description: '创建 (URL: ' + shortUrl + ') 失败: ' + (error.message || '未知错误。'),
+        title: 'Failed to create instance at ' + masterNameForToast,
+        description: 'Creation (URL: ' + shortUrl + ') failed: ' + (error.message || 'Unknown error.'),
         variant: 'destructive',
       });
-      onLog?.('创建实例失败于 ' + masterNameForToast + ': (URL: ' + shortUrl + ') - ' + (error.message || '未知错误'), 'ERROR');
+      onLog?.('Failed to create instance at ' + masterNameForToast + ': (URL: ' + shortUrl + ') - ' + (error.message || 'Unknown error'), 'ERROR');
     },
   });
 
  async function onSubmitHandler(values: CreateInstanceFormValues) {
     if (!apiId || !apiRoot || !apiToken || !activeApiConfig) {
-        toast({ title: "操作失败", description: "当前主控配置无效。", variant: "destructive"});
-        onLog?.('尝试创建实例失败: 当前主控配置无效。', 'ERROR');
+        toast({ title: "Operation failed", description: "Current master control configuration is invalid.", variant: "destructive"});
+        onLog?.('Attempt to create instance failed: Current master control configuration is invalid.', 'ERROR');
         return;
     }
 
@@ -190,28 +189,28 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
     let primaryCreatedInstance: Instance | null = null;
 
     const localOnLog = (message: string, type: 'INFO' | 'WARN' | 'ERROR') => {
-      if (type === 'ERROR') toast({ title: "配置错误", description: message, variant: "destructive" });
+      if (type === 'ERROR') toast({ title: "Configuration error", description: message, variant: "destructive" });
       onLog?.(message, type);
     };
 
-    if (values.instanceType === '客户端') {
+    if (values.instanceType === 'Client') {
       const clientSubmission = prepareClientUrlParams(values, activeApiConfig, localOnLog);
       if (!clientSubmission) return;
       primaryUrlParams = clientSubmission.clientParams;
-    } else { // '服务端'
+    } else { // 'Server'
       const serverSubmission = prepareServerUrlParams(values, localOnLog);
       if (!serverSubmission) return;
       primaryUrlParams = serverSubmission.serverParams;
     }
 
     if (!primaryUrlParams) {
-      onLog?.('主实例URL参数未能正确准备。', 'ERROR');
-      toast({ title: "内部错误", description: "主实例URL未能构建。", variant: "destructive" });
+      onLog?.('Failed to properly prepare URL parameters for primary instance.', 'ERROR');
+      toast({ title: "Internal error", description: "Failed to build primary instance URL.", variant: "destructive" });
       return;
     }
 
     const primaryInstanceUrl = buildUrlFromFormValues(primaryUrlParams, activeApiConfig);
-    onLog?.('准备创建主实例于 "' + activeApiConfig.name + '": ' + primaryInstanceUrl, 'INFO');
+    onLog?.('Preparing to create primary instance at "' + activeApiConfig.name + '": ' + primaryInstanceUrl, 'INFO');
 
     try {
       if (primaryInstanceUrl) {
@@ -223,7 +222,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
 
          if (primaryCreatedInstance && values.alias && values.alias.trim() !== "") {
             saveInstanceAlias(primaryCreatedInstance.id, values.alias.trim());
-            onLog?.(`为实例 ${primaryCreatedInstance.id.substring(0,8)}... 设置别名: "${values.alias.trim()}"`, 'INFO');
+            onLog?.(`Set alias for instance ${primaryCreatedInstance.id.substring(0,8)}...: "${values.alias.trim()}"`, 'INFO');
          }
       }
 
@@ -232,10 +231,10 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
          onOpenChange(false);
       }
     } catch (error: any) {
-       console.error("创建实例或保存别名时发生错误:", error);
+       console.error("Error occurred while creating instance or saving alias:", error);
        if (!createInstanceMutation.isError) {
-          toast({ title: "操作失败", description: "创建实例过程中发生意外错误。", variant: "destructive" });
-          onLog?.('创建实例或保存别名时发生错误: ' + error.message, 'ERROR');
+          toast({ title: "Operation failed", description: "An unexpected error occurred during instance creation.", variant: "destructive" });
+          onLog?.('Error occurred while creating instance or saving alias: ' + error.message, 'ERROR');
        }
     }
   }
@@ -246,19 +245,19 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
         <DialogHeader className="pb-2">
           <DialogTitle className="flex items-center font-title">
             <PlusCircle className="mr-2 h-5 w-5 text-primary" />
-            创建新实例
+            Create New Instance
           </DialogTitle>
           <div className="flex justify-between items-center mt-1">
             <DialogDescription className="font-sans text-xs mr-4">
-              为当前主控 “{apiName || 'N/A'}” 配置新实例。
+              Configure a new instance for the current master control “{apiName || 'N/A'}”.
             </DialogDescription>
-            {/* Removed Switch and Label for "参数说明" */}
+            {/* Removed Switch and Label for "Parameter Description" */}
           </div>
         </DialogHeader>
 
         <CreateInstanceFormFields
             form={form}
-            instanceType={instanceType as "客户端" | "服务端"}
+            instanceType={instanceType as "Client" | "Server"}
             tlsMode={tlsModeWatch}
             isSingleEndedForward={isSingleEndedForwardWatched}
             activeApiConfig={activeApiConfig}
@@ -273,17 +272,17 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
         <DialogFooter className="pt-3 font-sans">
           <DialogClose asChild>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={createInstanceMutation.isPending}>
-              取消
+              Cancel
             </Button>
           </DialogClose>
           <Button type="submit" form="create-instance-form" disabled={createInstanceMutation.isPending || !apiId}>
             {createInstanceMutation.isPending ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                创建中...
+                Creating...
               </>
             ) : (
-              '创建实例'
+              'Create Instance'
             )}
           </Button>
         </DialogFooter>

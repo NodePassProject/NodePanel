@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useEffect } from 'react';
@@ -42,20 +41,20 @@ export function EditAliasDialog({ open, onOpenChange, instanceId, currentAlias, 
           <DialogHeader>
             <DialogTitle className="flex items-center font-title">
               <Tag className="mr-2 h-5 w-5 text-primary" />
-              编辑实例别名
+              Edit Instance Alias
             </DialogTitle>
             <DialogDescription className="font-sans">
-              为实例 <span className="font-mono font-semibold">{instanceId}</span> 设置或修改别名。
+              Set or modify the alias for instance <span className="font-mono font-semibold">{instanceId}</span>.
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="space-y-1">
-              <Label htmlFor="alias-input" className="font-sans">别名</Label>
+              <Label htmlFor="alias-input" className="font-sans">Alias</Label>
               <Input
                 id="alias-input"
                 value={aliasInput}
                 onChange={(e) => setAliasInput(e.target.value)}
-                placeholder="输入别名 (可选)"
+                placeholder="Enter alias (optional)"
                 className="font-sans"
                 maxLength={50}
                 autoFocus
@@ -64,9 +63,9 @@ export function EditAliasDialog({ open, onOpenChange, instanceId, currentAlias, 
           </div>
           <DialogFooter className="font-sans">
             <DialogClose asChild>
-              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>取消</Button>
+              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
             </DialogClose>
-            <Button type="submit">保存别名</Button>
+            <Button type="submit">Save Alias</Button>
           </DialogFooter>
         </form>
       </DialogContent>

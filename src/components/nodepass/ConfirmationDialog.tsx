@@ -1,4 +1,3 @@
-
 "use client";
 
 import React from 'react';
@@ -37,11 +36,11 @@ export function ConfirmationDialog({
   description,
   children, // Destructure new prop
   onConfirm,
-  confirmText = "确认",
+  confirmText = "Confirm",
   confirmButtonVariant = "default",
   ConfirmButtonIcon,
   isLoading = false,
-  cancelText = "取消",
+  cancelText = "Cancel",
 }: ConfirmationDialogProps) {
   if (!open) return null;
 
@@ -69,11 +68,10 @@ export function ConfirmationDialog({
             ) : (
               ConfirmButtonIcon && <ConfirmButtonIcon className="mr-2 h-4 w-4" />
             )}
-            {isLoading ? "处理中..." : confirmText}
+            {isLoading ? "Processing..." : confirmText}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
   );
 }
-

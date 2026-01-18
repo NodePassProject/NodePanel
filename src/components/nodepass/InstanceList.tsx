@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useMemo, useRef } from 'react';
@@ -81,7 +80,7 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
   const { data: instances, isLoading: isLoadingInstances, error: instancesError } = useQuery<Instance[], Error>({
     queryKey: ['instances', apiId],
     queryFn: () => {
-      if (!apiId || !apiRoot || !apiToken) throw new Error("主控配置不完整。");
+      if (!apiId || !apiRoot || !apiToken) throw new Error("Master control configuration is incomplete.");
       return nodePassApi.getInstances(apiRoot, apiToken);
     },
     enabled: !!apiId && !!apiRoot && !!apiToken,
@@ -91,42 +90,42 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
 
   const updateInstanceMutation = useMutation({
     mutationFn: ({ instanceId, action }: { instanceId: string, action: UpdateInstanceRequest['action']}) => {
-      if (!apiId || !apiRoot || !apiToken) throw new Error("主控配置不完整。");
+      if (!apiId || !apiRoot || !apiToken) throw new Error("Master control configuration is incomplete.");
       return nodePassApi.updateInstance(instanceId, { action }, apiRoot, apiToken);
     },
     onSuccess: (data, variables) => {
-      const actionTextMap = { start: '启动', stop: '停止', restart: '重启' };
+      const actionTextMap = { start: 'Start', stop: 'Stop', restart: 'Restart' };
       const actionText = actionTextMap[variables.action] || variables.action;
       toast({
-        title: `实例操作: ${actionText}`,
-        description: `实例 ${data.id} 状态已改为 ${data.status}。`,
+        title: `Instance Operation: ${actionText}`,
+        description: `Instance ${data.id} status changed to ${data.status}.`,
       });
-      onLog?.(`实例 ${data.id} ${actionText}成功，状态: ${data.status}`, 'SUCCESS');
+      onLog?.(`Instance ${data.id} ${actionText} successfully, status: ${data.status}`, 'SUCCESS');
       queryClient.invalidateQueries({ queryKey: ['instances', apiId] });
     },
     onError: (error: any, variables) => {
-      const actionTextMap = { start: '启动', stop: '停止', restart: '重启' };
+      const actionTextMap = { start: 'Start', stop: 'Stop', restart: 'Restart' };
       const actionText = actionTextMap[variables.action] || variables.action;
       toast({
-        title: '实例操作失败',
-        description: `实例 ${variables.instanceId} ${actionText}失败: ${error.message || '未知错误。'}`,
+        title: 'Instance Operation Failed',
+        description: `Instance ${variables.instanceId} ${actionText} failed: ${error.message || 'Unknown error.'}`,
         variant: 'destructive',
       });
-      onLog?.(`实例 ${variables.instanceId} ${actionText}失败: ${error.message || '未知错误'}`, 'ERROR');
+      onLog?.(`Instance ${variables.instanceId} ${actionText} failed: ${error.message || 'Unknown error'}`, 'ERROR');
     },
   });
 
   const deleteInstanceMutation = useMutation({
     mutationFn: (instanceId: string) => {
-      if (!apiId || !apiRoot || !apiToken) throw new Error("主控配置不完整。");
+      if (!apiId || !apiRoot || !apiToken) throw new Error("Master control configuration is incomplete.");
       return nodePassApi.deleteInstance(instanceId, apiRoot, apiToken);
     },
     onSuccess: (_, instanceId) => {
       toast({
-        title: '实例已删除',
-        description: `实例 ${instanceId} 已删除。`,
+        title: 'Instance Deleted',
+        description: `Instance ${instanceId} has been deleted.`,
       });
-      onLog?.(`实例 ${instanceId} 已删除。`, 'SUCCESS');
+      onLog?.(`Instance ${instanceId} has been deleted.`, 'SUCCESS');
       removeAlias(instanceId);
       queryClient.invalidateQueries({ queryKey: ['instances', apiId] });
       queryClient.invalidateQueries({ queryKey: ['allInstancesForTraffic']});
@@ -139,25 +138,25 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
     },
     onError: (error: any, instanceId) => {
       toast({
-        title: '删除实例出错',
-        description: `删除实例 ${instanceId} 失败: ${error.message || '未知错误。'}`,
+        title: 'Error Deleting Instance',
+        description: `Failed to delete instance ${instanceId}: ${error.message || 'Unknown error.'}`,
         variant: 'destructive',
       });
-       onLog?.(`删除实例 ${instanceId} 失败: ${error.message || '未知错误'}`, 'ERROR');
+       onLog?.(`Failed to delete instance ${instanceId}: ${error.message || 'Unknown error'}`, 'ERROR');
     },
   });
 
   const handleCopyToClipboard = async (textToCopy: string, entity: string) => {
     if (!navigator.clipboard) {
-      toast({ title: '复制失败', description: '浏览器不支持剪贴板。', variant: 'destructive' });
+      toast({ title: 'Copy Failed', description: 'Browser does not support clipboard.', variant: 'destructive' });
       return;
     }
     try {
       await navigator.clipboard.writeText(textToCopy);
-      toast({ title: '复制成功', description: `${entity} 已复制到剪贴板。` });
+      toast({ title: 'Copy Successful', description: `${entity} copied to clipboard.` });
     } catch (err) {
-      toast({ title: '复制失败', description: `无法复制 ${entity}。`, variant: 'destructive' });
-      console.error('复制失败: ', err);
+      toast({ title: 'Copy Failed', description: `Unable to copy ${entity}.`, variant: 'destructive' });
+      console.error('Copy failed: ', err);
     }
   };
 
@@ -169,7 +168,7 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
         (instanceAlias || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
         instance.url.toLowerCase().includes(searchTerm.toLowerCase()) ||
         (instance.id !== '********' && instance.type.toLowerCase().includes(searchTerm.toLowerCase())) ||
-        (instance.id === '********' && ('api key'.includes(searchTerm.toLowerCase()) || '密钥'.includes(searchTerm.toLowerCase()) || (apiName && apiName.toLowerCase().includes(searchTerm.toLowerCase())) ))
+        (instance.id === '********' && ('api key'.includes(searchTerm.toLowerCase()) || 'secret key'.includes(searchTerm.toLowerCase()) || (apiName && apiName.toLowerCase().includes(searchTerm.toLowerCase())) ))
       );
     });
   }, [instances, searchTerm, isLoadingAliases, allAliasesObject, apiName]);
@@ -192,7 +191,7 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
   const handleConfirmBulkDelete = async () => {
     if (desktopSelectedInstanceIds.size === 0) return;
     setIsBulkDeleting(true);
-    onLog?.(`开始批量删除 ${desktopSelectedInstanceIds.size} 个实例...`, 'ACTION');
+    onLog?.(`Starting bulk delete of ${desktopSelectedInstanceIds.size} instances...`, 'ACTION');
 
     const results = await Promise.allSettled(
       Array.from(desktopSelectedInstanceIds).map(id => deleteInstanceMutation.mutateAsync(id))
@@ -206,12 +205,12 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
     });
 
     if (successCount > 0) {
-      toast({ title: '批量删除成功', description: `${successCount} 个实例已删除。` });
+      toast({ title: 'Bulk Delete Successful', description: `${successCount} instances deleted.` });
     }
     if (errorCount > 0) {
-      toast({ title: '批量删除部分失败', description: `${errorCount} 个实例删除失败，请检查日志。`, variant: 'destructive' });
+      toast({ title: 'Partial Bulk Delete Failed', description: `${errorCount} instances failed to delete, please check logs.`, variant: 'destructive' });
     }
-    onLog?.(`批量删除完成: ${successCount} 成功, ${errorCount} 失败。`, errorCount > 0 ? 'ERROR' : 'SUCCESS');
+    onLog?.(`Bulk delete completed: ${successCount} succeeded, ${errorCount} failed.`, errorCount > 0 ? 'ERROR' : 'SUCCESS');
 
     queryClient.invalidateQueries({ queryKey: ['instances', apiId] });
     queryClient.invalidateQueries({ queryKey: ['allInstancesForTraffic'] });
@@ -229,10 +228,10 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
   const handleSaveAliasFromDialog = (instanceId: string, newAlias: string) => {
     setAlias(instanceId, newAlias);
     toast({
-      title: '别名已更新',
-      description: newAlias ? `实例 ${instanceId} 的别名已设为 "${newAlias}"。` : `实例 ${instanceId} 的别名已清除。`,
+      title: 'Alias Updated',
+      description: newAlias ? `Alias for instance ${instanceId} set to "${newAlias}".` : `Alias for instance ${instanceId} has been cleared.`,
     });
-    onLog?.(newAlias ? `为实例 ${instanceId} 设置别名: "${newAlias}"` : `已清除实例 ${instanceId} 的别名`, 'INFO');
+    onLog?.(newAlias ? `Set alias for instance ${instanceId}: "${newAlias}"` : `Cleared alias for instance ${instanceId}`, 'INFO');
     setIsEditAliasDialogOpen(false);
     setEditingAliasContext(null);
   };
@@ -242,17 +241,17 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
     const currentAlias = (instance.id !== '********' && !isLoadingAliases) ? allAliasesObject[instance.id] : undefined;
 
     let displayTargetAddress: React.ReactNode = <span className="text-xs font-mono text-muted-foreground">-</span>;
-    let copyTargetTitle = "目标地址 (不适用)";
+    let copyTargetTitle = "Target Address (N/A)";
     let targetStringToCopy = "";
 
     let displayTunnelAddress: React.ReactNode = <span className="text-xs font-mono text-muted-foreground">-</span>;
-    let copyTunnelTitle = "隧道地址 (不适用)";
+    let copyTunnelTitle = "Tunnel Address (N/A)";
     let tunnelStringToCopy = "";
 
     if (instance.id !== '********' && parsedUrl) {
       if (instance.type === 'server') {
           targetStringToCopy = parsedUrl.targetAddress || "N/A";
-          copyTargetTitle = "服务端目标地址 (业务数据)";
+          copyTargetTitle = "Server Target Address (Business Data)";
           displayTargetAddress = (
              <span
               className="font-mono text-xs cursor-pointer hover:text-primary transition-colors duration-150 break-all"
@@ -263,7 +262,7 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
           );
 
           tunnelStringToCopy = parsedUrl.tunnelAddress || "N/A";
-          copyTunnelTitle = "服务端监听隧道地址";
+          copyTunnelTitle = "Server Listening Tunnel Address";
           displayTunnelAddress = (
              <span
               className="font-mono text-xs cursor-pointer hover:text-primary transition-colors duration-150 break-all"
@@ -276,23 +275,23 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
           const isSingleEnded = parsedUrl.scheme === 'client' && parsedUrl.targetAddress && parsedUrl.tunnelAddress && isWildcardHostname(extractHostname(parsedUrl.tunnelAddress));
           if (isSingleEnded) {
               targetStringToCopy = parsedUrl.targetAddress || "N/A";
-              copyTargetTitle = "客户端单端转发目标地址";
+              copyTargetTitle = "Client Single-ended Forwarding Target Address";
               displayTargetAddress = (
                  <span className="font-mono text-xs cursor-pointer hover:text-primary transition-colors duration-150 break-all" onClick={(e) => { e.stopPropagation(); if (targetStringToCopy !== "N/A") { handleCopyToClipboard(targetStringToCopy, copyTargetTitle); }}}>{targetStringToCopy}</span>
               );
               const clientLocalListeningPort = extractPort(parsedUrl.tunnelAddress || '');
               const clientMasterApiHost = extractHostname(activeApiConfig.apiUrl);
               tunnelStringToCopy = (clientMasterApiHost && clientLocalListeningPort) ? `${formatHostForDisplay(clientMasterApiHost)}:${clientLocalListeningPort}` : `${parsedUrl.tunnelAddress || '[::]:????'}`;
-              copyTunnelTitle = (clientMasterApiHost && clientLocalListeningPort) ? `客户端本地监听 (单端模式, 主控: ${activeApiConfig.name})` : `客户端本地监听 (单端模式, 主控地址未知)`;
+              copyTunnelTitle = (clientMasterApiHost && clientLocalListeningPort) ? `Client Local Listening (Single-ended Mode, Master: ${activeApiConfig.name})` : `Client Local Listening (Single-ended Mode, Master Address Unknown)`;
               displayTunnelAddress = (<span className="font-mono text-xs cursor-pointer hover:text-primary transition-colors duration-150 break-all" onClick={(e) => { e.stopPropagation(); if(tunnelStringToCopy && !tunnelStringToCopy.includes("????")) {handleCopyToClipboard(tunnelStringToCopy, copyTunnelTitle); }}}>{tunnelStringToCopy}</span>);
           } else {
               const clientLocalForwardPort = extractPort(parsedUrl.targetAddress || '');
               const clientMasterApiHost = extractHostname(activeApiConfig.apiUrl);
-              targetStringToCopy = (clientMasterApiHost && clientLocalForwardPort) ? `${formatHostForDisplay(clientMasterApiHost)}:${clientLocalForwardPort}` : (clientLocalForwardPort ? `127.0.0.1:${clientLocalForwardPort}` : (parsedUrl.targetAddress || "N/A (解析失败)"));
-              copyTunnelTitle = (clientMasterApiHost && clientLocalForwardPort) ? `客户端本地转发 (主控: ${activeApiConfig.name})` : (clientLocalForwardPort ? `客户端本地转发 (主控地址未知)` : "客户端本地转发目标");
+              targetStringToCopy = (clientMasterApiHost && clientLocalForwardPort) ? `${formatHostForDisplay(clientMasterApiHost)}:${clientLocalForwardPort}` : (clientLocalForwardPort ? `127.0.0.1:${clientLocalForwardPort}` : (parsedUrl.targetAddress || "N/A (Parse failed)"));
+              copyTunnelTitle = (clientMasterApiHost && clientLocalForwardPort) ? `Client Local Forwarding (Master: ${activeApiConfig.name})` : (clientLocalForwardPort ? `Client Local Forwarding (Master Address Unknown)` : "Client Local Forwarding Target");
               displayTargetAddress = (<span className="font-mono text-xs cursor-pointer hover:text-primary transition-colors duration-150 break-all" onClick={(e) => { e.stopPropagation(); if(targetStringToCopy && !targetStringToCopy.startsWith("N/A")) {handleCopyToClipboard(targetStringToCopy, copyTunnelTitle); }}}>{targetStringToCopy}</span>);
               tunnelStringToCopy = parsedUrl.tunnelAddress || "N/A";
-              copyTunnelTitle = "客户端连接的服务端隧道地址";
+              copyTunnelTitle = "Client Connected Server Tunnel Address";
               displayTunnelAddress = (<span className="font-mono text-xs cursor-pointer hover:text-primary transition-colors duration-150 break-all" onClick={(e) => { e.stopPropagation(); if (tunnelStringToCopy !== "N/A") { handleCopyToClipboard(tunnelStringToCopy, copyTunnelTitle); }}}>{tunnelStringToCopy}</span>);
           }
       }
@@ -378,15 +377,15 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
   const renderInstances = () => {
     const instancesToRender = (apiKeyInstance ? [apiKeyInstance] : []).concat(otherInstances || []);
     if (instancesToRender.length === 0) {
-        let message = "加载中或无可用实例数据。";
+        let message = "Loading or no available instance data.";
         if (apiId && !isLoadingInstances && !instancesError) {
             if (instances && instances.length === 0) {
-                message = `主控 "${activeApiConfig?.name || apiName}" 下无实例。`;
+                message = `No instances under master control "${activeApiConfig?.name || apiName}".`;
             } else if (searchTerm) {
-                message = `在 "${activeApiConfig?.name || apiName}" 中未找到与 "${searchTerm}" 匹配的实例。`;
+                message = `No instances matching "${searchTerm}" found in "${activeApiConfig?.name || apiName}".`;
             }
         } else if (!apiId) {
-            message = "请选择活动主控以查看实例。";
+            message = "Please select an active master control to view instances.";
         } else if (instancesError) {
             return null;
         }
@@ -423,18 +422,18 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
                   <div
                     className="text-sm font-semibold cursor-pointer hover:text-primary truncate"
                     onClick={() => !isApiKeyInstance && handleOpenEditAliasDialog(instance.id, currentAlias)}
-                    title={isApiKeyInstance ? "API Key" : (isLoadingAliases ? "加载中..." : (currentAlias ? `别名: ${currentAlias} (点击编辑)` : "点击设置别名"))}
+                    title={isApiKeyInstance ? "API Key" : (isLoadingAliases ? "Loading..." : (currentAlias ? `Alias: ${currentAlias} (Click to edit)` : "Click to set alias"))}
                   >
                     {isApiKeyInstance ?
                       <span className="flex items-center"><KeyRound className="h-4 w-4 mr-1.5 text-yellow-500" />API Key</span> :
-                      (isLoadingAliases ? <Skeleton className="h-5 w-24" /> : currentAlias || <span className="italic text-muted-foreground">设置别名...</span>)
+                      (isLoadingAliases ? <Skeleton className="h-5 w-24" /> : currentAlias || <span className="italic text-muted-foreground">Set alias...</span>)
                     }
                   </div>
                   {!isApiKeyInstance && (
                     <div
                       className="font-mono text-xs text-muted-foreground/70 cursor-pointer hover:text-primary truncate"
                       onClick={() => handleCopyToClipboard(instance.id, "ID")}
-                      title={`实例ID: ${instance.id} (点击复制)`}
+                      title={`Instance ID: ${instance.id} (Click to copy)`}
                     >
                       {instance.id}
                     </div>
@@ -448,11 +447,11 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
                         className="items-center whitespace-nowrap text-xs py-0.5 px-1.5 font-sans"
                       >
                         {instance.type === 'server' ? <ServerIcon size={10} className="mr-0.5" /> : <SmartphoneIcon size={10} className="mr-0.5" />}
-                        {instance.type === 'server' ? '服务端' : '客户端'}
+                        {instance.type === 'server' ? 'Server' : 'Client'}
                       </Badge>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-7 w-7" title="管理实例">
+                        <Button variant="ghost" size="icon" className="h-7 w-7" title="Manage Instance">
                           <MoreVertical className="h-4 w-4" />
                         </Button>
                       </DropdownMenuTrigger>
@@ -461,30 +460,30 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
                           onClick={() => updateInstanceMutation.mutate({ instanceId: instance.id, action: 'start' })}
                           disabled={instance.status === 'running' || (updateInstanceMutation.isPending && updateInstanceMutation.variables?.instanceId === instance.id)}
                         >
-                          <Play className="mr-2 h-4 w-4" /> 启动
+                          <Play className="mr-2 h-4 w-4" /> Start
                         </DropdownMenuItem>
                         <DropdownMenuItem
                           onClick={() => updateInstanceMutation.mutate({ instanceId: instance.id, action: 'stop' })}
                           disabled={instance.status === 'stopped' || (updateInstanceMutation.isPending && updateInstanceMutation.variables?.instanceId === instance.id)}
                         >
-                          <Square className="mr-2 h-4 w-4" /> 停止
+                          <Square className="mr-2 h-4 w-4" /> Stop
                         </DropdownMenuItem>
                         <DropdownMenuItem
                           onClick={() => updateInstanceMutation.mutate({ instanceId: instance.id, action: 'restart' })}
                           disabled={updateInstanceMutation.isPending && updateInstanceMutation.variables?.instanceId === instance.id}
                         >
-                          <RotateCcw className="mr-2 h-4 w-4" /> 重启
+                          <RotateCcw className="mr-2 h-4 w-4" /> Restart
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem onClick={() => setSelectedInstanceForDetails(instance)}>
-                          <Eye className="mr-2 h-4 w-4" /> 查看详情
+                          <Eye className="mr-2 h-4 w-4" /> View Details
                         </DropdownMenuItem>
                         <DropdownMenuItem
                           onClick={() => setSelectedInstanceForDelete(instance)}
                           disabled={deleteInstanceMutation.isPending && deleteInstanceMutation.variables === instance.id}
                           className="text-destructive hover:!text-destructive focus:!text-destructive focus:!bg-destructive/10"
                         >
-                          <Trash2 className="mr-2 h-4 w-4" /> 删除
+                          <Trash2 className="mr-2 h-4 w-4" /> Delete
                         </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
@@ -497,19 +496,19 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
                 <Separator className="my-2" />
                 <CardContent className="p-3 pt-1 text-xs space-y-1.5">
                   <div title={copyTunnelTitle}>
-                    <strong className="font-medium text-muted-foreground">隧道:</strong>
+                    <strong className="font-medium text-muted-foreground">Tunnel:</strong>
                     <span className="font-mono ml-1 break-all cursor-pointer hover:text-primary" onClick={() => tunnelStringToCopy && tunnelStringToCopy !== "N/A" && handleCopyToClipboard(tunnelStringToCopy, copyTunnelTitle)}>
                       {displayTunnelAddress}
                     </span>
                   </div>
                   <div title={copyTargetTitle}>
-                    <strong className="font-medium text-muted-foreground">目标:</strong>
+                    <strong className="font-medium text-muted-foreground">Target:</strong>
                     <span className="font-mono ml-1 break-all cursor-pointer hover:text-primary" onClick={() => targetStringToCopy && targetStringToCopy !== "N/A" && handleCopyToClipboard(targetStringToCopy, copyTargetTitle)}>
                       {displayTargetAddress}
                     </span>
                   </div>
                   <div>
-                    <strong className="font-medium text-muted-foreground">流量 (Rx/Tx):</strong>
+                    <strong className="font-medium text-muted-foreground">Traffic (Rx/Tx):</strong>
                     <span className="font-mono ml-1">
                       <ArrowDown className="inline-block h-3 w-3 mr-0.5 text-blue-500" />{formatBytes(totalRx)}
                       <span className="text-muted-foreground mx-1">/</span>
@@ -534,7 +533,7 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
                     <Checkbox
                     checked={desktopSelectedInstanceIds.has(instance.id)}
                     onCheckedChange={() => handleSelectInstance(instance.id)}
-                    aria-label={`选择实例 ${instance.id}`}
+                    aria-label={`Select instance ${instance.id}`}
                     disabled={isBulkDeleting}
                     />
                 )}
@@ -542,7 +541,7 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
                 <TableCell className="font-medium font-mono text-xs break-all" title={instance.id}>{instance.id}</TableCell>
                 <TableCell
                     className="text-xs font-sans truncate max-w-[150px]"
-                    title={isLoadingAliases ? "加载中..." : (currentAlias || "双击编辑别名")}
+                    title={isLoadingAliases ? "Loading..." : (currentAlias || "Double-click to edit alias")}
                     onDoubleClick={(e) => {
                         if (instance.id !== '********') {
                             e.stopPropagation();
@@ -552,13 +551,13 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
                 >
                     {isLoadingAliases && instance.id !== '********' ? <Skeleton className="h-4 w-20" /> :
                     currentAlias ? <span className="flex items-center cursor-pointer"><Pencil size={10} className="mr-1 text-muted-foreground opacity-50 group-hover:opacity-100" />{currentAlias}</span> :
-                    (instance.id !== '********' ? <span className="text-muted-foreground cursor-pointer hover:text-primary"><Pencil size={10} className="mr-1 text-muted-foreground opacity-50 group-hover:opacity-100" />编辑别名</span> : null)
+                    (instance.id !== '********' ? <span className="text-muted-foreground cursor-pointer hover:text-primary"><Pencil size={10} className="mr-1 text-muted-foreground opacity-50 group-hover:opacity-100" />Edit Alias</span> : null)
                     }
                 </TableCell>
                 <TableCell>
                 {instance.id === '********' ? (
                     <Badge variant="outline" className="border-yellow-500 text-yellow-600 items-center whitespace-nowrap text-xs py-0.5 px-1.5 font-sans">
-                    <KeyRound className="h-3 w-3 mr-1" />API 密钥
+                    <KeyRound className="h-3 w-3 mr-1" />API Key
                     </Badge>
                 ) : (
                     <Badge
@@ -566,7 +565,7 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
                     className="items-center whitespace-nowrap text-xs font-sans"
                     >
                     {instance.type === 'server' ? <ServerIcon size={12} className="mr-1" /> : <SmartphoneIcon size={12} className="mr-1" />}
-                    {instance.type === 'server' ? '服务端' : '客户端'}
+                    {instance.type === 'server' ? 'Server' : 'Client'}
                     </Badge>
                 )}
                 </TableCell>
@@ -574,7 +573,7 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
                 {instance.id === '********' ? (
                     <Badge variant="outline" className="border-green-500 text-green-600 whitespace-nowrap font-sans text-xs py-0.5 px-1.5">
                     <CheckCircle className="mr-1 h-3.5 w-3.5" />
-                    可用
+                    Available
                     </Badge>
                 ) : (
                     <InstanceStatusBadge status={instance.status} />
@@ -588,12 +587,12 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
                     <span className="text-muted-foreground">-</span>
                     ) : (
                     <div className="flex items-center space-x-2">
-                        <span className="flex items-center" title={`接收: TCP ${formatBytes(instance.tcprx)}, UDP ${formatBytes(instance.udprx)}`}>
+                        <span className="flex items-center" title={`Received: TCP ${formatBytes(instance.tcprx)}, UDP ${formatBytes(instance.udprx)}`}>
                         <ArrowDown className="h-3 w-3 mr-1 text-blue-500" />
                         {formatBytes(totalRx)}
                         </span>
                         <span className="text-muted-foreground">/</span>
-                        <span className="flex items-center" title={`发送: TCP ${formatBytes(instance.tcptx)}, UDP ${formatBytes(instance.udptx)}`}>
+                        <span className="flex items-center" title={`Sent: TCP ${formatBytes(instance.tcptx)}, UDP ${formatBytes(instance.udptx)}`}>
                         <ArrowUp className="h-3 w-3 mr-1 text-green-500" />
                         {formatBytes(totalTx)}
                         </span>
@@ -606,7 +605,7 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
                     {!isApiKeyInstance && (
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" className="h-8 w-8" title="管理实例">
+                          <Button variant="ghost" size="icon" className="h-8 w-8" title="Manage Instance">
                             <MoreVertical className="h-4 w-4" />
                           </Button>
                         </DropdownMenuTrigger>
@@ -615,23 +614,23 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
                             onClick={() => updateInstanceMutation.mutate({ instanceId: instance.id, action: 'start'})}
                             disabled={instance.status === 'running' || (updateInstanceMutation.isPending && updateInstanceMutation.variables?.instanceId === instance.id)}
                             >
-                            <Play className="mr-2 h-4 w-4" /> 启动
+                            <Play className="mr-2 h-4 w-4" /> Start
                             </DropdownMenuItem>
                             <DropdownMenuItem
                             onClick={() => updateInstanceMutation.mutate({ instanceId: instance.id, action: 'stop'})}
                             disabled={instance.status === 'stopped' || (updateInstanceMutation.isPending && updateInstanceMutation.variables?.instanceId === instance.id)}
                             >
-                            <Square className="mr-2 h-4 w-4" /> 停止
+                            <Square className="mr-2 h-4 w-4" /> Stop
                             </DropdownMenuItem>
                             <DropdownMenuItem
                             onClick={() => updateInstanceMutation.mutate({ instanceId: instance.id, action: 'restart'})}
                             disabled={updateInstanceMutation.isPending && updateInstanceMutation.variables?.instanceId === instance.id}
                             >
-                            <RotateCcw className="mr-2 h-4 w-4" /> 重启
+                            <RotateCcw className="mr-2 h-4 w-4" /> Restart
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
                             <DropdownMenuItem onClick={() => setSelectedInstanceForDetails(instance)}>
-                            <Eye className="mr-2 h-4 w-4" /> 查看详情
+                            <Eye className="mr-2 h-4 w-4" /> View Details
                             </DropdownMenuItem>
                              {!isApiKeyInstance && (
                                 <DropdownMenuItem
@@ -639,14 +638,14 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
                                 disabled={deleteInstanceMutation.isPending && deleteInstanceMutation.variables === instance.id}
                                 className="text-destructive hover:!text-destructive focus:!text-destructive focus:!bg-destructive/10"
                                 >
-                                <Trash2 className="mr-2 h-4 w-4" /> 删除
+                                <Trash2 className="mr-2 h-4 w-4" /> Delete
                                 </DropdownMenuItem>
                              )}
                         </DropdownMenuContent>
                       </DropdownMenu>
                     )}
                     {isApiKeyInstance && (
-                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setSelectedInstanceForDetails(instance)} title="查看详情">
+                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setSelectedInstanceForDetails(instance)} title="View Details">
                             <Eye className="h-4 w-4" />
                         </Button>
                     )}
@@ -663,8 +662,8 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
     <Card className="shadow-lg mt-6">
       <CardHeader className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
         <div>
-          <CardTitle className="font-title">实例概览 (主控: {apiName || 'N/A'})</CardTitle>
-          <CardDescription className="font-sans">管理和监控 NodePass 实例。</CardDescription>
+          <CardTitle className="font-title">Instance Overview (Master Control: {apiName || 'N/A'})</CardTitle>
+          <CardDescription className="font-sans">Manage and monitor NodePass instances.</CardDescription>
         </div>
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 mt-4 sm:mt-0 w-full sm:w-auto">
            {!isMobile && deletableInstances.length > 0 && desktopSelectedInstanceIds.size > 0 && (
@@ -676,14 +675,14 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
               className="font-sans h-9 w-full sm:w-auto"
             >
               <Trash2 className="mr-2 h-4 w-4" />
-              删除选中 ({desktopSelectedInstanceIds.size})
+              Delete Selected ({desktopSelectedInstanceIds.size})
             </Button>
           )}
           <div className="relative w-full sm:w-auto flex-grow sm:flex-grow-0">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
               type="search"
-              placeholder="搜索实例..."
+              placeholder="Search instances..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="pl-8 w-full font-sans h-9"
@@ -691,7 +690,7 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
           </div>
           <Button onClick={onOpenCreateInstanceDialog} disabled={!apiRoot || !apiToken} className="font-sans h-9 w-full sm:w-auto">
             <PlusCircle className="mr-2 h-4 w-4" />
-            创建新实例
+            Create New Instance
           </Button>
         </div>
       </CardHeader>
@@ -699,13 +698,13 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
       <CardContent className={isMobile ? "pt-4 px-2 sm:px-4" : ""}>
         {!apiId && (
           <div className="text-center py-10 text-muted-foreground font-sans">
-            请选择活动主控以查看实例。
+            Please select an active master control to view instances.
           </div>
         )}
         {apiId && instancesError && (
           <div className="text-destructive-foreground bg-destructive p-4 rounded-md flex items-center font-sans">
             <AlertTriangle className="h-5 w-5 mr-2" />
-            加载实例错误: {instancesError.message}
+            Error loading instances: {instancesError.message}
           </div>
         )}
         {apiId && !instancesError && (
@@ -729,19 +728,19 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
                               : false
                           }
                           onCheckedChange={handleSelectAllInstances}
-                          aria-label="全选/取消全选实例"
+                          aria-label="Select/Deselect all instances"
                           disabled={deletableInstances.length === 0 || isBulkDeleting}
                         />
                       )}
                     </TableHead>
                     <TableHead className="font-sans">ID</TableHead>
-                    <TableHead className="font-sans">别名</TableHead>
-                    <TableHead className="font-sans">类型</TableHead>
-                    <TableHead className="font-sans">状态</TableHead>
-                    <TableHead className="font-sans">隧道地址</TableHead>
-                    <TableHead className="font-sans">目标地址</TableHead>
-                    <TableHead className="text-left whitespace-nowrap font-sans">实例用量</TableHead>
-                    <TableHead className="text-right font-sans">操作</TableHead>
+                    <TableHead className="font-sans">Alias</TableHead>
+                    <TableHead className="font-sans">Type</TableHead>
+                    <TableHead className="font-sans">Status</TableHead>
+                    <TableHead className="font-sans">Tunnel Address</TableHead>
+                    <TableHead className="font-sans">Target Address</TableHead>
+                    <TableHead className="text-left whitespace-nowrap font-sans">Instance Usage</TableHead>
+                    <TableHead className="text-right font-sans">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -795,4 +794,3 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
     </Card>
   );
 }
-

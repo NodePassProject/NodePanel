@@ -1,4 +1,3 @@
-
 "use client";
 
 import type { NextPage } from 'next';
@@ -34,12 +33,12 @@ function formatBytes(bytes: number, decimals = 2) {
 
 const chartConfig = {
   totalRx: {
-    label: "总接收",
+    label: "Total Received",
     color: "hsl(var(--chart-1))",
     icon: ArrowDownCircle,
   },
   totalTx: {
-    label: "总发送",
+    label: "Total Sent",
     color: "hsl(var(--chart-2))",
     icon: ArrowUpCircle,
   },
@@ -81,7 +80,7 @@ const TrafficPage: NextPage = () => {
             const errorMessage = error instanceof Error ? error.message : String(error);
             console.error(`TrafficPage: Failed to load instances from API "${config.name}" (ID: ${config.id}). Error:`, errorMessage);
             toast({
-              title: `加载 "${config.name}" 失败`,
+              title: `Failed to load "${config.name}"`,
               description: errorMessage.length > 100 ? errorMessage.substring(0, 97) + "..." : errorMessage,
               variant: 'destructive',
             });
@@ -191,7 +190,7 @@ const TrafficPage: NextPage = () => {
       <AppLayout>
         <div className="flex-grow container mx-auto px-4 py-8 flex items-center justify-center h-[calc(100vh-var(--header-height)-var(--footer-height)-4rem)]">
           <Loader2 className="h-12 w-12 animate-spin text-primary" />
-          <p className="ml-4 text-lg font-sans">加载主控配置...</p>
+          <p className="ml-4 text-lg font-sans">Loading main control configurations...</p>
         </div>
       </AppLayout>
     );
@@ -201,8 +200,8 @@ const TrafficPage: NextPage = () => {
     return (
       <AppLayout>
         <Card className="max-w-md mx-auto mt-10 shadow-lg">
-          <CardHeader><CardTitle className="text-destructive flex items-center justify-center font-title"><AlertTriangle className="h-6 w-6 mr-2" />错误</CardTitle></CardHeader>
-          <CardContent><p className="font-sans">加载流量数据失败: {fetchErrorGlobal.message}</p></CardContent>
+          <CardHeader><CardTitle className="text-destructive flex items-center justify-center font-title"><AlertTriangle className="h-6 w-6 mr-2" />Error</CardTitle></CardHeader>
+          <CardContent><p className="font-sans">Failed to load traffic data: {fetchErrorGlobal.message}</p></CardContent>
         </Card>
       </AppLayout>
     );
@@ -211,12 +210,12 @@ const TrafficPage: NextPage = () => {
   return (
     <AppLayout>
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold font-title">流量统计</h1>
+        <h1 className="text-2xl font-bold font-title">Traffic Statistics</h1>
         <div className="flex items-center gap-2">
-          {lastRefreshed && <span className="text-xs text-muted-foreground font-sans">刷新: {lastRefreshed.toLocaleTimeString()}</span>}
+          {lastRefreshed && <span className="text-xs text-muted-foreground font-sans">Last refreshed: {lastRefreshed.toLocaleTimeString()}</span>}
           <Button variant="outline" onClick={handleRefresh} disabled={isLoadingData} className="font-sans">
             <RefreshCw className={`mr-2 h-4 w-4 ${isLoadingData ? 'animate-spin' : ''}`} />
-            {isLoadingData ? '刷新中...' : '刷新数据'}
+            {isLoadingData ? 'Refreshing...' : 'Refresh Data'}
           </Button>
         </div>
       </div>
@@ -224,14 +223,14 @@ const TrafficPage: NextPage = () => {
       {isLoadingData && !isLoadingApiConfig && (
          <div className="flex-grow container mx-auto px-4 py-8 flex items-center justify-center h-[calc(100vh-var(--header-height)-var(--footer-height)-4rem)]">
           <Loader2 className="h-16 w-16 animate-spin text-primary" />
-          <p className="ml-4 text-xl font-sans">加载流量数据...</p>
+          <p className="ml-4 text-xl font-sans">Loading traffic data...</p>
         </div>
       )}
 
       {!isLoadingData && allInstances.length === 0 && !fetchErrorGlobal && (
         <Card className="text-center py-10 shadow-lg card-hover-shadow">
-          <CardHeader><CardTitle className="font-title">无数据显示</CardTitle></CardHeader>
-          <CardContent><p className="text-muted-foreground font-sans">{apiConfigsList.length > 0 ? "未找到任何实例或所有实例流量为0。" : "请先配置主控连接。"}</p></CardContent>
+          <CardHeader><CardTitle className="font-title">No Data Available</CardTitle></CardHeader>
+          <CardContent><p className="text-muted-foreground font-sans">{apiConfigsList.length > 0 ? "No instances found or all instances have zero traffic." : "Please configure the main control connection first."}</p></CardContent>
         </Card>
       )}
 
@@ -239,8 +238,8 @@ const TrafficPage: NextPage = () => {
         <div className="space-y-8">
           <Card className="shadow-lg card-hover-shadow">
             <CardHeader>
-              <CardTitle className="flex items-center font-title"><PieChartIcon className="mr-2 h-5 w-5 text-primary" />整体流量分布</CardTitle>
-              <CardDescription className="font-sans mt-1">所有实例的总流量按接收/发送分布。将鼠标悬停在扇区上可查看详细信息。</CardDescription>
+              <CardTitle className="flex items-center font-title"><PieChartIcon className="mr-2 h-5 w-5 text-primary" />Overall Traffic Distribution</CardTitle>
+              <CardDescription className="font-sans mt-1">Total traffic of all instances distributed by received/sent. Hover over sectors to view details.</CardDescription>
             </CardHeader>
              <CardContent className="flex-1 pb-0">
                 <ChartContainer
@@ -291,7 +290,7 @@ const TrafficPage: NextPage = () => {
                                     y={(viewBox.cy || 0) + 24}
                                     className="fill-muted-foreground font-sans text-sm"
                                   >
-                                    总用量
+                                    Total Usage
                                   </tspan>
                                 </text>
                               );
@@ -309,8 +308,8 @@ const TrafficPage: NextPage = () => {
           
            <Card className="shadow-lg card-hover-shadow">
             <CardHeader>
-              <CardTitle className="flex items-center font-title"><List className="mr-2 h-5 w-5 text-primary" />各实例流量详情</CardTitle>
-              <CardDescription className="font-sans mt-1">每个单独实例的流量统计。</CardDescription>
+              <CardTitle className="flex items-center font-title"><List className="mr-2 h-5 w-5 text-primary" />Traffic Details Per Instance</CardTitle>
+              <CardDescription className="font-sans mt-1">Traffic statistics for each individual instance.</CardDescription>
             </CardHeader>
             <CardContent>
               {isMobile ? (
@@ -327,17 +326,17 @@ const TrafficPage: NextPage = () => {
                             className="items-center whitespace-nowrap text-xs font-sans flex-shrink-0"
                           >
                             {instance.type === 'server' ? <Server className="h-3 w-3 mr-1" /> : <Smartphone className="h-3 w-3 mr-1" />}
-                            {instance.type === 'server' ? '服务端' : '客户端'}
+                            {instance.type === 'server' ? 'Server' : 'Client'}
                           </Badge>
                        </div>
                        <div className="mt-2 pt-2 border-t flex justify-between items-center text-sm font-mono">
-                          <span className="text-muted-foreground">用量 (↓/↑):</span>
+                          <span className="text-muted-foreground">Usage (↓/↑):</span>
                           <span className="flex items-center space-x-1 whitespace-nowrap">
                             <ArrowDownCircle className="h-4 w-4 text-blue-500 flex-shrink-0" />
-                            <span title="接收">{formatBytes(instance.tcprx + instance.udprx)}</span>
+                            <span title="Received">{formatBytes(instance.tcprx + instance.udprx)}</span>
                             <span className="text-muted-foreground">/</span>
                             <ArrowUpCircle className="h-4 w-4 text-green-500 flex-shrink-0" />
-                            <span title="发送">{formatBytes(instance.tcptx + instance.udptx)}</span>
+                            <span title="Sent">{formatBytes(instance.tcptx + instance.udptx)}</span>
                            </span>
                        </div>
                     </Card>
@@ -348,10 +347,10 @@ const TrafficPage: NextPage = () => {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead className="font-sans min-w-[120px]">来源主控</TableHead>
-                      <TableHead className="font-sans min-w-[120px]">实例 ID</TableHead>
-                      <TableHead className="font-sans">类型</TableHead>
-                      <TableHead className="text-right font-sans min-w-[180px]">用量 (↓ 接收 / ↑ 发送)</TableHead>
+                      <TableHead className="font-sans min-w-[120px]">Source Control</TableHead>
+                      <TableHead className="font-sans min-w-[120px]">Instance ID</TableHead>
+                      <TableHead className="font-sans">Type</TableHead>
+                      <TableHead className="text-right font-sans min-w-[180px]">Usage (↓ Receive / ↑ Send)</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -365,16 +364,16 @@ const TrafficPage: NextPage = () => {
                             className="items-center whitespace-nowrap text-xs font-sans"
                           >
                             {instance.type === 'server' ? <Server className="h-3 w-3 mr-1" /> : <Smartphone className="h-3 w-3 mr-1" />}
-                            {instance.type === 'server' ? '服务端' : '客户端'}
+                            {instance.type === 'server' ? 'Server' : 'Client'}
                           </Badge>
                         </TableCell>
                          <TableCell className="text-right font-mono text-xs">
                            <span className="flex items-center justify-end space-x-1 whitespace-nowrap">
                             <ArrowDownCircle className="h-4 w-4 text-blue-500 flex-shrink-0" />
-                            <span title="接收">{formatBytes(instance.tcprx + instance.udprx)}</span>
+                            <span title="Received">{formatBytes(instance.tcprx + instance.udprx)}</span>
                             <span className="text-muted-foreground mx-2">/</span>
                             <ArrowUpCircle className="h-4 w-4 text-green-500 flex-shrink-0" />
-                            <span title="发送">{formatBytes(instance.tcptx + instance.udptx)}</span>
+                            <span title="Sent">{formatBytes(instance.tcptx + instance.udptx)}</span>
                            </span>
                         </TableCell>
                       </TableRow>

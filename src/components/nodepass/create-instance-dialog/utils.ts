@@ -1,4 +1,3 @@
-
 "use client";
 
 import type { CreateInstanceFormValues } from '@/zod-schemas/nodepass';
@@ -14,7 +13,7 @@ export function formatHostForUrl(host: string | null | undefined): string {
 }
 
 export interface BuildUrlParams {
-  instanceType: "客户端" | "服务端";
+  instanceType: "Client" | "Server";
   isSingleEndedForward?: boolean;
   tunnelKey?: string;
   tunnelAddress: string;
@@ -31,7 +30,7 @@ export function buildUrlFromFormValues(
   params: BuildUrlParams,
   masterConfigForInstance: NamedApiConfig | null
 ): string {
-  const schemeType = params.instanceType === "服务端" ? "server" : "client";
+  const schemeType = params.instanceType === "Server" ? "server" : "client";
   const tunnelAuthPart = params.tunnelKey && params.tunnelKey.trim() !== "" ? `${params.tunnelKey.trim()}@` : "";
   let url = `${schemeType}://${tunnelAuthPart}${params.tunnelAddress}/${params.targetAddress}`;
 
@@ -51,7 +50,7 @@ export function buildUrlFromFormValues(
 
   let effectiveTlsMode = params.tlsMode;
 
-  if (params.instanceType === "服务端") {
+  if (params.instanceType === "Server") {
     if (effectiveTlsMode === 'master' || !effectiveTlsMode) {
       effectiveTlsMode = (masterConfigForInstance?.masterDefaultTlsMode && masterConfigForInstance.masterDefaultTlsMode !== 'master')
                             ? masterConfigForInstance.masterDefaultTlsMode
@@ -66,7 +65,7 @@ export function buildUrlFromFormValues(
       if (params.keyPath && params.keyPath.trim() !== '') queryParams.append('key', params.keyPath.trim());
     }
 
-  } else if (params.instanceType === "客户端") {
+  } else if (params.instanceType === "Client") {
     if (params.isSingleEndedForward) {
       // No TLS params in URL for single-ended client's local listener
     } else { // Regular (tunnel) client
@@ -108,7 +107,7 @@ export function prepareClientUrlParams(
   onLogLocal: (message: string, type: 'INFO' | 'WARN' | 'ERROR') => void
 ): PrepareClientUrlParamsResult | null {
   if (!activeApiConfig) {
-    onLogLocal('当前客户端主控配置无效，无法准备客户端参数。', 'ERROR');
+    onLogLocal('The current client master configuration is invalid, unable to prepare client parameters.', 'ERROR');
     return null;
   }
 
@@ -124,16 +123,16 @@ export function prepareClientUrlParams(
     const remoteTargetAddress = values.targetAddress; // This is the remote service the client forwards to
 
     if (!remoteTargetAddress) {
-      onLogLocal("单端转发模式下，目标地址 (业务数据) 是必需的。", "ERROR");
+      onLogLocal("In single-ended forwarding mode, the target address (business data) is required.", "ERROR");
       return null;
     }
     if (!localListenAddress) {
-        onLogLocal("单端转发模式下，本地监听地址是必需的。", "ERROR");
+        onLogLocal("In single-ended forwarding mode, the local listening address is required.", "ERROR");
         return null;
     }
 
     clientParams = {
-      instanceType: "客户端",
+      instanceType: "Client",
       isSingleEndedForward: true,
       tunnelKey: values.tunnelKey,
       tunnelAddress: localListenAddress,
@@ -150,7 +149,7 @@ export function prepareClientUrlParams(
     const clientLocalTargetPortOrAddress = values.targetAddress; // Client's local listening port/address
 
     if (!connectToServerTunnel) {
-      onLogLocal("连接到现有服务端时，服务端隧道地址是必需的。", "ERROR");
+      onLogLocal("When connecting to an existing server, the server tunnel address is required.", "ERROR");
       return null;
     }
     
@@ -168,7 +167,7 @@ export function prepareClientUrlParams(
 
 
     clientParams = {
-      instanceType: "客户端",
+      instanceType: "Client",
       isSingleEndedForward: false,
       tunnelKey: values.tunnelKey,
       tunnelAddress: connectToServerTunnel, // S node's address
@@ -197,16 +196,16 @@ export function prepareServerUrlParams(
   const serverTargetAddress = values.targetAddress; // Where S node forwards traffic to
 
   if (!serverTargetAddress) {
-    onLogLocal("创建服务端时，目标地址 (业务数据) 是必需的。", "ERROR");
+    onLogLocal("When creating a server, the target address (business data) is required.", "ERROR");
     return null;
   }
   if (!serverTunnelAddress) {
-    onLogLocal("创建服务端时，隧道监听地址是必需的。", "ERROR");
+    onLogLocal("When creating a server, the tunnel listening address is required.", "ERROR");
     return null;
   }
 
   const serverParams: BuildUrlParams = {
-    instanceType: "服务端",
+    instanceType: "Server",
     tunnelKey: values.tunnelKey,
     tunnelAddress: serverTunnelAddress,
     targetAddress: serverTargetAddress,

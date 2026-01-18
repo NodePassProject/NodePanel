@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
@@ -56,7 +55,7 @@ export function useApiConfig() {
         setActiveConfigId(storedActiveConfigId);
       }
     } catch (error) {
-      console.warn("无法从 localStorage 加载主控配置列表:", error);
+      console.warn("Failed to load master configurations list from localStorage:", error);
     } finally {
       setIsLoading(false);
     }
@@ -68,7 +67,7 @@ export function useApiConfig() {
       localStorage.setItem(API_CONFIGS_LIST_STORAGE_KEY, JSON.stringify(cleanConfigs));
       setApiConfigsList(cleanConfigs);
     } catch (error) {
-      console.error("无法将主控配置列表保存到 localStorage:", error);
+      console.error("Failed to save master configurations list to localStorage:", error);
     }
   }, [getCleanConfig]);
 
@@ -81,7 +80,7 @@ export function useApiConfig() {
       }
       setActiveConfigId(id);
     } catch (error) {
-      console.error("无法将活动主控 ID 保存到 localStorage:", error);
+      console.error("Failed to save active master ID to localStorage:", error);
     }
   }, []);
 

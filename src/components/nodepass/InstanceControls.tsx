@@ -1,4 +1,3 @@
-
 "use client";
 
 import React from 'react';
@@ -28,7 +27,7 @@ export function InstanceControls({ instance, onAction, isLoading }: InstanceCont
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" size="icon" className="h-8 w-8" disabled={isLoading}>
           <MoreVertical className="h-4 w-4" />
-          <span className="sr-only">实例操作</span>
+          <span className="sr-only">Instance Actions</span>
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
@@ -37,21 +36,21 @@ export function InstanceControls({ instance, onAction, isLoading }: InstanceCont
           disabled={instance.status === 'running' || isLoading}
         >
           <Play className="mr-2 h-4 w-4" />
-          启动
+          Start
         </DropdownMenuItem>
         <DropdownMenuItem
           onClick={() => handleAction('stop')}
           disabled={instance.status === 'stopped' || isLoading}
         >
           <Square className="mr-2 h-4 w-4" />
-          停止
+          Stop
         </DropdownMenuItem>
         <DropdownMenuItem
           onClick={() => handleAction('restart')}
           disabled={isLoading}
         >
           <RotateCcw className="mr-2 h-4 w-4" />
-          重启
+          Restart
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

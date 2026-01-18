@@ -1,4 +1,3 @@
-
 import type { Instance as NodelessInstance, CreateInstanceRequest, UpdateInstanceRequest, MasterInfo } from '@/types/nodepass';
 
 // Re-export Instance to avoid direct dependency on types/nodepass elsewhere if not needed.
@@ -28,7 +27,7 @@ async function request<T>(
   } catch (networkError: any) {
     console.error(`Network error while requesting ${fullRequestUrl}:`, networkError);
     
-    let errorMessage = `网络请求失败 (${networkError.message || '未知错误'})。`;
+    let errorMessage = `Network request failed (${networkError.message || 'Unknown error'}).`;
     const lowerCaseErrorMessage = networkError.message?.toLowerCase() || "";
 
     if (lowerCaseErrorMessage.includes('failed to fetch')) {
@@ -38,10 +37,10 @@ async function request<T>(
         const isFrontendSecure = typeof window !== 'undefined' && window.location.protocol === 'https:';
 
         if (targetUrl.protocol === 'http:' && isFrontendSecure) {
-          errorMessage = `检测到混合内容请求 (HTTPS 页面请求 HTTP 资源)。您的浏览器可能已阻止此请求。请参考应用内帮助文档中的“HTTP 主控连接问题 (混合内容)”部分进行浏览器设置。`;
+          errorMessage = `Detected mixed content request (HTTPS page requesting HTTP resource). Your browser may have blocked this request. Please refer to the "HTTP Master Connection Issues (Mixed Content)" section in the in-app help documentation for browser settings.`;
           specificErrorHandled = true;
         } else if (targetUrl.protocol === 'https:') {
-          errorMessage = `连接到 ${fullRequestUrl} (HTTPS) 失败。如果目标 API 使用自签名 SSL 证书，请尝试在浏览器新标签页中直接访问此 API 地址并接受安全警告。详情请参考应用内帮助文档中的“HTTPS (自签名证书) 主控连接问题”部分。若非证书问题，请检查 CORS 配置、网络连接或服务器状态。`;
+          errorMessage = `Failed to connect to ${fullRequestUrl} (HTTPS). If the target API uses a self-signed SSL certificate, please try accessing this API address directly in a new browser tab and accept the security warning. For details, please refer to the "HTTPS (Self-signed Certificate) Master Connection Issues" section in the in-app help documentation. If not a certificate issue, please check CORS configuration, network connection, or server status.`;
           specificErrorHandled = true;
         }
       } catch (urlParseError) {
@@ -50,18 +49,18 @@ async function request<T>(
       }
 
       if (!specificErrorHandled) {
-        errorMessage = `网络请求至 ${fullRequestUrl} 失败。这通常是由于目标服务器的 CORS 策略阻止了请求 (缺少 Access-Control-Allow-Origin 头部)、网络连接问题或服务器未运行。请检查网络连接和目标服务器的 CORS 配置。`;
+        errorMessage = `Network request to ${fullRequestUrl} failed. This is usually caused by the target server's CORS policy blocking the request (missing Access-Control-Allow-Origin header), network connection issues, or the server not running. Please check your network connection and the target server's CORS configuration.`;
         try {
             const urlObject = new URL(fullRequestUrl);
             const ipv4Regex = /^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$/;
             if (ipv4Regex.test(urlObject.hostname)) {
-                errorMessage += ` 对于IPv4地址 (${urlObject.hostname})，请额外确认NodePass服务已在该IPv4地址和端口 (${urlObject.port || '默认'}) 上监听。确保服务监听在 '0.0.0.0:${urlObject.port || '默认端口'}' (所有网络接口) 或具体的 '${urlObject.hostname}:${urlObject.port || '默认端口'}'。`;
+                errorMessage += ` For IPv4 address (${urlObject.hostname}), please additionally confirm that the NodePass service is listening on that IPv4 address and port (${urlObject.port || 'default'}). Ensure the service listens on '0.0.0.0:${urlObject.port || 'default port'}' (all network interfaces) or specifically on '${urlObject.hostname}:${urlObject.port || 'default port'}'.`;
             }
         } catch (e) { /* ignore parsing error if fullRequestUrl is malformed */ }
       }
     } else {
       // Other network errors not "Failed to fetch"
-      errorMessage = `网络请求至 ${fullRequestUrl} 发生错误: ${networkError.message || '未知网络错误'}。请检查您的网络连接和目标服务器状态。`;
+      errorMessage = `Network request to ${fullRequestUrl} encountered an error: ${networkError.message || 'Unknown network error'}. Please check your network connection and the target server status.`;
     }
 
     const error = new Error(errorMessage);
@@ -76,7 +75,7 @@ async function request<T>(
     } catch (e) {
       errorBody = { message: response.statusText };
     }
-    const error = new Error(`API 错误: ${response.status} ${errorBody?.message || response.statusText}`);
+    const error = new Error(`API error: ${response.status} ${errorBody?.message || response.statusText}`);
     (error as any).status = response.status; 
     (error as any).body = errorBody; 
     throw error;
@@ -91,43 +90,43 @@ async function request<T>(
 
 const checkApiRootUrl = (apiRootUrl: string | null | undefined, operation: string): void => {
   if (!apiRootUrl || typeof apiRootUrl !== 'string' || apiRootUrl.trim() === '') {
-    throw new Error(`无法 ${operation}: API 根地址 (apiRootUrl) 未配置或无效。`);
+    throw new Error(`Cannot ${operation}: API root URL (apiRootUrl) is not configured or invalid.`);
   }
 };
 
 export const nodePassApi = {
   getInstances: (apiRootUrl: string, token: string) => {
-    checkApiRootUrl(apiRootUrl, '获取实例列表');
+    checkApiRootUrl(apiRootUrl, 'fetch instance list');
     return request<Instance[]>(`${apiRootUrl}/instances`, {}, token);
   },
   
   createInstance: (data: CreateInstanceRequest, apiRootUrl: string, token: string) => {
-    checkApiRootUrl(apiRootUrl, '创建实例');
+    checkApiRootUrl(apiRootUrl, 'create instance');
     return request<Instance>(`${apiRootUrl}/instances`, { method: 'POST', body: JSON.stringify(data) }, token);
   },
   
   getInstance: (id: string, apiRootUrl: string, token: string) => {
-    checkApiRootUrl(apiRootUrl, `获取实例 ${id}`);
+    checkApiRootUrl(apiRootUrl, `fetch instance ${id}`);
     return request<Instance>(`${apiRootUrl}/instances/${id}`, {}, token);
   },
   
   updateInstance: (id: string, data: UpdateInstanceRequest, apiRootUrl: string, token: string) => {
-    checkApiRootUrl(apiRootUrl, `更新实例 ${id}`);
+    checkApiRootUrl(apiRootUrl, `update instance ${id}`);
     return request<Instance>(`${apiRootUrl}/instances/${id}`, { method: 'PATCH', body: JSON.stringify(data) }, token);
   },
   
   deleteInstance: (id: string, apiRootUrl: string, token: string) => {
-    checkApiRootUrl(apiRootUrl, `删除实例 ${id}`);
+    checkApiRootUrl(apiRootUrl, `delete instance ${id}`);
     return request<void>(`${apiRootUrl}/instances/${id}`, { method: 'DELETE' }, token);
   },
 
   getMasterInfo: (apiRootUrl: string, token: string) => {
-    checkApiRootUrl(apiRootUrl, '获取主控信息');
+    checkApiRootUrl(apiRootUrl, 'fetch master info');
     return request<MasterInfo>(`${apiRootUrl}/info`, {}, token);
   },
 };
 
 export const getEventsUrl = (apiRootUrl: string | null): string => {
-  if (!apiRootUrl) throw new Error("API 根地址 (apiRootUrl) 未配置，无法获取事件 URL。");
+  if (!apiRootUrl) throw new Error("API root URL (apiRootUrl) is not configured, cannot get events URL.");
   return `${apiRootUrl}/events`;
 };

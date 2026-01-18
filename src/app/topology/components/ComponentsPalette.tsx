@@ -1,4 +1,3 @@
-
 "use client";
 
 import React from 'react';
@@ -16,10 +15,10 @@ interface ComponentItem {
 }
 
 const componentItems: ComponentItem[] = [
-  { type: 'U', label: '用户入口', icon: UserIcon, colorClass: 'text-purple-600', description: '用户或流量发起方' },
-  { type: 'C', label: '客户端', icon: ClientIcon, colorClass: 'text-green-600', description: 'NodePass 客户端实例' },
-  { type: 'S', label: '服务端', icon: Server, colorClass: 'text-primary', description: 'NodePass 服务端实例' },
-  { type: 'T', label: '目标服务', icon: Globe, colorClass: 'text-orange-500', description: '最终流量目标设备/服务' },
+  { type: 'U', label: 'User Entry', icon: UserIcon, colorClass: 'text-purple-600', description: 'User or traffic initiator' },
+  { type: 'C', label: 'Client', icon: ClientIcon, colorClass: 'text-green-600', description: 'NodePass client instance' },
+  { type: 'S', label: 'Server', icon: Server, colorClass: 'text-primary', description: 'NodePass server instance' },
+  { type: 'T', label: 'Target Service', icon: Globe, colorClass: 'text-orange-500', description: 'Final traffic target device/service' },
 ];
 
 interface ComponentsPaletteProps {
@@ -49,7 +48,7 @@ export function ComponentsPalette({ isMobileClickToAdd, onItemClick }: Component
           onDragStart={!isMobileClickToAdd ? (event) => handleDragStart(event, item.type) : undefined}
           onClick={isMobileClickToAdd ? () => handleClick(item.type) : undefined}
           className={`flex items-center p-2 border rounded-md bg-card text-card-foreground hover:bg-muted/50 transition-colors text-xs font-sans shadow-sm ${isMobileClickToAdd ? 'cursor-pointer' : 'cursor-grab active:cursor-grabbing'}`}
-          title={isMobileClickToAdd ? `点按添加 ${item.label} 到画布` : `拖拽 ${item.label} 到画布`}
+          title={isMobileClickToAdd ? `Tap to add ${item.label} to canvas` : `Drag ${item.label} to canvas`}
         >
           <item.icon className={`mr-2 h-4 w-4 ${item.colorClass} flex-shrink-0`} />
           <div className="truncate">

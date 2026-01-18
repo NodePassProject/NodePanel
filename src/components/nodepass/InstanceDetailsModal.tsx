@@ -1,4 +1,3 @@
-
 "use client";
 
 import React,  { useState, useEffect, useRef, useCallback } from 'react';
@@ -31,8 +30,8 @@ interface InstanceDetailsModalProps {
 const MAX_LOG_LINES = 200;
 const RECONNECT_DELAY = 5000;
 
-const INITIAL_MESSAGE_TEXT = "正在初始化实例日志流...";
-const CONNECTED_MESSAGE_TEXT = "SSE事件流已连接。";
+const INITIAL_MESSAGE_TEXT = "Initializing instance log stream...";
+const CONNECTED_MESSAGE_TEXT = "SSE event stream connected.";
 
 interface ParsedLogEntry {
   id: string;
@@ -112,8 +111,8 @@ function parseAndFormatLogLine(
         const udpTx = trafficData['UDP_TX'] || 0;
 
         const formattedMessage = 
-`TCP 流量: ${formatBytes(tcpRx)} / ${formatBytes(tcpTx)}
-UDP 流量: ${formatBytes(udpRx)} / ${formatBytes(udpTx)}`;
+`TCP Traffic: ${formatBytes(tcpRx)} / ${formatBytes(tcpTx)}
+UDP Traffic: ${formatBytes(udpRx)} / ${formatBytes(udpTx)}`;
         
         return { 
           id: `${matchedFullTimestamp}-${index}-traffic-${Math.random()}`, 
@@ -180,7 +179,7 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
     }
     if(instance.id === '********') {
       setInstanceLogs([]); 
-      addLogEntry(parseAndFormatLogLine("此为特殊API Key实例，不展示实时日志。", logCounterRef.current++, 'INFO'));
+      addLogEntry(parseAndFormatLogLine("This is a special API Key instance, real-time logs are not displayed.", logCounterRef.current++, 'INFO'));
       return;
     }
 
@@ -197,7 +196,7 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
 
     const eventsUrl = getEventsUrl(apiRoot);
     if (!eventsUrl) {
-        addLogEntry(parseAndFormatLogLine(`事件流URL无效，无法连接。 Root: ${apiRoot}`, logCounterRef.current++, 'ERROR'));
+        addLogEntry(parseAndFormatLogLine(`Event stream URL invalid, unable to connect. Root: ${apiRoot}`, logCounterRef.current++, 'ERROR'));
         return;
     }
 
@@ -244,7 +243,7 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
 
         if (done) {
           if (!signal.aborted) {
-            addLogEntry(parseAndFormatLogLine(`事件流已关闭，${RECONNECT_DELAY / 1000}秒后尝试重连...`, logCounterRef.current++, 'INFO'));
+            addLogEntry(parseAndFormatLogLine(`Event stream closed, retrying in ${RECONNECT_DELAY / 1000} seconds...`, logCounterRef.current++, 'INFO'));
             if (!signal.aborted) reconnectTimeoutRef.current = setTimeout(connectToSse, RECONNECT_DELAY);
           }
           break;
@@ -297,11 +296,11 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
                   if (typeof rawLogData === 'string') {
                     addLogEntry(parseAndFormatLogLine(rawLogData, logCounterRef.current++)); 
                   } else {
-                    addLogEntry(parseAndFormatLogLine(`收到实例 ${instance.id} 的日志，但'logs'字段非字符串。类型: ${typeof rawLogData}`, logCounterRef.current++, 'WARN'));
+                    addLogEntry(parseAndFormatLogLine(`Received log for instance ${instance.id}, but 'logs' field is not a string. Type: ${typeof rawLogData}`, logCounterRef.current++, 'WARN'));
                   }
                 }
               } else if (jsonData.type === 'shutdown') {
-                addLogEntry(parseAndFormatLogLine(`主控服务已关闭事件流。连接将不会自动重试。`, logCounterRef.current++, 'INFO'));
+                addLogEntry(parseAndFormatLogLine(`Main control service has shut down the event stream. Connection will not retry automatically.`, logCounterRef.current++, 'INFO'));
                 if (abortControllerRef.current && !abortControllerRef.current.signal.aborted) {
                     abortControllerRef.current.abort("Server shutdown event received");
                 }
@@ -320,29 +319,29 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
                 if (currentInstanceDataInEvent) {
                     const statusFromEvent = currentInstanceDataInEvent.status;
                     if (statusFromEvent !== instance.status) { // Only log if status changed
-                         addLogEntry(parseAndFormatLogLine(`收到本实例的初始状态数据 (ID: ${instance.id}, 状态: ${statusFromEvent})。`, logCounterRef.current++, 'INFO'));
+                         addLogEntry(parseAndFormatLogLine(`Received initial state data for this instance (ID: ${instance.id}, Status: ${statusFromEvent}).`, logCounterRef.current++, 'INFO'));
                     }
                 }
               } else if (jsonData.type === 'create' && eventInstanceId === instance.id) {
-                  addLogEntry(parseAndFormatLogLine(`本实例已创建 (ID: ${instance.id})。`, logCounterRef.current++, 'INFO'));
+                  addLogEntry(parseAndFormatLogLine(`This instance has been created (ID: ${instance.id}).`, logCounterRef.current++, 'INFO'));
               } else if (jsonData.type === 'update' && eventInstanceId === instance.id) {
                   if (eventInstanceStatus && eventInstanceStatus !== instance.status) { // Only log if status changed
-                    addLogEntry(parseAndFormatLogLine(`本实例已更新 (ID: ${instance.id}, 新状态: ${eventInstanceStatus})。`, logCounterRef.current++, 'INFO'));
+                    addLogEntry(parseAndFormatLogLine(`This instance has been updated (ID: ${instance.id}, New status: ${eventInstanceStatus}).`, logCounterRef.current++, 'INFO'));
                   }
               } else if (jsonData.type === 'delete' && eventInstanceId === instance.id) {
-                  addLogEntry(parseAndFormatLogLine(`本实例已删除 (ID: ${instance.id})。`, logCounterRef.current++, 'INFO'));
+                  addLogEntry(parseAndFormatLogLine(`This instance has been deleted (ID: ${instance.id}).`, logCounterRef.current++, 'INFO'));
               } else if (jsonData.type === 'error' && eventInstanceId === instance.id) { 
-                  const errorMessage = jsonData.error || jsonData.message || '未知实例错误';
-                  addLogEntry(parseAndFormatLogLine(`实例错误: ${errorMessage} (ID: ${instance.id})`, logCounterRef.current++, 'ERROR'));
+                  const errorMessage = jsonData.error || jsonData.message || 'Unknown instance error';
+                  addLogEntry(parseAndFormatLogLine(`Instance error: ${errorMessage} (ID: ${instance.id})`, logCounterRef.current++, 'ERROR'));
               }
 
             } catch (e: any) {
                  if (instance.id !== '********') { 
-                    addLogEntry(parseAndFormatLogLine(`解析 'instance' 事件数据错误: ${e.message}. Data snippet: ${eventData.substring(0,100)}...`, logCounterRef.current++, 'ERROR'));
+                    addLogEntry(parseAndFormatLogLine(`Error parsing 'instance' event data: ${e.message}. Data snippet: ${eventData.substring(0,100)}...`, logCounterRef.current++, 'ERROR'));
                  }
             }
           } else if (eventData && instance.id !== '********') { 
-             addLogEntry(parseAndFormatLogLine(`收到事件 "${eventName}" (预期 "instance"). Data: ${eventData.substring(0, 50)}...`, logCounterRef.current++, 'WARN'));
+             addLogEntry(parseAndFormatLogLine(`Received event "${eventName}" (expected "instance"). Data: ${eventData.substring(0, 50)}...`, logCounterRef.current++, 'WARN'));
           }
         }
       }
@@ -350,12 +349,12 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
       if (signal.aborted && error.name === 'AbortError') {
         // This is an expected abort
       } else {
-        let displayError = typeof error.message === 'string' ? error.message : '未知连接错误。';
+        let displayError = typeof error.message === 'string' ? error.message : 'Unknown connection error.';
         if (typeof error.message === 'string' && (error.message.toLowerCase().includes('failed to fetch') || error.message.toLowerCase().includes('networkerror'))) {
-            displayError = '网络错误。请检查连接或服务器CORS设置。';
+            displayError = 'Network error. Please check connection or server CORS settings.';
         }
         if (instance.id !== '********') { 
-          addLogEntry(parseAndFormatLogLine(`事件流连接错误: ${displayError} ${RECONNECT_DELAY / 1000}秒后尝试重连...`, logCounterRef.current++, 'ERROR'));
+          addLogEntry(parseAndFormatLogLine(`Event stream connection error: ${displayError} Retrying in ${RECONNECT_DELAY / 1000} seconds...`, logCounterRef.current++, 'ERROR'));
           if (!signal.aborted) {
             reconnectTimeoutRef.current = setTimeout(connectToSse, RECONNECT_DELAY);
           }
@@ -406,15 +405,15 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
 
   const handleCopyToClipboard = async (textToCopy: string, entity: string) => {
     if (!navigator.clipboard) {
-      toast({ title: '复制失败', description: '浏览器不支持剪贴板。', variant: 'destructive' });
+      toast({ title: 'Copy failed', description: 'Browser does not support clipboard.', variant: 'destructive' });
       return;
     }
     try {
       await navigator.clipboard.writeText(textToCopy);
-      toast({ title: '复制成功', description: `${entity} 已复制到剪贴板。` });
+      toast({ title: 'Copy successful', description: `${entity} copied to clipboard.` });
     } catch (err) {
-      toast({ title: '复制失败', description: `无法复制 ${entity}。`, variant: 'destructive' });
-      console.error('复制失败: ', err);
+      toast({ title: 'Copy failed', description: `Unable to copy ${entity}.`, variant: 'destructive' });
+      console.error('Copy failed: ', err);
     }
   };
 
@@ -429,7 +428,7 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
       value: (
         <span
           className="font-mono text-xs cursor-pointer hover:text-primary transition-colors duration-150 break-all"
-          title={`点击复制: ${instance.id}`}
+          title={`Click to copy: ${instance.id}`}
           onClick={() => handleCopyToClipboard(instance.id, "ID")}
         >
           {instance.id}
@@ -438,14 +437,14 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
       icon: <Fingerprint className="h-4 w-4 text-muted-foreground" />
     },
     ...(!isApiKeyInstance ? [{
-      label: "别名",
+      label: "Alias",
       value: (
-        isLoadingAliases ? <span className="text-xs">加载中...</span> :
+        isLoadingAliases ? <span className="text-xs">Loading...</span> :
         alias ? (
           <span
             className="font-sans text-xs cursor-pointer hover:text-primary transition-colors duration-150"
-            title={`点击复制: ${alias}`}
-            onClick={() => handleCopyToClipboard(alias, "别名")}
+            title={`Click to copy: ${alias}`}
+            onClick={() => handleCopyToClipboard(alias, "Alias")}
           >
             {alias}
           </span>
@@ -454,11 +453,11 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
       icon: <Tag className="h-4 w-4 text-muted-foreground" />
     }] : []),
     {
-      label: "类型",
+      label: "Type",
       value: isApiKeyInstance ? (
         <span className="flex items-center text-xs font-sans">
           <KeyRound className="h-4 w-4 mr-1.5 text-yellow-500" />
-          API 密钥
+          API Key
         </span>
       ) : (
         <Badge
@@ -466,29 +465,29 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
           className="items-center whitespace-nowrap text-xs font-sans"
         >
           {instance.type === 'server' ? <ServerIcon size={12} className="mr-1" /> : <SmartphoneIcon size={12} className="mr-1" />}
-          {instance.type === 'server' ? '服务端' : '客户端'}
+          {instance.type === 'server' ? 'Server' : 'Client'}
         </Badge>
       ),
       icon: isApiKeyInstance ? <KeyRound className="h-4 w-4 text-muted-foreground" /> : (instance.type === 'server' ? <ServerIcon className="h-4 w-4 text-muted-foreground" /> : <SmartphoneIcon className="h-4 w-4 text-muted-foreground" />)
     },
     {
-      label: "状态",
+      label: "Status",
       value: isApiKeyInstance ? (
          <Badge variant="outline" className="border-yellow-500 text-yellow-600 whitespace-nowrap font-sans text-xs">
             <KeyRound className="mr-1 h-3.5 w-3.5" />
-            可用
+            Available
           </Badge>
       ) : <InstanceStatusBadge status={instance.status} />,
       icon: <Cable className="h-4 w-4 text-muted-foreground" />
     },
     {
-      label: isApiKeyInstance ? "API 密钥" : "URL",
+      label: isApiKeyInstance ? "API Key" : "URL",
       value: (
         <div className="flex items-center justify-between w-full">
           <span
             className={`font-mono text-xs break-all ${isApiKeyInstance ? 'flex-grow' : ''} cursor-pointer hover:text-primary transition-colors duration-150`}
-            title={`点击复制: ${instance.url}`}
-            onClick={() => handleCopyToClipboard(instance.url, isApiKeyInstance ? 'API 密钥' : 'URL')}
+            title={`Click to copy: ${instance.url}`}
+            onClick={() => handleCopyToClipboard(instance.url, isApiKeyInstance ? 'API Key' : 'URL')}
           >
             {isApiKeyInstance ? (showApiKey ? instance.url : '••••••••••••••••••••••••••••••••') : instance.url}
           </span>
@@ -496,7 +495,7 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
             <button
               className="p-1 ml-2 rounded-md hover:bg-muted flex-shrink-0"
               onClick={(e) => { e.stopPropagation(); setShowApiKey(!showApiKey);}}
-              aria-label={showApiKey ? "隐藏密钥" : "显示密钥"}
+              aria-label={showApiKey ? "Hide key" : "Show key"}
             >
               {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
             </button>
@@ -508,7 +507,7 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
     },
     ...(!isApiKeyInstance ? [
       {
-        label: "TCP 流量 (接收/发送)",
+        label: "TCP Traffic (Rx/Tx)",
         value: (
           <span className="font-mono text-xs">
             <ArrowDownCircle className="inline-block h-3.5 w-3.5 mr-1 text-blue-500" />{formatBytes(instance.tcprx)}
@@ -519,7 +518,7 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
         icon: <Cable className="h-4 w-4 text-muted-foreground" />
       },
       {
-        label: "UDP 流量 (接收/发送)",
+        label: "UDP Traffic (Rx/Tx)",
         value: (
           <span className="font-mono text-xs">
             <ArrowDownCircle className="inline-block h-3.5 w-3.5 mr-1 text-blue-500" />{formatBytes(instance.udprx)}
@@ -573,15 +572,15 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg max-h-[85vh] flex flex-col">
         <DialogHeader>
-          <DialogTitle className="font-title">实例详情</DialogTitle>
+          <DialogTitle className="font-title">Instance Details</DialogTitle>
           <DialogDescription className="font-sans">
-            实例 <span
+            Instance <span
                     className="font-semibold font-mono cursor-pointer hover:text-primary transition-colors duration-150 break-all"
-                    title={`点击复制: ${instance.id}`}
+                    title={`Click to copy: ${instance.id}`}
                     onClick={() => handleCopyToClipboard(instance.id, "ID")}
                   >
                     {instance.id}
-                  </span> 详细信息。
+                  </span> detailed information.
           </DialogDescription>
         </DialogHeader>
         <div className="mt-4 space-y-3 overflow-y-auto pr-1">
@@ -600,10 +599,10 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
           <div className="mt-4 pt-4 border-t border-border/50 flex-shrink-0 flex flex-col min-h-0">
             <h3 className="text-md font-semibold mb-2 flex items-center font-title">
               <ScrollText size={18} className="mr-2 text-primary" />
-              实例日志
+              Instance Logs
             </h3>
             <ScrollArea className="h-48 w-full rounded-md border border-border/30 p-3 bg-muted/20 flex-grow">
-              {instanceLogs.length === 0 && <p className="text-xs text-muted-foreground text-center py-2 font-sans">等待日志...</p>}
+              {instanceLogs.length === 0 && <p className="text-xs text-muted-foreground text-center py-2 font-sans">Waiting for logs...</p>}
               {instanceLogs.map((log) => (
                 <div key={log.id} className="flex items-start text-xs font-mono py-0.5 whitespace-pre-wrap break-words">
                   <TooltipProvider delayDuration={100}>
@@ -630,5 +629,3 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
     </Dialog>
   );
 }
-
-    

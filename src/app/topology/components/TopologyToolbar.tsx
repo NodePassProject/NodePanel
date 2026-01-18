@@ -1,4 +1,3 @@
-
 "use client";
 
 import React from 'react';
@@ -33,24 +32,24 @@ export function TopologyToolbar({
       {isMobile && onToggleMobilePalette && (
         <Button onClick={onToggleMobilePalette} size="sm" variant="outline" className="font-sans">
           <PanelLeft className="mr-2 h-4 w-4" />
-          组件面板
+          Component Panel
         </Button>
       )}
       <Button onClick={onRefreshAllInstanceCounts} size="sm" variant="outline" className="font-sans" disabled={isSubmitting || isRefreshingCounts}>
         <RefreshCw className={`mr-2 h-4 w-4 ${isRefreshingCounts ? 'animate-spin' : ''}`} />
-        {isRefreshingCounts ? "刷新中..." : "刷新计数"}
+        {isRefreshingCounts ? "Refreshing..." : "Refresh Counts"}
       </Button>
       <Button onClick={onCenterView} size="sm" variant="outline" className="font-sans" disabled={isSubmitting}>
         <LocateFixed className="mr-2 h-4 w-4" />
-        居中
+        Center
       </Button>
       <Button onClick={onSubmitTopology} size="sm" variant="default" className="font-sans" disabled={!canSubmit || isSubmitting}>
         <Send className="mr-2 h-4 w-4" />
-        {isSubmitting ? "提交中..." : "提交"}
+        {isSubmitting ? "Submitting..." : "Submit"}
       </Button>
       <Button onClick={onClearCanvas} size="sm" variant="destructive" className="font-sans" disabled={isSubmitting}>
         <Trash2 className="mr-2 h-4 w-4" />
-        清空
+        Clear
       </Button>
     </div>
   );

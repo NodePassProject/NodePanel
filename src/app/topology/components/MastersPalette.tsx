@@ -1,4 +1,3 @@
-
 "use client";
 
 import React from 'react';
@@ -39,7 +38,7 @@ const MasterPaletteItem: React.FC<MasterPaletteItemProps> = ({ config, isMobileC
     refetchOnWindowFocus: false,
     onError: (err) => {
         toast({
-            title: `获取主控 ${config.name} 实例计数失败`,
+            title: `Failed to get instance count for master ${config.name}`,
             description: err.message,
             variant: "destructive"
         })
@@ -61,9 +60,9 @@ const MasterPaletteItem: React.FC<MasterPaletteItemProps> = ({ config, isMobileC
   const countsDisplay = isLoadingInstances
     ? <Loader2 className="h-3 w-3 animate-spin ml-1" />
     : error
-    ? <RefreshCw className="h-3 w-3 ml-1 text-destructive cursor-pointer" onClick={(e) => { e.stopPropagation(); refetch(); }} title="点击重试计数"/>
+    ? <RefreshCw className="h-3 w-3 ml-1 text-destructive cursor-pointer" onClick={(e) => { e.stopPropagation(); refetch(); }} title="Click to retry count"/>
     : instanceCounts
-    ? `(${instanceCounts.totalInstanceCount} 个实例)` 
+    ? `(${instanceCounts.totalInstanceCount} instances)` 
     : '';
 
 
@@ -73,7 +72,7 @@ const MasterPaletteItem: React.FC<MasterPaletteItemProps> = ({ config, isMobileC
       onDragStart={!isMobileClickToAdd ? (event) => handleDragStart(event, config) : undefined}
       onClick={isMobileClickToAdd ? () => handleClick(config) : undefined}
       className={`group flex items-center justify-between p-2 border rounded-md bg-card text-card-foreground hover:bg-muted/50 transition-colors text-xs font-sans shadow-sm ${isMobileClickToAdd ? 'cursor-pointer' : 'cursor-grab active:cursor-grabbing'}`}
-      title={isMobileClickToAdd ? `点按添加主控 "${config.name}" 到画布` :`拖拽主控 "${config.name}" 到画布`}
+      title={isMobileClickToAdd ? `Tap to add master "${config.name}" to the canvas` :`Drag master "${config.name}" to the canvas`}
     >
       <div className="flex items-center truncate">
         <Cog className="mr-2 h-4 w-4 text-primary flex-shrink-0" />
@@ -101,7 +100,7 @@ export function MastersPalette({ isMobileClickToAdd, onItemClick }: MastersPalet
           ))}
         </div>
       ) : apiConfigsList.length === 0 ? (
-        <p className="text-xs text-muted-foreground font-sans text-center">未配置任何主控。</p>
+        <p className="text-xs text-muted-foreground font-sans text-center">No masters configured.</p>
       ) : (
         <div className="space-y-2">
           {apiConfigsList.map((config) => (

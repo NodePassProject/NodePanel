@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect, useCallback } from 'react';
@@ -25,7 +24,7 @@ export function useInstanceAliases() {
         setAliases({}); // Initialize to empty object if nothing is in storage
       }
     } catch (error) {
-      console.warn("无法从 localStorage 加载实例别名:", error);
+      console.warn("Failed to load instance aliases from localStorage:", error);
       setAliases({}); // Fallback to empty object on error
     } finally {
       setIsLoading(false); // Set loading to false after attempting to load
@@ -73,7 +72,7 @@ export function useInstanceAliases() {
         setAliases(updatedAliases);
       }
     } catch (error) {
-      console.error("无法将实例别名保存到 localStorage:", error);
+      console.error("Failed to save instance aliases to localStorage:", error);
     }
   }, [aliases]); // Include aliases in dependency array for comparison
 
@@ -113,4 +112,3 @@ export function useInstanceAliases() {
     getAllAliases,
   };
 }
-    
