@@ -138,12 +138,13 @@ export default function HomePage() {
         addPageLog(`Master control configurations import completed: ${importSummary}`, 'INFO');
 
         if (firstNewlyImportedConfig && !currentActiveConfigBeforeImport) {
-            setActiveApiConfigId(firstNewlyImportedConfig.id);
+            const config = firstNewlyImportedConfig as NamedApiConfig;
+            setActiveApiConfigId(config.id);
              toast({
                 title: 'Master Control Activated',
-                description: `“${firstNewlyImportedConfig.name}” has been automatically activated.`,
+                description: `"${config.name}" has been automatically activated.`,
             });
-            addPageLog(`Master control "${firstNewlyImportedConfig.name}" has been automatically activated.`, 'INFO');
+            addPageLog(`Master control "${config.name}" has been automatically activated.`, 'INFO');
         }
 
       } catch (error: any) {

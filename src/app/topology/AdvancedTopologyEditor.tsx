@@ -231,7 +231,7 @@ export function AdvancedTopologyEditor() {
                 if (newClientTunnelAddress && newClientTunnelAddress.trim() !== "") {
                     sourceInfo = { serverTunnelAddress: newClientTunnelAddress };
                 } else {
-                    toast({ title: 'Unable to determine tunnel address', description: 'Failed to automatically calculate the tunnel address of the source S node.', variant: "warning" });
+                    toast({ title: 'Unable to determine tunnel address', description: 'Failed to automatically calculate the tunnel address of the source S node.', variant: "destructive" });
                 }
             }
         } else {
@@ -248,7 +248,7 @@ export function AdvancedTopologyEditor() {
                     if (newClientTunnelAddress && newClientTunnelAddress.trim() !== "") {
                         sourceInfo = { serverTunnelAddress: newClientTunnelAddress };
                     } else {
-                         toast({ title: 'Unable to determine tunnel address', description: 'Failed to automatically calculate the tunnel address of the target S node.', variant: "warning" });
+                         toast({ title: 'Unable to determine tunnel address', description: 'Failed to automatically calculate the tunnel address of the target S node.', variant: "destructive" });
                     }
                  }
             }
@@ -593,7 +593,7 @@ export function AdvancedTopologyEditor() {
                     }
                     return n;
                 });
-                toast({ title: "Warning: Unable to auto-configure cross-master client (C) address", description: "Failed to compute a valid server tunnel address. Please check the source S node and its master configuration. Client (C) is set to tunnel mode, please manually configure its tunnel address.", variant: "warning" });
+                toast({ title: "Warning: Unable to auto-configure cross-master client (C) address", description: "Failed to compute a valid server tunnel address. Please check the source S node and its master configuration. Client (C) is set to tunnel mode, please manually configure its tunnel address.", variant: "destructive" });
             }
         }
       } else if ((sourceNode.data.role === 'S' || sourceNode.data.role === 'C') && targetNode.data.role === 'T') {
@@ -908,9 +908,9 @@ export function AdvancedTopologyEditor() {
     const instancesToCreate: InstanceUrlConfigWithName[] = [];
     const allCurrentNodes = getNodes();
     const allCurrentEdges = getEdges();
-    const localOnLog = (message: string, type: 'INFO' | 'WARN' | 'ERROR') => {
+    const localOnLog = (message: string, type: 'INFO' | 'WARNING' | 'ERROR') => {
       if (type === 'ERROR') toast({ title: "Configuration error", description: message, variant: "destructive" });
-      if (type === 'WARN') toast({ title: "Configuration warning", description: message, variant: "warning" });
+      if (type === 'WARNING') toast({ title: "Configuration warning", description: message, variant: "destructive" });
     };
 
     for (const node of allCurrentNodes) {
@@ -1162,7 +1162,7 @@ export function AdvancedTopologyEditor() {
                                 };
                                 toast({ title: `Cross-master client (C) ${clientNode.data.label} address auto-updated.` });
                             } else if (!newClientTunnelAddr || newClientTunnelAddr.trim() === "") {
-                                toast({ title: `Warning: Could not recalculate tunnel address for client (C) ${clientNode.data.label} after server (S) update.`, variant: "warning" });
+                                toast({ title: `Warning: Could not recalculate tunnel address for client (C) ${clientNode.data.label} after server (S) update.`, variant: "destructive" });
                             }
                         }
                     }
@@ -1196,7 +1196,7 @@ export function AdvancedTopologyEditor() {
                                 };
                                 toast({ title: `Cross-master client (C) ${clientNode.data.label} address auto-updated.` });
                             } else if (!newClientTunnelAddr || newClientTunnelAddr.trim() === "") {
-                                toast({ title: `Warning: Could not recalculate tunnel address for client (C) ${clientNode.data.label} after server (S) update.`, variant: "warning" });
+                                toast({ title: `Warning: Could not recalculate tunnel address for client (C) ${clientNode.data.label} after server (S) update.`, variant: "destructive" });
                             }
                         }
                     }
@@ -1271,7 +1271,7 @@ export function AdvancedTopologyEditor() {
     itemData?: NamedApiConfig
   ) => {
     if (!reactFlowWrapperRef.current) {
-      toast({ title: "Unable to add node", description: "Editor not fully loaded.", variant: "warning" });
+      toast({ title: "Unable to add node", description: "Editor not fully loaded.", variant: "destructive" });
       return;
     }
     const reactFlowBounds = reactFlowWrapperRef.current.getBoundingClientRect();

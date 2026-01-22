@@ -275,12 +275,13 @@ export function ConnectionsManager({ onLog }: ConnectionsManagerProps) {
         onLog?.(`Master config import completed: ${importSummary}`, 'INFO');
 
         if (firstNewlyImportedConfig && !currentActiveConfigBeforeImport) {
-            setActiveApiConfigId(firstNewlyImportedConfig.id);
+            const config = firstNewlyImportedConfig as NamedApiConfig;
+            setActiveApiConfigId(config.id);
             toast({
                 title: 'Master activated',
-                description: `“${firstNewlyImportedConfig.name}” has been automatically activated.`,
+                description: `"${config.name}" has been automatically activated.`,
             });
-            onLog?.(`Master "${firstNewlyImportedConfig.name}" has been automatically activated.`, 'INFO');
+            onLog?.(`Master "${config.name}" has been automatically activated.`, 'INFO');
         }
 
       } catch (error: any) {

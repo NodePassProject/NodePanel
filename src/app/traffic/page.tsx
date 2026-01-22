@@ -1,7 +1,7 @@
 "use client";
 
 import type { NextPage } from 'next';
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { useApiConfig } from '@/hooks/use-api-key';
 import { nodePassApi } from '@/lib/api';
@@ -101,10 +101,13 @@ const TrafficPage: NextPage = () => {
     enabled: !isLoadingApiConfig && apiConfigsList.length > 0,
     refetchOnMount: 'always',
     refetchOnWindowFocus: true,
-    onSuccess: () => {
+  });
+
+  useEffect(() => {
+    if (allInstancesData !== undefined) {
       setLastRefreshed(new Date());
     }
-  });
+  }, [allInstancesData]);
 
   const allInstances = allInstancesData || [];
 
