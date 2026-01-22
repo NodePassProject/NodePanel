@@ -55,8 +55,8 @@ export interface CustomNodeData {
 }
 
 export interface Node extends ReactFlowNode<CustomNodeData> {
-  width?: number;
-  height?: number;
+  width?: number | null;
+  height?: number | null;
 }
 
 export interface TopologyContextMenu {

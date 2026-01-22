@@ -188,7 +188,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
     let primaryUrlParams: BuildUrlParams | null = null;
     let primaryCreatedInstance: Instance | null = null;
 
-    const localOnLog = (message: string, type: 'INFO' | 'WARN' | 'ERROR') => {
+    const localOnLog = (message: string, type: 'INFO' | 'WARNING' | 'ERROR') => {
       if (type === 'ERROR') toast({ title: "Configuration error", description: message, variant: "destructive" });
       onLog?.(message, type);
     };

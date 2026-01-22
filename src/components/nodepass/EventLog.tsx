@@ -12,7 +12,7 @@ import { useToast } from '@/hooks/use-toast';
 export interface AppLogEntry {
   timestamp: string;
   message: string;
-  type: 'SUCCESS' | 'ERROR' | 'INFO' | 'ACTION'; // ACTION for general operations
+  type: 'SUCCESS' | 'ERROR' | 'INFO' | 'ACTION' | 'WARNING'; // ACTION for general operations
   details?: Record<string, any> | string; // Optional detailed information
 }
 
@@ -59,6 +59,7 @@ export function EventLog({ logs }: EventLogProps) {
       case 'ERROR': return 'destructive';
       case 'INFO': return 'secondary';
       case 'ACTION': return 'outline';
+      case 'WARNING': return 'destructive';
       default: return 'outline';
     }
   };
@@ -68,6 +69,7 @@ export function EventLog({ logs }: EventLogProps) {
       case 'SUCCESS': return <CheckCircle className="h-3.5 w-3.5 mr-1.5 text-green-500" />;
       case 'ERROR': return <AlertTriangle className="h-3.5 w-3.5 mr-1.5 text-destructive" />;
       case 'INFO': return <Info className="h-3.5 w-3.5 mr-1.5 text-blue-500" />;
+      case 'WARNING': return <AlertTriangle className="h-3.5 w-3.5 mr-1.5 text-yellow-500" />;
       case 'ACTION':
         if (message.includes('Create')) return <Pencil className="h-3.5 w-3.5 mr-1.5 text-muted-foreground"/>;
         if (message.includes('Delete')) return <Trash2 className="h-3.5 w-3.5 mr-1.5 text-muted-foreground"/>;

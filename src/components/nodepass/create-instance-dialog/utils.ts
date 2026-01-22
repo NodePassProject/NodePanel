@@ -104,7 +104,7 @@ interface PrepareClientUrlParamsResult {
 export function prepareClientUrlParams(
   values: CreateInstanceFormValues,
   activeApiConfig: NamedApiConfig | null,
-  onLogLocal: (message: string, type: 'INFO' | 'WARN' | 'ERROR') => void
+  onLogLocal: (message: string, type: 'INFO' | 'WARNING' | 'ERROR') => void
 ): PrepareClientUrlParamsResult | null {
   if (!activeApiConfig) {
     onLogLocal('The current client master configuration is invalid, unable to prepare client parameters.', 'ERROR');
@@ -190,7 +190,7 @@ interface PrepareServerUrlParamsResult {
 
 export function prepareServerUrlParams(
   values: CreateInstanceFormValues,
-  onLogLocal: (message: string, type: 'INFO' | 'WARN' | 'ERROR') => void
+  onLogLocal: (message: string, type: 'INFO' | 'WARNING' | 'ERROR') => void
 ): PrepareServerUrlParamsResult | null {
   const serverTunnelAddress = values.tunnelAddress; // S node's listening address
   const serverTargetAddress = values.targetAddress; // Where S node forwards traffic to
